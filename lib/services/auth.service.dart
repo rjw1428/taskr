@@ -1,7 +1,6 @@
 // import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 // import 'package:google_sign_in/google_sign_in.dart';
-import 'dart:developer';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 final WEB_CLIENT_ID = dotenv.env['WEB_CLIENT_ID'];
@@ -21,8 +20,7 @@ class AuthService {
   Future<void> googleLogin() async {
     try {
       final googleProvider = GoogleAuthProvider();
-      googleProvider
-          .addScope('https://www.googleapis.com/auth/contacts.readonly');
+      googleProvider.addScope('https://www.googleapis.com/auth/contacts.readonly');
       googleProvider.setCustomParameters({'login_hint': 'user@example.com'});
       await FirebaseAuth.instance.signInWithPopup(googleProvider);
 
@@ -36,7 +34,7 @@ class AuthService {
 
       // await FirebaseAuth.instance.signInWithCredential(authCredentials);
     } on FirebaseAuthException catch (e) {
-      log(e as String);
+      print('Unknown exception: $e');
     }
   }
 
