@@ -1,0 +1,34 @@
+services:
+  emulator:
+    build:
+      context: ./firebase
+      dockerfile: emulator/Dockerfile
+      args:
+        - FIREBASE_VERSION=13.11.2
+    stop_grace_period: 1m
+    environment:
+      FIREBASE_AUTH_EMULATOR_HOST: "localhost:9099"
+      FIRESTORE_EMULATOR_HOST: "localhost:8080"
+      PUBSUB_EMULATOR_HOST: "localhost:8085"
+      FUNCTIONS_EMULATOR_HOST: "localhost:5001"
+      FIREBASE_PROJECT: "taskr-1428"
+      GCLOUD_PROJECT: "taskr-1428"
+      FORCE_COLOR: 'true'
+      DATA_DIRECTORY: "data"
+      CHOKIDAR_USEPOLLING: 'true'
+    ports:
+      - "4000:4001" # ui
+      - "4400:4401" # hub
+      - "4600:4601" # logging
+      - "5001:5002" # functions
+      - "8080:8081" # firestore
+      - "8085:8086" # pubsub
+      - "9000:9001" # database
+      - "9099:9100" # auth
+      - "9199:9200" # Storage
+      - "6000:6001" # Hosting
+    volumes:
+      - ./cache:/root/.cache/:rw
+      - ~/.config/:/root/.config
+      # - ./firebase:/srv/firebase:r
+      # - ./firebase/emulator/data:/srv/firebase/emulator/data:r

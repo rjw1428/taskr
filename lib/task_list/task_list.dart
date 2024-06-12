@@ -19,15 +19,19 @@ class TaskListScreen extends StatelessWidget {
             return const LoadingScreen();
           }
           if (snapshot.hasError) {
-            return Center(child: ErrorMessage(message: snapshot.error.toString()));
+            print(snapshot.error.toString());
           }
-          if (!snapshot.hasData) {
-            return const Center(child: ErrorMessage(message: "No Data"));
-          }
-          var tasks = snapshot.data!;
+
+          var tasks = snapshot.hasError || !snapshot.hasData ? [] : snapshot.data!;
+
           return Scaffold(
               appBar: AppBar(
                 title: const Text('Taskr'),
+                actions: [
+                  IconButton(
+                      onPressed: () => AuthService().signOut(),
+                      icon: const Icon(FontAwesomeIcons.userAstronaut))
+                ],
               ),
               body: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

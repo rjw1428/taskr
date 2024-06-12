@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -10,6 +12,15 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  if (bool.parse(dotenv.env['DEV'] ?? 'true')) {
+    try {
+      print('Using local setup');
+      FirebaseFirestore.instance.useFirestoreEmulator('localhost', 8080);
+      await FirebaseAuth.instance.useAuthEmulator('localhost', 9099);
+    } catch (e) {}
+  }
+
   runApp(const MyApp());
 }
 
