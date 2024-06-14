@@ -1,4 +1,5 @@
 #!/bin/bash
+
 set -eo pipefail
 
 # Function to print error messages and exit
