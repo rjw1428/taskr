@@ -30,5 +30,4 @@ services:
     volumes:
       - ./cache:/root/.cache/:rw
       - ~/.config/:/root/.config
-      # - ./firebase:/srv/firebase:r
-      # - ./firebase/emulator/data:/srv/firebase/emulator/data:r
+      - ./firebase/emulator/data:/srv/firebase/emulator/data:rw #-> NEED TO TURN ON IF EXPORTING

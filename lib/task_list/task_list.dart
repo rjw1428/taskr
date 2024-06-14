@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:rxdart/rxdart.dart';
+import 'package:taskr/services/auth.service.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/task_list/add_task.dart';
@@ -13,8 +15,9 @@ class TaskListScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<Task>>(
-        stream: TaskService().streamTasks(),
+        stream: TaskService().streamTasks(AuthService().user!.uid),
         builder: (context, snapshot) {
+          print(snapshot.connectionState);
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const LoadingScreen();
           }
@@ -37,6 +40,7 @@ class TaskListScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: tasks.map((task) => TaskItem(task: task)).toList(),
               ),
+              bottomNavigationBar: const BottomNavBar(),
               floatingActionButton: FloatingActionButton(
                   child: const Icon(FontAwesomeIcons.plus, size: 20),
                   onPressed: () => showDialog(

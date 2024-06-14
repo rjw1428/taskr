@@ -11,25 +11,25 @@ class LoginScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Login'),
       ),
-      body: Container(
+      body: Center(
+          child: Container(
         padding: const EdgeInsets.all(30),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
             const FlutterLogo(
               size: 150,
             ),
-            Flexible(
-                child: LoginButton(
+            LoginButton(
               icon: FontAwesomeIcons.google,
               text: "Login wiht Google",
               color: Colors.blue,
               loginMethod: AuthService().googleLogin,
-            ))
+            )
           ],
         ),
-      ),
+      )),
     );
   }
 }
@@ -49,8 +49,8 @@ class LoginButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 200.0),
       child: ElevatedButton.icon(
         icon: Icon(
           icon,

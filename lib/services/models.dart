@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:json_annotation/json_annotation.dart';
 part 'models.g.dart';
 
@@ -14,7 +16,7 @@ class Task {
   String startTime;
   String? endTime;
   List<String> subtasks;
-  int priority;
+  String priority;
   Task(
       {this.added,
       this.modified = '',
@@ -22,7 +24,7 @@ class Task {
       this.description,
       this.completed = false,
       this.tags = const [],
-      this.priority = 1,
+      this.priority = 'low',
       this.dueDate = '',
       this.startTime = '',
       this.endTime,
@@ -36,4 +38,20 @@ class Task {
     obj.removeWhere((key, value) => value == null || value == '');
     return obj;
   }
+
+  Task setTagLabes(List<String> labels) {
+    tags = labels;
+    return this;
+  }
+}
+
+@JsonSerializable()
+class Tag {
+  String id;
+  String label;
+
+  Tag({this.id = '', this.label = ''});
+
+  factory Tag.fromJson(Map<String, dynamic> json) => _$TagFromJson(json);
+  Map<String, dynamic> toJson() => _$TagToJson(this);
 }

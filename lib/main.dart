@@ -13,7 +13,7 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  if (bool.parse(dotenv.env['DEV'] ?? 'true')) {
+  if (bool.parse(dotenv.env['DEV_MODE'] ?? 'true')) {
     try {
       print('Using local setup');
       FirebaseFirestore.instance.useFirestoreEmulator('localhost', 8080);

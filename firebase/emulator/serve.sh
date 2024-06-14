@@ -22,7 +22,7 @@ done
 
 # Start Firebase emulators
 emulator_cmd="firebase emulators:start --project=${FIREBASE_PROJECT}"
-[[ -n "${DATA_DIRECTORY}" ]] && emulator_cmd+=" --import=./emulator/${DATA_DIRECTORY}" #--export-on-exit
+[[ -n "${DATA_DIRECTORY}" ]] && emulator_cmd+=" --import=./emulator/${DATA_DIRECTORY} --export-on-exit" 
 echo $emulator_cmd
 $emulator_cmd &
 firebase_pid=$!

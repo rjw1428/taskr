@@ -2,12 +2,19 @@
 import 'package:firebase_auth/firebase_auth.dart';
 // import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:rxdart/rxdart.dart';
 
 final WEB_CLIENT_ID = dotenv.env['WEB_CLIENT_ID'];
 
 class AuthService {
-  final userStream = FirebaseAuth.instance.authStateChanges();
+  AuthService._internal();
+  static final _instance = AuthService._internal();
   final user = FirebaseAuth.instance.currentUser;
+  final userStream = FirebaseAuth.instance.authStateChanges();
+
+  factory AuthService() {
+    return _instance;
+  }
 
   Future<void> anonLogin() async {
     try {
