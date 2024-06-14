@@ -14,6 +14,4 @@ RUN chmod +x /usr/bin/serve.sh
 
 WORKDIR /srv/firebase
 
-ENTRYPOINT ["tail"]
-CMD ["-f","/dev/null"]
-# ENTRYPOINT ["/usr/bin/serve.sh"]
+ENTRYPOINT ["/usr/bin/serve.sh"]
