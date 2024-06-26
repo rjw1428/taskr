@@ -20,6 +20,7 @@ class HomeScreen extends StatelessWidget {
           );
         } else if (snapshot.hasData) {
           // Will be null if user is not logged in
+          print("HERE");
           return const TaskListScreen();
         } else {
           return const LoginScreen();

@@ -20,11 +20,12 @@ class ScoreService {
     });
   }
 
+  // NEED TO SET THE CURRENT SCORE
   Future<void> incrementScore(String userId) {
-    return score(userId).set({'currentScore': FieldValue.increment(1)});
+    return score(userId).update({'currentScore': FieldValue.increment(1)});
   }
 
   Future<void> decrementScore(String userId) {
-    return score(userId).set({'currentScore': FieldValue.increment(1)});
+    return score(userId).update({'currentScore': FieldValue.increment(-1)});
   }
 }

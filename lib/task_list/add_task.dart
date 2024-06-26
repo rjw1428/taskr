@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
-import 'package:taskr/services/tag.service.dart';
 import 'package:taskr/shared/constants.dart';
 import 'package:multi_select_flutter/multi_select_flutter.dart';
 import 'package:taskr/shared/loading.dart';
@@ -27,8 +26,13 @@ class AddTaskScreen extends StatelessWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text("Add a task"),
-                        const TaskForm(),
+                        const Text("Add a task",
+                            style: TextStyle(fontSize: 40, color: Colors.black)),
+                        SizedBox(
+                          width: MediaQuery.of(context).size.width * .5,
+                          height: 300,
+                          child: const TaskForm(),
+                        ),
                         ElevatedButton(
                             onPressed: () {
                               Navigator.of(context).pop();
@@ -56,9 +60,9 @@ class TaskFormState extends State<TaskForm> {
   // bool _completed = false;
   String _title = '';
   String? _description;
-  final String _dueDate = '';
-  final String _startTime = '';
-  final String _endTime = '';
+  // final String _dueDate = '';
+  // final String _startTime = '';
+  // final String _endTime = '';
   String _priority = 'low';
   List<String> _tags = const [];
   // List<String> _subTasks = const [];
@@ -82,7 +86,7 @@ class TaskFormState extends State<TaskForm> {
         dueDate: 'tomorrow',
         startTime: 'later',
         added: DateTime.now().millisecondsSinceEpoch,
-        tags: [],
+        tags: _tags,
         subtasks: []);
     await TaskService().addTasks(newTask);
 
@@ -98,13 +102,18 @@ class TaskFormState extends State<TaskForm> {
     return StreamBuilder(
         stream: TagService().streamTagsArray(AuthService().user!.uid),
         builder: (context, snapshot) {
+          print(snapshot.connectionState.toString());
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const LoadingScreen();
           }
           if (snapshot.hasError) {
             print(snapshot.error.toString());
           }
-
+          final colorOptions = priorityColors.entries
+              .map((color) => DropdownMenuItem(
+                  value: color.key, child: Text(color.key, style: TextStyle(color: color.value))))
+              .toList();
+          // final selectedPriorityOption = Provider.of<String>(context);
           var tags = snapshot.hasError || !snapshot.hasData ? [] as List<Tag> : snapshot.data!;
           return Form(
             key: _formKey, // Assign the form key
@@ -125,42 +134,31 @@ class TaskFormState extends State<TaskForm> {
                   decoration: const InputDecoration(labelText: 'Description'),
                   onSaved: (value) => _description = value!,
                 ),
-                DropdownButtonFormField(
-                  items: priorityColors.entries
-                      .map((color) => DropdownMenuItem(
-                          value: color.key,
-                          child: Text(color.key, style: TextStyle(color: color.value))))
-                      .toList(),
+                DropdownButton(
+                  items: colorOptions,
+                  hint: const Text('Set Priority'),
                   onChanged: (value) => setState(() {
                     _priority = value!;
                   }),
                   value: _priority,
                 ),
+
                 MultiSelectDialogField(
                   title: const Text(
                     "Tags",
                     style: TextStyle(color: Colors.white),
                   ),
-                  selectedColor: Colors.blue,
-                  // decoration: BoxDecoration(
-                  //   color: Colors.blue.withOpacity(0.1),
-                  //   borderRadius: const BorderRadius.all(Radius.circular(40)),
-                  //   border: Border.all(
-                  //     color: Colors.blue,
-                  //     width: 2,
-                  //   ),
-                  // ),
-                  backgroundColor: Colors.green,
-                  items: tags.map((t) => MultiSelectItem(t.id, t.label)).toList(),
-                  listType: MultiSelectListType.LIST,
-                  // onConfirm: (result) => setState(() {
-                  //   print(value);
-                  //   _tags = value;
-                  // }),
-                  onConfirm: (result) => print(result),
+                  isDismissible: true,
+                  itemsTextStyle: const TextStyle(color: Colors.white),
+                  selectedColor: Colors.red,
+                  selectedItemsTextStyle: const TextStyle(color: Colors.black),
+                  backgroundColor: Colors.black,
+                  items: tags.map((tag) => MultiSelectItem(tag.id, tag.label)).toList(),
+                  listType: MultiSelectListType.CHIP,
+                  onConfirm: (result) => _tags = result,
                   buttonIcon: const Icon(
                     FontAwesomeIcons.tag,
-                    color: Colors.blue,
+                    color: Colors.black,
                   ),
                   buttonText: const Text(
                     "Tags",
