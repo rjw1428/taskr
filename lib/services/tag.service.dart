@@ -21,7 +21,10 @@ class TagService {
         .map((snapshot) => snapshot.docs
             .map((doc) => {doc.id: Tag.fromJson(doc.data())})
             .reduce((acc, cur) => {...acc, ...cur}))
-        .handleError((error) => print(error));
+        .handleError((error) {
+      print("TAG WARNING: $error");
+      return {};
+    });
   }
 
   Stream<List<Tag>> streamTagsArray(String userId) {

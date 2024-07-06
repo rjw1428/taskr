@@ -85,7 +85,7 @@ class TaskFormState extends State<TaskForm> {
         dueDate: _dueDate,
         startTime: _startTime,
         added: DateTime.now().millisecondsSinceEpoch,
-        tags: _tags ?? [],
+        tags: _tags,
         subtasks: []);
     await TaskService().addTasks(newTask);
 

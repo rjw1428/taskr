@@ -20,17 +20,48 @@ class TaskService {
     return _db.collection('todos').doc(userId).collection('tasks');
   }
 
+  Stream<List<String>> taskOrderStream(userId) {
+    return _db.collection('todos').doc(userId).snapshots().map((snapshot) {
+      final d = snapshot.data();
+      if (d != null && d.containsKey("taskOrder")) {
+        return List<String>.from(d["taskOrder"]);
+      } else {
+        return List<String>.from([]);
+      }
+    });
+  }
+
+  Future<List<String>> getTaskOrder(userId) async {
+    final ref = await _db.collection('todos').doc(userId).get();
+    final d = ref.data();
+    if (d != null && d.containsKey("taskOrder")) {
+      return List<String>.from(d["taskOrder"]);
+    } else {
+      return List<String>.from([]);
+    }
+  }
+
+  Future<void> updateTaskOrder(String userId, List<String> updatedOrder) async {
+    return await _db.collection('todos').doc(userId).update({"taskOrder": updatedOrder});
+  }
+
   Stream<List<Task>> streamTasks(userId) {
-    return CombineLatestStream.combine2(
+    return CombineLatestStream.combine3(
+        taskCollection(userId)
+            .orderBy('added', descending: true)
+            .snapshots()
+            .handleError((error) => print("TASK LIST: $error"))
+            .map((snapshot) => snapshot.docs.map((doc) {
+                  return Task.fromJson({...doc.data(), 'id': doc.id});
+                }).toList()),
         TagService().streamTags(userId),
-        taskCollection(userId).orderBy('added', descending: true).snapshots().map((snapshot) =>
-            snapshot.docs.map((doc) => Task.fromJson({...doc.data(), 'id': doc.id})).toList()),
-        (tags, tasks) {
-      return tasks
-          .map((task) => task.setTagLabes(
-              task.tags.map((tagId) => tags.containsKey(tagId) ? tags[tagId]!.label : '').toList()))
-          .toList();
-    }).handleError((error) => print(error));
+        taskOrderStream(userId),
+        (tasks, tags, order) => order
+            .map((id) => tasks.firstWhere((task) => task.id == id))
+            .map((task) => task.setTagLabes(task.tags
+                .map((tagId) => tags.containsKey(tagId) ? tags[tagId]!.label : '')
+                .toList()))
+            .toList()).handleError((error) => print(error));
   }
 
   Future<List<Task>> getTasks() async {
@@ -43,7 +74,9 @@ class TaskService {
           ...doc.data(),
           'id': doc.id,
         }));
-    return data.map((d) => Task.fromJson(d)).toList();
+    var x = data.map((d) => Task.fromJson(d)).toList();
+    print(x.toString());
+    return x;
   }
 
   Future<String> addTasks(Task task) async {
@@ -52,9 +85,14 @@ class TaskService {
       throw "No user logged in when adding task";
     }
     final completer = Completer<String>();
-    await taskCollection(user.uid)
+    var id = await taskCollection(user.uid)
         .add(task.removeNulls())
-        .then((DocumentReference ref) => completer.complete(ref.id));
+        .then((DocumentReference ref) => ref.id);
+
+    await _db.collection('todos').doc(user.uid).set({
+      "taskOrder": FieldValue.arrayUnion([id])
+    }, SetOptions(merge: true));
+    completer.complete(id);
     return completer.future;
   }
 
@@ -72,6 +110,9 @@ class TaskService {
     if (user == null) {
       throw "No user logged in when deleting task";
     } else {
+      await _db.collection('todos').doc(user.uid).set({
+        "taskOrder": FieldValue.arrayRemove([taskId])
+      }, SetOptions(merge: true));
       return await taskCollection(user.uid).doc(taskId).delete();
     }
   }
