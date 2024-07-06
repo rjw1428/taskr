@@ -5,6 +5,7 @@ import 'package:taskr/services/services.dart';
 import 'package:taskr/shared/constants.dart';
 import 'package:multi_select_flutter/multi_select_flutter.dart';
 import 'package:taskr/shared/loading.dart';
+import 'package:intl/intl.dart';
 
 class AddTaskScreen extends StatelessWidget {
   const AddTaskScreen({super.key});
@@ -30,7 +31,7 @@ class AddTaskScreen extends StatelessWidget {
                             style: TextStyle(fontSize: 40, color: Colors.black)),
                         SizedBox(
                           width: MediaQuery.of(context).size.width * .5,
-                          height: 300,
+                          height: 500,
                           child: const TaskForm(),
                         ),
                         ElevatedButton(
@@ -55,13 +56,11 @@ class TaskForm extends StatefulWidget {
 class TaskFormState extends State<TaskForm> {
   final _formKey = GlobalKey<FormState>();
 
-  // String _added = '';
   // String _modified = '';
-  // bool _completed = false;
-  String _title = '';
-  String? _description;
-  // final String _dueDate = '';
-  // final String _startTime = '';
+  final TextEditingController _title = TextEditingController();
+  final TextEditingController _description = TextEditingController();
+  String? _dueDate;
+  String? _startTime;
   // final String _endTime = '';
   String _priority = 'low';
   List<String> _tags = const [];
@@ -79,14 +78,14 @@ class TaskFormState extends State<TaskForm> {
 
     _formKey.currentState!.save();
     Task newTask = Task(
-        title: _title,
-        description: _description,
+        title: _title.value.text,
+        description: _description.value.text,
         priority: _priority,
         completed: false,
-        dueDate: 'tomorrow',
-        startTime: 'later',
+        dueDate: _dueDate,
+        startTime: _startTime,
         added: DateTime.now().millisecondsSinceEpoch,
-        tags: _tags,
+        tags: _tags ?? [],
         subtasks: []);
     await TaskService().addTasks(newTask);
 
@@ -122,17 +121,17 @@ class TaskFormState extends State<TaskForm> {
                 // Text input fields and other form elements
                 TextFormField(
                   decoration: const InputDecoration(labelText: 'Title'),
+                  controller: _title,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Please enter the title';
                     }
                     return null;
                   },
-                  onSaved: (value) => _title = value!,
                 ),
                 TextFormField(
                   decoration: const InputDecoration(labelText: 'Description'),
-                  onSaved: (value) => _description = value!,
+                  controller: _description,
                 ),
                 DropdownButton(
                   items: colorOptions,
@@ -143,6 +142,30 @@ class TaskFormState extends State<TaskForm> {
                   value: _priority,
                 ),
 
+                ElevatedButton(
+                    onPressed: () async {
+                      final date = await _selectDate(context);
+                      if (date == null) {
+                        return;
+                      }
+                      setState(() => _dueDate = DateFormat('yyyy-MM-dd').format(date));
+                    },
+                    child: const Text('Set a due date')),
+                if (_dueDate != null) Text(_dueDate!),
+                if (_dueDate != null)
+                  ElevatedButton(
+                      onPressed: () async {
+                        final time = await _selectTime(context);
+                        if (time == null) {
+                          return;
+                        }
+                        setState(() {
+                          DateTime tempDateTime = DateTime(2024, 1, 1, time.hour, time.minute);
+                          _startTime = DateFormat('HH:mm').format(tempDateTime);
+                        });
+                      },
+                      child: const Text('Set a start time')),
+                if (_startTime != null) Text(_startTime!),
                 MultiSelectDialogField(
                   title: const Text(
                     "Tags",
@@ -155,7 +178,8 @@ class TaskFormState extends State<TaskForm> {
                   backgroundColor: Colors.black,
                   items: tags.map((tag) => MultiSelectItem(tag.id, tag.label)).toList(),
                   listType: MultiSelectListType.CHIP,
-                  onConfirm: (result) => _tags = result,
+                  initialValue: _tags,
+                  onConfirm: (result) => setState(() => _tags = result),
                   buttonIcon: const Icon(
                     FontAwesomeIcons.tag,
                     color: Colors.black,
@@ -175,5 +199,25 @@ class TaskFormState extends State<TaskForm> {
             ),
           );
         });
+  }
+
+  Future<DateTime?> _selectDate(BuildContext context) async {
+    final now = DateTime.now();
+    final DateTime? selectedDate = await showDatePicker(
+        context: context,
+        initialDate: now,
+        initialDatePickerMode: DatePickerMode.day,
+        firstDate: now,
+        lastDate: DateTime(now.year + 1));
+    return selectedDate;
+  }
+
+  Future<TimeOfDay?> _selectTime(BuildContext context) async {
+    final now = TimeOfDay.now();
+    final TimeOfDay? selectedTime = await showTimePicker(
+      context: context,
+      initialTime: now,
+    );
+    return selectedTime;
   }
 }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 Map<String, Color> priorityColors = {
-  'high': Colors.red.shade800,
-  'medium': Colors.yellow.shade600,
+  'high': const Color.fromRGBO(198, 40, 40, 1),
+  'medium': const Color.fromARGB(255, 226, 184, 0),
   'low': Colors.green.shade800,
 };

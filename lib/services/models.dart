@@ -10,8 +10,8 @@ class Task {
   String? description;
   bool completed;
   List<String> tags;
-  String dueDate;
-  String startTime;
+  String? dueDate;
+  String? startTime;
   String? endTime;
   List<String> subtasks;
   String priority;

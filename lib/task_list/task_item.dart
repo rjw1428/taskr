@@ -1,6 +1,7 @@
 import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:intl/intl.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/shared/constants.dart';
@@ -11,7 +12,8 @@ class TaskItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var confetti = ConfettiController(duration: const Duration(seconds: 1));
+    final confetti = ConfettiController(duration: const Duration(seconds: 1));
+    final timeFrame = timeFrameBuilder(task);
 
     return Stack(children: [
       Container(
@@ -36,18 +38,25 @@ class TaskItem extends StatelessWidget {
                       child: Checkbox(
                           value: task.completed,
                           onChanged: (value) {
-                            TaskService().updateTaskByKey({"completed": value}, task.id!);
                             if (value!) {
                               confetti.play();
                               ScoreService().incrementScore(AuthService().user!.uid);
                             } else {
                               ScoreService().decrementScore(AuthService().user!.uid);
                             }
+                            TaskService().updateTaskByKey({"completed": value}, task.id!);
                           }),
                     ),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Row(
+                          children: [
+                            if (timeFrame != '')
+                              Text(timeFrame,
+                                  style: const TextStyle(fontSize: 16, color: Colors.white)),
+                          ],
+                        ),
                         Text(
                           task.title,
                           style: const TextStyle(fontSize: 20, color: Colors.white),
@@ -94,5 +103,27 @@ class TaskItem extends StatelessWidget {
         ),
       )
     ]);
+  }
+
+  String timeFrameBuilder(Task task) {
+    if (task.dueDate == null || task.dueDate == '') {
+      return '';
+    }
+    try {
+      final parsedDate = DateFormat('yyyy-MM-dd').parse(task.dueDate!);
+      final dueDate = DateFormat('MM/dd').format(parsedDate);
+      final startTime = task.startTime;
+      if (startTime == null) {
+        return dueDate;
+      }
+      final endTime = task.endTime;
+      if (endTime == null) {
+        return "$dueDate: $startTime";
+      }
+      return "$dueDate: $startTime - $endTime";
+    } catch (e) {
+      print("Error: ${task.dueDate}");
+      return '';
+    }
   }
 }

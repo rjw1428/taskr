@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:rxdart/rxdart.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/task_list/add_task.dart';
@@ -13,13 +14,20 @@ class TaskListScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<Task>>(
-        stream: TaskService().streamTasks(AuthService().user!.uid),
+        stream: AuthService().userStream.switchMap((user) {
+          if (user == null) {
+            return Stream.value([]);
+          }
+          var userId = user.uid;
+          return TaskService().streamTasks(userId);
+        }),
         builder: (context, snapshot) {
           print(snapshot.connectionState);
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const LoadingScreen();
           }
           if (snapshot.hasError) {
+            print(snapshot.error);
             return const ErrorMessage(message: 'Oh Shit');
           }
 
