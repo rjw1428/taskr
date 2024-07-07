@@ -91,6 +91,16 @@ class TaskItem extends StatelessWidget {
                       ),
                     ),
                     IconButton(
+                        onPressed: () {
+                          final d = task.dueDate != null
+                              ? DateFormat('yyyy-MM-dd').parse(task.dueDate!)
+                              : DateTime.now();
+                          final update = d.add(const Duration(days: 1));
+                          TaskService().updateTaskByKey(
+                              {"dueDate": DateFormat('yyyy-MM-dd').format(update)}, task.id!);
+                        },
+                        icon: const Icon(FontAwesomeIcons.arrowRightToBracket)),
+                    IconButton(
                         onPressed: () => TaskService().deleteTask(task.id!),
                         icon: const Icon(FontAwesomeIcons.trashCan))
                   ],
@@ -120,7 +130,6 @@ class TaskItem extends StatelessWidget {
       final parsedDate = DateFormat('yyyy-MM-dd').parse(task.dueDate!);
       final dueDate = DateFormat('MM/dd').format(parsedDate);
       final startTime = task.startTime;
-      print("START: $startTime");
       if (startTime == null) {
         return dueDate;
       }
