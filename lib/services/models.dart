@@ -23,8 +23,8 @@ class Task {
       this.completed = false,
       this.tags = const [],
       this.priority = 'low',
-      this.dueDate = '',
-      this.startTime = '',
+      this.dueDate,
+      this.startTime,
       this.endTime,
       this.subtasks = const []});
 

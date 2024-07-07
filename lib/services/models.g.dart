@@ -16,8 +16,8 @@ Task _$TaskFromJson(Map<String, dynamic> json) => Task(
           (json['tags'] as List<dynamic>?)?.map((e) => e as String).toList() ??
               const [],
       priority: json['priority'] as String? ?? 'low',
-      dueDate: json['dueDate'] as String? ?? '',
-      startTime: json['startTime'] as String? ?? '',
+      dueDate: json['dueDate'] as String?,
+      startTime: json['startTime'] as String?,
       endTime: json['endTime'] as String?,
       subtasks: (json['subtasks'] as List<dynamic>?)
               ?.map((e) => e as String)

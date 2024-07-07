@@ -112,6 +112,7 @@ class TaskItem extends StatelessWidget {
       final parsedDate = DateFormat('yyyy-MM-dd').parse(task.dueDate!);
       final dueDate = DateFormat('MM/dd').format(parsedDate);
       final startTime = task.startTime;
+      print("START: $startTime");
       if (startTime == null) {
         return dueDate;
       }
