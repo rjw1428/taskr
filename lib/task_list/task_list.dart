@@ -36,8 +36,18 @@ class TaskListState extends State<TaskListScreen> {
             return const ErrorMessage(message: 'Oh Shit');
           }
           print("FETCHING NEW TASK DATA");
-          _tasks = snapshot.hasError || !snapshot.hasData ? [] : snapshot.data!;
+          if (snapshot.hasError || !snapshot.hasData) {
+            _tasks = [];
+          }
 
+          _tasks = snapshot.data!;
+          List<Widget> _children = [];
+          for (int i = 0; i < _tasks!.length; i++) {
+            final task = _tasks![i];
+            // _children.add(ReorderableDragStartListener(
+            //     key: ValueKey(task.id!), index: i, child: TaskItem(task: task)));
+            _children.add(TaskItem(task: task, index: i, key: ValueKey(task.id!)));
+          }
           return Scaffold(
               appBar: AppBar(
                 title: const Text('Taskr'),
@@ -48,6 +58,7 @@ class TaskListState extends State<TaskListScreen> {
                 ],
               ),
               body: ReorderableListView(
+                  buildDefaultDragHandles: false,
                   onReorder: (int oldIndex, int newIndex) {
                     setState(() {
                       final delta = newIndex > oldIndex ? -1 : 0;
@@ -69,11 +80,7 @@ class TaskListState extends State<TaskListScreen> {
                       TaskService().updateTaskOrder(userId, list);
                     });
                   },
-                  children:
-                      _tasks!.map((task) => TaskItem(task: task, key: ValueKey(task.id!))).toList()
-                  // tasks.toList().map((task, index) => ReorderableDragStartListener(index: 0,
-                  // child: TaskItem(key: ValueKey(task.id!), task: task))),
-                  ),
+                  children: _children),
               bottomNavigationBar: const BottomNavBar(),
               floatingActionButton: FloatingActionButton(
                   child: const Icon(FontAwesomeIcons.plus, size: 20),

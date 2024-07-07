@@ -8,7 +8,8 @@ import 'package:taskr/shared/constants.dart';
 
 class TaskItem extends StatelessWidget {
   final Task task;
-  const TaskItem({super.key, required this.task});
+  final int index;
+  const TaskItem({super.key, required this.task, required this.index});
 
   @override
   Widget build(BuildContext context) {
@@ -82,6 +83,13 @@ class TaskItem extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
+                    ReorderableDragStartListener(
+                      index: index,
+                      child: IconButton(
+                        icon: const Icon(FontAwesomeIcons.gripLines),
+                        onPressed: () => print("HERE"),
+                      ),
+                    ),
                     IconButton(
                         onPressed: () => TaskService().deleteTask(task.id!),
                         icon: const Icon(FontAwesomeIcons.trashCan))
