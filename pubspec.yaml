@@ -10,7 +10,7 @@ environment:
 
 scripts:
   run:
-    $before: START /B docker compose up --build
+    $before: docker compose up --build
     $script: flutter run
 
 dependencies:

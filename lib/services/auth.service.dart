@@ -9,8 +9,8 @@ final WEB_CLIENT_ID = dotenv.env['WEB_CLIENT_ID'];
 class AuthService {
   AuthService._internal();
   static final _instance = AuthService._internal();
-  final user = FirebaseAuth.instance.currentUser;
   final userStream = FirebaseAuth.instance.authStateChanges().shareReplay(maxSize: 1);
+  User? user = FirebaseAuth.instance.currentUser;
   factory AuthService() {
     return _instance;
   }
@@ -39,6 +39,7 @@ class AuthService {
       //     accessToken: googleAuth.accessToken, idToken: googleAuth.idToken);
 
       // await FirebaseAuth.instance.signInWithCredential(authCredentials);
+      user = FirebaseAuth.instance.currentUser;
     } on FirebaseAuthException catch (e) {
       print('Unknown exception: $e');
     }

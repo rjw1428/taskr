@@ -48,20 +48,23 @@ class TaskService {
   Stream<List<Task>> streamTasks(userId) {
     return CombineLatestStream.combine3(
         taskCollection(userId)
-            .orderBy('added', descending: true)
+            // .orderBy('added', descending: true)
             .snapshots()
             .handleError((error) => print("TASK LIST: $error"))
-            .map((snapshot) => snapshot.docs.map((doc) {
-                  return Task.fromJson({...doc.data(), 'id': doc.id});
-                }).toList()),
+            .map((snapshot) {
+          return snapshot.docs.map((doc) {
+            return Task.fromJson({...doc.data(), 'id': doc.id});
+          }).toList();
+        }),
         TagService().streamTags(userId),
         taskOrderStream(userId),
-        (tasks, tags, order) => order
-            .map((id) => tasks.firstWhere((task) => task.id == id))
-            .map((task) => task.setTagLabes(task.tags
-                .map((tagId) => tags.containsKey(tagId) ? tags[tagId]!.label : '')
-                .toList()))
-            .toList()).handleError((error) => print(error));
+        (tasks, tags, order) =>
+            order.map((id) => tasks.firstWhere((task) => task.id == id)).map((task) {
+              final tagList = task.tags
+                  .map((tagId) => tags.containsKey(tagId) ? tags[tagId]!.label : '<NOT FOUND>')
+                  .toList();
+              return Task.fromJson({...task.toJson(), "tags": tagList});
+            }).toList()).handleError((error) => print(error));
   }
 
   Future<List<Task>> getTasks() async {
@@ -74,9 +77,7 @@ class TaskService {
           ...doc.data(),
           'id': doc.id,
         }));
-    var x = data.map((d) => Task.fromJson(d)).toList();
-    print(x.toString());
-    return x;
+    return data.map((d) => Task.fromJson(d)).toList();
   }
 
   Future<String> addTasks(Task task) async {

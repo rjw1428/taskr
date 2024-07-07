@@ -36,11 +36,6 @@ class Task {
     obj.removeWhere((key, value) => value == null || value == '');
     return obj;
   }
-
-  Task setTagLabes(List<String> labels) {
-    tags = labels;
-    return this;
-  }
 }
 
 @JsonSerializable()

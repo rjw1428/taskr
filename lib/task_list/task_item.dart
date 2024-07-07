@@ -19,8 +19,7 @@ class TaskItem extends StatelessWidget {
       Container(
           width: MediaQuery.of(context).size.width * .7,
           decoration: BoxDecoration(
-            // color: const Color.fromARGB(255, 18, 18, 18),
-            color: priorityColors[task.priority],
+            color: priorityColors[task.priority]!.withOpacity(task.completed ? 0.5 : 1),
             border: Border.all(color: Colors.black45),
             borderRadius: BorderRadius.circular(10),
             boxShadow: const [
