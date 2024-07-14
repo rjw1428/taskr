@@ -50,15 +50,16 @@ class TaskListState extends State<TaskListScreen> {
           List<Widget> _children = [];
           for (int i = 0; i < _tasks!.length; i++) {
             final task = _tasks![i];
-            if (task.dueDate == null) {
-              if (DateService().getString(DateTime.now()) == selectedDate) {
-                _children.add(displayTask(task, i));
-              }
-            } else {
-              if (task.dueDate == selectedDate) {
-                _children.add(displayTask(task, i));
-              }
-            }
+            _children.add(displayTask(task, i));
+            // if (task.dueDate == null) {
+            //   if (DateService().getString(DateTime.now()) == selectedDate) {
+            //     _children.add(displayTask(task, i));
+            //   }
+            // } else {
+            //   if (task.dueDate == selectedDate) {
+            //     _children.add(displayTask(task, i));
+            //   }
+            // }
           }
           return Scaffold(
               appBar: AppBar(
@@ -118,7 +119,7 @@ class TaskListState extends State<TaskListScreen> {
                         _tasks!.insert(newIndex + delta, swapItem);
                       }
                       final userId = AuthService().user!.uid;
-                      TaskService().updateTaskOrder(userId, list);
+                      TaskService().updateTaskOrder(userId, list, selectedDate);
                     });
                   },
                   children: _children),

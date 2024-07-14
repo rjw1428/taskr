@@ -9,18 +9,25 @@ class TaskService {
   TaskService._internal();
 
   final _db = FirebaseFirestore.instance;
+  static const defaultUnassignedDate = "unassigned";
   static final TaskService _instance = TaskService._internal();
 
   factory TaskService() {
     return _instance;
   }
 
-  CollectionReference<Map<String, dynamic>> taskCollection(String userId) {
-    return _db.collection('todos').doc(userId).collection('tasks');
+  CollectionReference<Map<String, dynamic>> taskCollection(String userId, String date) {
+    return _db.collection('todos').doc(userId).collection('tasks').doc(date).collection("items");
   }
 
-  Stream<List<String>> taskOrderStream(userId) {
-    return _db.collection('todos').doc(userId).snapshots().map((snapshot) {
+  Stream<List<String>> taskOrderStream(String userId, String date) {
+    return _db
+        .collection('todos')
+        .doc(userId)
+        .collection("tasks")
+        .doc(date)
+        .snapshots()
+        .map((snapshot) {
       final d = snapshot.data();
       if (d != null && d.containsKey("taskOrder")) {
         return List<String>.from(d["taskOrder"]);
@@ -30,25 +37,28 @@ class TaskService {
     });
   }
 
-  Future<List<String>> getTaskOrder(userId) async {
-    final ref = await _db.collection('todos').doc(userId).get();
-    final d = ref.data();
-    if (d != null && d.containsKey("taskOrder")) {
-      return List<String>.from(d["taskOrder"]);
-    } else {
-      return List<String>.from([]);
-    }
-  }
+  // Future<List<String>> getTaskOrder(userId) async {
+  //   final ref = await _db.collection('todos').doc(userId).get();
+  //   final d = ref.data();
+  //   if (d != null && d.containsKey("taskOrder")) {
+  //     return List<String>.from(d["taskOrder"]);
+  //   } else {
+  //     return List<String>.from([]);
+  //   }
+  // }
 
-  Future<void> updateTaskOrder(String userId, List<String> updatedOrder) async {
-    return await _db.collection('todos').doc(userId).update({"taskOrder": updatedOrder});
+  Future<void> updateTaskOrder(String userId, List<String> updatedOrder, String date) async {
+    return await _db
+        .collection('todos')
+        .doc(userId)
+        .collection("tasks")
+        .doc(date)
+        .update({"taskOrder": updatedOrder});
   }
 
   Stream<List<Task>> streamTasks(String userId, String date) {
     return CombineLatestStream.combine3(
-        taskCollection(
-          userId,
-        )
+        taskCollection(userId, date)
             // .orderBy('added', descending: true)
             .snapshots()
             .handleError((error) => print("TASK LIST: $error"))
@@ -58,7 +68,7 @@ class TaskService {
           }).toList();
         }),
         TagService().streamTags(userId),
-        taskOrderStream(userId),
+        taskOrderStream(userId, date),
         (tasks, tags, order) =>
             order.map((id) => tasks.firstWhere((task) => task.id == id)).map((task) {
               final tagList = task.tags
@@ -68,12 +78,12 @@ class TaskService {
             }).toList()).handleError((error) => print(error));
   }
 
-  Future<List<Task>> getTasks() async {
+  Future<List<Task>> getTasks(String date) async {
     var user = AuthService().user;
     if (user == null) {
       throw "No user logged in when getting tasks";
     }
-    var snapshot = await taskCollection(user.uid).orderBy('added', descending: true).get();
+    var snapshot = await taskCollection(user.uid, date).orderBy('added', descending: true).get();
     var data = snapshot.docs.map((doc) => ({
           ...doc.data(),
           'id': doc.id,
@@ -81,41 +91,63 @@ class TaskService {
     return data.map((d) => Task.fromJson(d)).toList();
   }
 
-  Future<String> addTasks(Task task) async {
+  Future<String> addTask(Task task) async {
     var user = AuthService().user;
     if (user == null) {
       throw "No user logged in when adding task";
     }
+    final date = task.dueDate == null ? defaultUnassignedDate : task.dueDate!;
     final completer = Completer<String>();
-    var id = await taskCollection(user.uid)
+    var id = await taskCollection(user.uid, date)
         .add(task.removeNulls())
         .then((DocumentReference ref) => ref.id);
 
-    await _db.collection('todos').doc(user.uid).set({
+    await _db.collection('todos').doc(user.uid).collection("tasks").doc(date).set({
       "taskOrder": FieldValue.arrayUnion([id])
     }, SetOptions(merge: true));
     completer.complete(id);
     return completer.future;
   }
 
-  Future<void> updateTaskByKey(Map<String, dynamic> update, String taskId) async {
+  Future<void> updateTask(String id, Task task) async {
     var user = AuthService().user;
+    if (user == null) {
+      throw "No user logged in when adding task";
+    }
+    final date = task.dueDate == null ? defaultUnassignedDate : task.dueDate!;
+    await taskCollection(user.uid, date).doc(id).set(task.removeNulls());
+  }
+
+  Future<void> updateTaskByKey(Map<String, dynamic> update, Task task) async {
+    var user = AuthService().user;
+    final taskId = task.id!;
+    final date = task.dueDate == null ? defaultUnassignedDate : task.dueDate!;
     if (user == null) {
       throw "No user logged in when completing task";
     } else {
-      return await taskCollection(user.uid).doc(taskId).update(update);
+      return await taskCollection(user.uid, date).doc(taskId).update(update);
     }
   }
 
-  Future<void> deleteTask(String taskId) async {
+  Future<void> deleteTask(Task task) async {
     var user = AuthService().user;
+    final taskId = task.id!;
+    final date = task.dueDate == null ? defaultUnassignedDate : task.dueDate!;
     if (user == null) {
       throw "No user logged in when deleting task";
     } else {
-      await _db.collection('todos').doc(user.uid).set({
+      await _db.collection('todos').doc(user.uid).collection("tasks").doc(date).set({
         "taskOrder": FieldValue.arrayRemove([taskId])
       }, SetOptions(merge: true));
-      return await taskCollection(user.uid).doc(taskId).delete();
+      return await taskCollection(user.uid, date).doc(taskId).delete();
     }
+  }
+
+  Future<void> pushTask(Task task) async {
+    await deleteTask(task);
+    final d = task.dueDate != null ? DateService().getDate(task.dueDate!) : DateTime.now();
+    task.dueDate = DateService().incrementDate(d);
+    await addTask(task);
+    // await TaskService().updateTaskByKey({"dueDate": DateService().incrementDate(d)}, task);
   }
 }

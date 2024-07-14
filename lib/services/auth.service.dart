@@ -1,8 +1,6 @@
-// import 'package:flutter/material.dart';
-import 'dart:io';
+// import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:rxdart/rxdart.dart';
 
 final WEB_CLIENT_ID = dotenv.env['WEB_CLIENT_ID'];
@@ -26,7 +24,7 @@ class AuthService {
 
   Future<void> createUser(String email, String password) async {
     try {
-      final credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
@@ -56,7 +54,7 @@ class AuthService {
       }
     } else {
       try {
-        final credential = await FirebaseAuth.instance
+        await FirebaseAuth.instance
             .signInWithEmailAndPassword(email: "rjw1428@gmail.com", password: "123456");
         user = await userStream.first;
       } on FirebaseAuthException catch (e) {

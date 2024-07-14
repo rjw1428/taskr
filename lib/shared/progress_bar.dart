@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:taskr/services/models.dart';
 
 class AnimatedProgressbar extends StatelessWidget {
   final double value;

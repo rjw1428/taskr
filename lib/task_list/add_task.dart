@@ -8,7 +8,8 @@ import 'package:taskr/shared/loading.dart';
 import 'package:intl/intl.dart';
 
 class AddTaskScreen extends StatelessWidget {
-  const AddTaskScreen({super.key});
+  final Task? task;
+  const AddTaskScreen({super.key, this.task});
 
   @override
   Widget build(BuildContext context) {
@@ -27,12 +28,12 @@ class AddTaskScreen extends StatelessWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text("Add a task",
+                        Text(task == null ? "Add a task" : "Edit task",
                             style: TextStyle(fontSize: 40, color: Colors.black)),
                         SizedBox(
-                          width: MediaQuery.of(context).size.width * .5,
+                          // width: MediaQuery.of(context).size.width * .5,
                           height: 500,
-                          child: const TaskForm(),
+                          child: TaskForm(task: task),
                         ),
                         ElevatedButton(
                             onPressed: () {
@@ -47,14 +48,16 @@ class AddTaskScreen extends StatelessWidget {
 }
 
 class TaskForm extends StatefulWidget {
-  const TaskForm({super.key});
+  final Task? task;
+  const TaskForm({super.key, this.task});
 
   @override
-  TaskFormState createState() => TaskFormState();
+  TaskFormState createState() => TaskFormState(task: task);
 }
 
 class TaskFormState extends State<TaskForm> {
   final _formKey = GlobalKey<FormState>();
+  final Task? task;
 
   // String _modified = '';
   final TextEditingController _title = TextEditingController();
@@ -63,11 +66,22 @@ class TaskFormState extends State<TaskForm> {
   String? _startTime;
   // final String _endTime = '';
   String _priority = 'low';
-  List<String> _tags = const [];
+  List<String>? _tags;
+  List<String> _initTagLabels = [];
   // List<String> _subTasks = const [];
 
   bool apiPending = false;
 
+  TaskFormState({this.task}) {
+    if (task != null) {
+      _title.text = task!.title;
+      _description.text = task!.description ?? '';
+      _dueDate = task!.dueDate;
+      _startTime = task!.startTime;
+      _priority = task!.priority;
+      _initTagLabels = task!.tags;
+    }
+  }
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -85,9 +99,22 @@ class TaskFormState extends State<TaskForm> {
         dueDate: _dueDate,
         startTime: _startTime,
         added: DateTime.now().millisecondsSinceEpoch,
-        tags: _tags,
+        tags: _tags ?? [],
         subtasks: []);
-    await TaskService().addTasks(newTask);
+
+    if (task == null) {
+      // ADD NEW TASK
+      await TaskService().addTask(newTask);
+    } else {
+      if (task!.dueDate != newTask.dueDate) {
+        // MOVE TO NEW DAY
+        await TaskService().deleteTask(task!);
+        await TaskService().addTask(newTask);
+      } else {
+        // UPDATE WITHIN THE SAME DAY
+        await TaskService().updateTask(task!.id!, newTask);
+      }
+    }
 
     setState(() {
       apiPending = false;
@@ -114,12 +141,20 @@ class TaskFormState extends State<TaskForm> {
               .toList();
           // final selectedPriorityOption = Provider.of<String>(context);
           var tags = snapshot.hasError || !snapshot.hasData ? [] as List<Tag> : snapshot.data!;
+
+          var initTags = _initTagLabels.map((label) {
+            return tags.firstWhere((tag) => tag.label == label).id;
+          }).toList();
+
+          _tags ??= initTags;
+
           return Form(
             key: _formKey, // Assign the form key
             child: Column(
               children: [
                 // Text input fields and other form elements
                 TextFormField(
+                  textCapitalization: TextCapitalization.words,
                   decoration: const InputDecoration(labelText: 'Title'),
                   controller: _title,
                   validator: (value) {
@@ -161,7 +196,7 @@ class TaskFormState extends State<TaskForm> {
                         }
                         setState(() {
                           DateTime tempDateTime = DateTime(2024, 1, 1, time.hour, time.minute);
-                          _startTime = DateFormat('HH:mm').format(tempDateTime);
+                          _startTime = DateService().getTimeStr(tempDateTime);
                         });
                       },
                       child: const Text('Set a start time')),
@@ -178,7 +213,7 @@ class TaskFormState extends State<TaskForm> {
                   backgroundColor: Colors.black,
                   items: tags.map((tag) => MultiSelectItem(tag.id, tag.label)).toList(),
                   listType: MultiSelectListType.CHIP,
-                  initialValue: _tags,
+                  initialValue: _tags!,
                   onConfirm: (result) => setState(() => _tags = result),
                   buttonIcon: const Icon(
                     FontAwesomeIcons.tag,
@@ -207,7 +242,7 @@ class TaskFormState extends State<TaskForm> {
         context: context,
         initialDate: now,
         initialDatePickerMode: DatePickerMode.day,
-        firstDate: now,
+        firstDate: DateTime(now.year - 1),
         lastDate: DateTime(now.year + 1));
     return selectedDate;
   }

@@ -5,13 +5,18 @@ class DateService {
   DateService._internal();
   static final _instance = DateService._internal();
   static const stringFmt = 'yyyy-MM-dd';
-
+  static const dbTimeFormat = 'HH:mm';
+  static const displayTimeFormat = 'h:mm aa';
   factory DateService() {
     return _instance;
   }
 
   String getString(DateTime d) {
     return DateFormat(stringFmt).format(d);
+  }
+
+  String getTimeStr(DateTime t) {
+    return DateFormat('HH:mm').format(t);
   }
 
   DateTime getDate(String dateStr) {
@@ -37,12 +42,14 @@ class DateService {
       return '';
     }
     try {
-      final parsedDate = DateFormat(stringFmt).parse(task.dueDate!);
-      final dueDate = DateFormat('MM/dd').format(parsedDate);
-      final startTime = task.startTime;
-      if (startTime == null) {
-        return dueDate;
+      // final parsedDate = DateFormat(stringFmt).parse(task.dueDate!);
+      // final dueDate = DateFormat('MM/dd').format(parsedDate);
+      if (task.startTime == null) {
+        return '';
+        // return dueDate;
       }
+      final stime = DateFormat(dbTimeFormat).parse(task.startTime!);
+      final startTime = DateFormat(displayTimeFormat).format(stime);
       final endTime = task.endTime;
       if (endTime == null) {
         return startTime;
