@@ -1,10 +1,9 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:taskr/services/auth.service.dart';
+import 'package:taskr/services/services.dart';
 import 'package:taskr/services/models.dart';
 import 'package:rxdart/rxdart.dart';
-import 'package:taskr/services/tag.service.dart';
 
 class TaskService {
   TaskService._internal();
@@ -45,9 +44,11 @@ class TaskService {
     return await _db.collection('todos').doc(userId).update({"taskOrder": updatedOrder});
   }
 
-  Stream<List<Task>> streamTasks(userId) {
+  Stream<List<Task>> streamTasks(String userId, String date) {
     return CombineLatestStream.combine3(
-        taskCollection(userId)
+        taskCollection(
+          userId,
+        )
             // .orderBy('added', descending: true)
             .snapshots()
             .handleError((error) => print("TASK LIST: $error"))

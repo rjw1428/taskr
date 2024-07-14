@@ -3,13 +3,14 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:taskr/services/services.dart';
 
 class LoadingScreen extends StatelessWidget {
-  const LoadingScreen({super.key});
+  final String message;
+  const LoadingScreen({super.key, this.message = 'Thinking...'});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Thinking...'),
+        title: Text(message),
         actions: [
           IconButton(
               onPressed: () => AuthService().signOut(),

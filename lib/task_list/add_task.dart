@@ -148,7 +148,7 @@ class TaskFormState extends State<TaskForm> {
                       if (date == null) {
                         return;
                       }
-                      setState(() => _dueDate = DateFormat('yyyy-MM-dd').format(date));
+                      setState(() => _dueDate = DateService().getString(date));
                     },
                     child: const Text('Set a due date')),
                 if (_dueDate != null) Text(_dueDate!),

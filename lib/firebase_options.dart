@@ -62,7 +62,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '1070956843093',
     projectId: 'taskr-1428',
     storageBucket: 'taskr-1428.appspot.com',
-    iosBundleId: 'com.example.taskr',
+    iosBundleId: 'com.rwss.taskr',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
@@ -71,7 +71,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '1070956843093',
     projectId: 'taskr-1428',
     storageBucket: 'taskr-1428.appspot.com',
-    iosBundleId: 'com.example.taskr',
+    iosBundleId: 'com.rwss.taskr',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
