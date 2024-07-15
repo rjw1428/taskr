@@ -87,6 +87,8 @@ class TaskListState extends State<TaskListScreen> {
                                   print("LEFT");
                                   selectedDate = DateService()
                                       .decrementDate(DateService().getDate(selectedDate));
+                                  DateService()
+                                      .setSelectedDate(DateService().getDate(selectedDate));
                                 }),
                             icon: const Icon(FontAwesomeIcons.caretLeft)),
                         Text(selectedDate),
@@ -95,6 +97,8 @@ class TaskListState extends State<TaskListScreen> {
                                   print("RIGHT");
                                   selectedDate = DateService()
                                       .incrementDate(DateService().getDate(selectedDate));
+                                  DateService()
+                                      .setSelectedDate(DateService().getDate(selectedDate));
                                 }),
                             icon: const Icon(FontAwesomeIcons.caretRight)),
                       ],

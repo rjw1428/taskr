@@ -5,7 +5,6 @@ import 'package:taskr/services/services.dart';
 import 'package:taskr/shared/constants.dart';
 import 'package:multi_select_flutter/multi_select_flutter.dart';
 import 'package:taskr/shared/loading.dart';
-import 'package:intl/intl.dart';
 
 class AddTaskScreen extends StatelessWidget {
   final Task? task;
@@ -69,8 +68,9 @@ class TaskFormState extends State<TaskForm> {
   List<String>? _tags;
   List<String> _initTagLabels = [];
   // List<String> _subTasks = const [];
-
+  DateTime? initialDueDate;
   bool apiPending = false;
+  bool _showSelectDate = true;
 
   TaskFormState({this.task}) {
     if (task != null) {
@@ -81,6 +81,10 @@ class TaskFormState extends State<TaskForm> {
       _priority = task!.priority;
       _initTagLabels = task!.tags;
     }
+
+    initialDueDate =
+        _dueDate == null ? DateService().getSelectedDate() : DateService().getDate(_dueDate!);
+    _dueDate = DateService().getString(initialDueDate!);
   }
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
@@ -176,19 +180,18 @@ class TaskFormState extends State<TaskForm> {
                   value: _priority,
                 ),
 
-                ElevatedButton(
-                    onPressed: () async {
-                      final initial =
-                          _dueDate == null ? DateTime.now() : DateService().getDate(_dueDate!);
-                      final date = await _selectDate(context, initial);
-                      if (date == null) {
-                        return;
-                      }
-                      setState(() => _dueDate = DateService().getString(date));
-                    },
-                    child: const Text('Set a due date')),
+                if (_showSelectDate)
+                  ElevatedButton(
+                      onPressed: () async {
+                        final date = await _selectDate(context, initialDueDate!);
+                        if (date == null) {
+                          return;
+                        }
+                        setState(() => _dueDate = DateService().getString(date));
+                      },
+                      child: const Text('Set a due date')),
                 if (_dueDate != null) Text(_dueDate!),
-                if (_dueDate != null)
+                if (_dueDate != null && _showSelectDate)
                   ElevatedButton(
                       onPressed: () async {
                         final initial = _startTime == null
@@ -205,6 +208,20 @@ class TaskFormState extends State<TaskForm> {
                       },
                       child: const Text('Set a start time')),
                 if (_startTime != null) Text(DateService().displayTime(_startTime!)),
+                Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  const Text('Add to backlog'),
+                  Checkbox(
+                      value: !_showSelectDate,
+                      onChanged: (value) => setState(() {
+                            if (value == true) {
+                              _dueDate = null;
+                              _showSelectDate = false;
+                            } else {
+                              _dueDate = DateService().getString(initialDueDate!);
+                              _showSelectDate = true;
+                            }
+                          }))
+                ]),
                 MultiSelectDialogField(
                   title: const Text(
                     "Tags",

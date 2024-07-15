@@ -8,8 +8,17 @@ class DateService {
   static const stringFmt = 'yyyy-MM-dd';
   static const dbTimeFormat = 'HH:mm';
   static const displayTimeFormat = 'h:mm aa';
+  var selectedDate = DateTime.now();
   factory DateService() {
     return _instance;
+  }
+
+  DateTime getSelectedDate() {
+    return selectedDate;
+  }
+
+  void setSelectedDate(DateTime d) {
+    selectedDate = d;
   }
 
   String getString(DateTime d) {
