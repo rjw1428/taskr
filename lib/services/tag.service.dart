@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:rxdart/rxdart.dart';
 import 'package:taskr/services/models.dart';
 
 class TagService {
@@ -24,7 +25,7 @@ class TagService {
         .handleError((error) {
       print("TAG WARNING: $error");
       return {};
-    });
+    }).shareReplay(maxSize: 1);
   }
 
   Stream<List<Tag>> streamTagsArray(String userId) {
@@ -32,6 +33,7 @@ class TagService {
         .snapshots()
         .map((snapshot) =>
             snapshot.docs.map((doc) => Tag.fromJson({'id': doc.id, ...doc.data()})).toList())
-        .handleError((error) => print(error));
+        .handleError((error) => print(error))
+        .shareReplay(maxSize: 1);
   }
 }

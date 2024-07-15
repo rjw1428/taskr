@@ -142,10 +142,9 @@ class TaskFormState extends State<TaskForm> {
           // final selectedPriorityOption = Provider.of<String>(context);
           var tags = snapshot.hasError || !snapshot.hasData ? [] as List<Tag> : snapshot.data!;
 
-          var initTags = _initTagLabels.map((label) {
+          var initTags = _initTagLabels.where((label) => label != '<NOT FOUND>').map((label) {
             return tags.firstWhere((tag) => tag.label == label).id;
           }).toList();
-
           _tags ??= initTags;
 
           return Form(
@@ -179,7 +178,9 @@ class TaskFormState extends State<TaskForm> {
 
                 ElevatedButton(
                     onPressed: () async {
-                      final date = await _selectDate(context);
+                      final initial =
+                          _dueDate == null ? DateTime.now() : DateService().getDate(_dueDate!);
+                      final date = await _selectDate(context, initial);
                       if (date == null) {
                         return;
                       }
@@ -190,7 +191,10 @@ class TaskFormState extends State<TaskForm> {
                 if (_dueDate != null)
                   ElevatedButton(
                       onPressed: () async {
-                        final time = await _selectTime(context);
+                        final initial = _startTime == null
+                            ? TimeOfDay.now()
+                            : DateService().getTime(_startTime!);
+                        final time = await _selectTime(context, initial);
                         if (time == null) {
                           return;
                         }
@@ -200,7 +204,7 @@ class TaskFormState extends State<TaskForm> {
                         });
                       },
                       child: const Text('Set a start time')),
-                if (_startTime != null) Text(_startTime!),
+                if (_startTime != null) Text(DateService().displayTime(_startTime!)),
                 MultiSelectDialogField(
                   title: const Text(
                     "Tags",
@@ -236,22 +240,21 @@ class TaskFormState extends State<TaskForm> {
         });
   }
 
-  Future<DateTime?> _selectDate(BuildContext context) async {
+  Future<DateTime?> _selectDate(BuildContext context, DateTime initial) async {
     final now = DateTime.now();
     final DateTime? selectedDate = await showDatePicker(
         context: context,
-        initialDate: now,
+        initialDate: initial,
         initialDatePickerMode: DatePickerMode.day,
         firstDate: DateTime(now.year - 1),
         lastDate: DateTime(now.year + 1));
     return selectedDate;
   }
 
-  Future<TimeOfDay?> _selectTime(BuildContext context) async {
-    final now = TimeOfDay.now();
+  Future<TimeOfDay?> _selectTime(BuildContext context, TimeOfDay initial) async {
     final TimeOfDay? selectedTime = await showTimePicker(
       context: context,
-      initialTime: now,
+      initialTime: initial,
     );
     return selectedTime;
   }

@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:taskr/services/models.dart';
 
@@ -16,7 +17,17 @@ class DateService {
   }
 
   String getTimeStr(DateTime t) {
-    return DateFormat('HH:mm').format(t);
+    return DateFormat(dbTimeFormat).format(t);
+  }
+
+  TimeOfDay getTime(String time) {
+    final t = DateFormat(dbTimeFormat).parse(time);
+    return TimeOfDay(hour: t.hour, minute: t.minute);
+  }
+
+  String displayTime(String time) {
+    final t = DateFormat(dbTimeFormat).parse(time);
+    return DateFormat(displayTimeFormat).format(t);
   }
 
   DateTime getDate(String dateStr) {

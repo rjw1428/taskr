@@ -144,9 +144,12 @@ class TaskService {
   }
 
   Future<void> pushTask(Task task) async {
+    var user = AuthService().user;
+    final tags = await TagService().streamTagsArray(user!.uid).first;
     await deleteTask(task);
     final d = task.dueDate != null ? DateService().getDate(task.dueDate!) : DateTime.now();
     task.dueDate = DateService().incrementDate(d);
+    task.tags = task.tags.map((label) => tags.firstWhere((tag) => tag.label == label).id).toList();
     await addTask(task);
     // await TaskService().updateTaskByKey({"dueDate": DateService().incrementDate(d)}, task);
   }
