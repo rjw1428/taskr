@@ -32,6 +32,7 @@ class TaskListState extends State<TaskListScreen> {
           return TaskService().streamTasks(userId, selectedDate);
         }),
         builder: (context, snapshot) {
+          final userId = AuthService().user!.uid;
           if (snapshot.connectionState == ConnectionState.waiting && _tasks == null) {
             return const LoadingScreen(message: 'Loading Tasks...');
           }
@@ -47,10 +48,20 @@ class TaskListState extends State<TaskListScreen> {
           _tasks = snapshot.data!;
           _completedCount = 0;
           _totalCount = 0;
+
+          onComplete(int taskIndex) {
+            setState(() {
+              var list = _tasks!.map((task) => task.id!).toList();
+              var taskId = list!.removeAt(taskIndex);
+              list!.add(taskId);
+              TaskService().updateTaskOrder(userId, list, selectedDate);
+            });
+          }
+
           List<Widget> _children = [];
           for (int i = 0; i < _tasks!.length; i++) {
             final task = _tasks![i];
-            _children.add(displayTask(task, i));
+            _children.add(displayTask(task, i, onComplete));
             // if (task.dueDate == null) {
             //   if (DateService().getString(DateTime.now()) == selectedDate) {
             //     _children.add(displayTask(task, i));
@@ -122,7 +133,7 @@ class TaskListState extends State<TaskListScreen> {
                         var swapItem = _tasks!.removeAt(oldIndex);
                         _tasks!.insert(newIndex + delta, swapItem);
                       }
-                      final userId = AuthService().user!.uid;
+
                       TaskService().updateTaskOrder(userId, list, selectedDate);
                     });
                   },
@@ -135,11 +146,11 @@ class TaskListState extends State<TaskListScreen> {
         });
   }
 
-  displayTask(Task task, int i) {
+  displayTask(Task task, int i, Function onComplete) {
     _totalCount++;
     if (task.completed) {
       _completedCount++;
     }
-    return TaskItem(task: task, index: i, key: ValueKey(task.id!));
+    return TaskItem(task: task, index: i, key: ValueKey(task.id!), onComplete: onComplete);
   }
 }

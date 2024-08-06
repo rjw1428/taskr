@@ -70,14 +70,21 @@ class DateService {
       }
       final stime = DateFormat(dbTimeFormat).parse(task.startTime!);
       final startTime = DateFormat(displayTimeFormat).format(stime);
-      final endTime = task.endTime;
-      if (endTime == null) {
+      if (task.endTime == null) {
         return startTime;
       }
+      final etime = DateFormat(displayTimeFormat).parse(task.endTime!);
+      final endTime = DateFormat(displayTimeFormat).format(etime);
       return "$startTime - $endTime";
     } catch (e) {
       print("Error: ${task.dueDate}");
+      print(e);
       return '';
     }
+  }
+
+  bool isTimeLessThan(TimeOfDay a, TimeOfDay b) {
+    double toDouble(TimeOfDay a) => a.hour + a.minute / 60.0;
+    return toDouble(a) < toDouble(b);
   }
 }

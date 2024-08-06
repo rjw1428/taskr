@@ -63,7 +63,7 @@ class TaskFormState extends State<TaskForm> {
   final TextEditingController _description = TextEditingController();
   String? _dueDate;
   String? _startTime;
-  // final String _endTime = '';
+  String? _endTime;
   String _priority = 'low';
   List<String>? _tags;
   List<String> _initTagLabels = [];
@@ -78,6 +78,7 @@ class TaskFormState extends State<TaskForm> {
       _description.text = task!.description ?? '';
       _dueDate = task!.dueDate;
       _startTime = task!.startTime;
+      _endTime = task!.endTime;
       _priority = task!.priority;
       _initTagLabels = task!.tags;
     }
@@ -102,6 +103,7 @@ class TaskFormState extends State<TaskForm> {
         completed: false,
         dueDate: _dueDate,
         startTime: _startTime,
+        endTime: _endTime,
         added: DateTime.now().millisecondsSinceEpoch,
         tags: _tags ?? [],
         subtasks: []);
@@ -173,7 +175,7 @@ class TaskFormState extends State<TaskForm> {
                 ),
                 DropdownButton(
                   items: colorOptions,
-                  hint: const Text('Set Priority'),
+                  hint: const Text('Set Effort'),
                   onChanged: (value) => setState(() {
                     _priority = value!;
                   }),
@@ -208,6 +210,23 @@ class TaskFormState extends State<TaskForm> {
                       },
                       child: const Text('Set a start time')),
                 if (_startTime != null) Text(DateService().displayTime(_startTime!)),
+                ElevatedButton(
+                    onPressed: () async {
+                      final initial =
+                          _endTime == null ? TimeOfDay.now() : DateService().getTime(_endTime!);
+                      final time = await _selectTime(context, initial);
+                      if (time == null) {
+                        return;
+                      }
+                      // IF END TIME IS EARLIER THAN START TIME, ERROR?
+                      setState(() {
+                        DateTime tempDateTime = DateTime(2024, 1, 1, time.hour, time.minute);
+                        _endTime = DateService().getTimeStr(tempDateTime);
+                      });
+                    },
+                    child: const Text('Set an end time')),
+                if (_endTime != null) Text(DateService().displayTime(_endTime!)),
+
                 Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                   const Text('Add to backlog'),
                   Checkbox(

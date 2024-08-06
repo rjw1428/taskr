@@ -37,15 +37,15 @@ class TaskService {
     });
   }
 
-  // Future<List<String>> getTaskOrder(userId) async {
-  //   final ref = await _db.collection('todos').doc(userId).get();
-  //   final d = ref.data();
-  //   if (d != null && d.containsKey("taskOrder")) {
-  //     return List<String>.from(d["taskOrder"]);
-  //   } else {
-  //     return List<String>.from([]);
-  //   }
-  // }
+  Future<List<String>> getTaskOrder(String userId, String date) async {
+    final ref = await _db.collection('todos').doc(userId).collection("tasks").doc(date).get();
+    final d = ref.data();
+    if (d != null && d.containsKey("taskOrder")) {
+      return List<String>.from(d["taskOrder"]);
+    } else {
+      return List<String>.from([]);
+    }
+  }
 
   Future<void> updateTaskOrder(String userId, List<String> updatedOrder, String date) async {
     return await _db
@@ -78,17 +78,19 @@ class TaskService {
             }).toList()).handleError((error) => print(error));
   }
 
-  Future<List<Task>> getTasks(String date) async {
-    var user = AuthService().user;
-    if (user == null) {
-      throw "No user logged in when getting tasks";
-    }
-    var snapshot = await taskCollection(user.uid, date).orderBy('added', descending: true).get();
+  Future<List<Task>> getTasks(String userId, String date) async {
+    var snapshot = await taskCollection(userId, date).orderBy('added', descending: true).get();
     var data = snapshot.docs.map((doc) => ({
           ...doc.data(),
           'id': doc.id,
         }));
     return data.map((d) => Task.fromJson(d)).toList();
+  }
+
+  Future<List<Task>> getTasksInOrder(String userId, String date) async {
+    final order = await getTaskOrder(userId, date);
+    final tasks = await getTasks(userId, date);
+    return order.map((id) => tasks.firstWhere((t) => t.id == id)).toList();
   }
 
   Future<String> addTask(Task task) async {
@@ -102,9 +104,63 @@ class TaskService {
         .add(task.removeNulls())
         .then((DocumentReference ref) => ref.id);
 
-    await _db.collection('todos').doc(user.uid).collection("tasks").doc(date).set({
-      "taskOrder": FieldValue.arrayUnion([id])
-    }, SetOptions(merge: true));
+    if (task.dueDate == null) {
+      await _db.collection('todos').doc(user.uid).collection("tasks").doc(date).set({
+        "taskOrder": FieldValue.arrayUnion([id])
+      }, SetOptions(merge: true));
+      completer.complete(id);
+      return completer.future;
+    }
+
+    List<Task> tasks = await getTasksInOrder(user.uid, task.dueDate!);
+    var completed = tasks.where((t) => t.completed).map((t) => t.id).toList();
+    var notCompleted = tasks.where((t) => !t.completed).map((t) => t.id).toList();
+    if (task.startTime == null) {
+      notCompleted.add(id);
+      var newOrder = notCompleted + completed;
+      await _db
+          .collection('todos')
+          .doc(user.uid)
+          .collection("tasks")
+          .doc(date)
+          .set({"taskOrder": newOrder});
+      completer.complete(id);
+      return completer.future;
+    }
+
+    var lowerItems = [];
+    var index = 0;
+    for (int i = 0; i < tasks.length; i++) {
+      var t = tasks[i];
+      index = i;
+
+      if (t.completed) {
+        lowerItems.add(id);
+        break;
+      }
+
+      if (t.startTime == null) {
+        lowerItems.add(t.id);
+        continue;
+      }
+
+      if (DateService().isTimeLessThan(
+          DateService().getTime(task.startTime!), DateService().getTime(t.startTime!))) {
+        lowerItems.add(id);
+        break;
+      }
+      lowerItems.add(t.id);
+    }
+    var update = lowerItems;
+    if (index < tasks.length) {
+      update = update + tasks.sublist(index).map((t) => t.id!).toList();
+    }
+    await _db
+        .collection('todos')
+        .doc(user.uid)
+        .collection("tasks")
+        .doc(date)
+        .set({"taskOrder": update});
     completer.complete(id);
     return completer.future;
   }

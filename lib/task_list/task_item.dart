@@ -9,7 +9,8 @@ import 'package:taskr/task_list/add_task.dart';
 class TaskItem extends StatelessWidget {
   final Task task;
   final int index;
-  const TaskItem({super.key, required this.task, required this.index});
+  final Function onComplete;
+  const TaskItem({super.key, required this.task, required this.index, required this.onComplete});
 
   @override
   Widget build(BuildContext context) {
@@ -38,14 +39,15 @@ class TaskItem extends StatelessWidget {
                       children: [
                         Checkbox(
                             value: task.completed,
-                            onChanged: (value) {
+                            onChanged: (value) async {
                               if (value!) {
                                 confetti.play();
                                 ScoreService().incrementScore(AuthService().user!.uid);
+                                onComplete(index);
                               } else {
                                 ScoreService().decrementScore(AuthService().user!.uid);
                               }
-                              TaskService().updateTaskByKey({"completed": value}, task);
+                              await TaskService().updateTaskByKey({"completed": value}, task);
                             }),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
