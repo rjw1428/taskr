@@ -73,7 +73,7 @@ class DateService {
       if (task.endTime == null) {
         return startTime;
       }
-      final etime = DateFormat(displayTimeFormat).parse(task.endTime!);
+      final etime = DateFormat(dbTimeFormat).parse(task.endTime!);
       final endTime = DateFormat(displayTimeFormat).format(etime);
       return "$startTime - $endTime";
     } catch (e) {

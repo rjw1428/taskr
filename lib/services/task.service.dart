@@ -100,10 +100,14 @@ class TaskService {
     }
     final date = task.dueDate == null ? defaultUnassignedDate : task.dueDate!;
     final completer = Completer<String>();
+
+    // Insert into DB
     var id = await taskCollection(user.uid, date)
         .add(task.removeNulls())
         .then((DocumentReference ref) => ref.id);
 
+    // -- Smart Ordering --
+    // If backloged, add to end
     if (task.dueDate == null) {
       await _db.collection('todos').doc(user.uid).collection("tasks").doc(date).set({
         "taskOrder": FieldValue.arrayUnion([id])
@@ -113,9 +117,11 @@ class TaskService {
     }
 
     List<Task> tasks = await getTasksInOrder(user.uid, task.dueDate!);
-    var completed = tasks.where((t) => t.completed).map((t) => t.id).toList();
-    var notCompleted = tasks.where((t) => !t.completed).map((t) => t.id).toList();
+
+    // If no start time, make the last not-completed task
     if (task.startTime == null) {
+      var completed = tasks.where((t) => t.completed).map((t) => t.id).toList();
+      var notCompleted = tasks.where((t) => !t.completed).map((t) => t.id).toList();
       notCompleted.add(id);
       var newOrder = notCompleted + completed;
       await _db
@@ -128,6 +134,9 @@ class TaskService {
       return completer.future;
     }
 
+    // If there is a start time, iterate through to find either the first completed
+    // or the first with the time > the added task, while preserving the order of tasks
+    // without a start time
     var lowerItems = [];
     var index = 0;
     for (int i = 0; i < tasks.length; i++) {
@@ -152,7 +161,9 @@ class TaskService {
       lowerItems.add(t.id);
     }
     var update = lowerItems;
-    if (index < tasks.length) {
+    if (index == tasks.length - 1) {
+      update = update + [id];
+    } else if (index < tasks.length) {
       update = update + tasks.sublist(index).map((t) => t.id!).toList();
     }
     await _db
@@ -205,8 +216,8 @@ class TaskService {
     await deleteTask(task);
     final d = task.dueDate != null ? DateService().getDate(task.dueDate!) : DateTime.now();
     task.dueDate = DateService().incrementDate(d);
+    task.pushCount += 1;
     task.tags = task.tags.map((label) => tags.firstWhere((tag) => tag.label == label).id).toList();
     await addTask(task);
-    // await TaskService().updateTaskByKey({"dueDate": DateService().incrementDate(d)}, task);
   }
 }

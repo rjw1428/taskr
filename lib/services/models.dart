@@ -1,4 +1,5 @@
 import 'package:json_annotation/json_annotation.dart';
+import 'package:taskr/shared/constants.dart';
 part 'models.g.dart';
 
 @JsonSerializable()
@@ -13,8 +14,10 @@ class Task {
   String? dueDate;
   String? startTime;
   String? endTime;
+  String? completedTime;
   List<String> subtasks;
-  String priority;
+  Priority priority;
+  int pushCount;
   Task(
       {this.added,
       this.modified = '',
@@ -22,10 +25,11 @@ class Task {
       this.description,
       this.completed = false,
       this.tags = const [],
-      this.priority = 'low',
+      this.priority = Priority.low,
       this.dueDate,
       this.startTime,
       this.endTime,
+      this.pushCount = 0,
       this.subtasks = const []});
 
   factory Task.fromJson(Map<String, dynamic> json) => _$TaskFromJson(json);

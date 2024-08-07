@@ -52,8 +52,8 @@ class TaskListState extends State<TaskListScreen> {
           onComplete(int taskIndex) {
             setState(() {
               var list = _tasks!.map((task) => task.id!).toList();
-              var taskId = list!.removeAt(taskIndex);
-              list!.add(taskId);
+              var taskId = list.removeAt(taskIndex);
+              list.add(taskId);
               TaskService().updateTaskOrder(userId, list, selectedDate);
             });
           }
@@ -72,6 +72,7 @@ class TaskListState extends State<TaskListScreen> {
             //   }
             // }
           }
+
           return Scaffold(
               appBar: AppBar(
                 title: const Text('Taskr'),
@@ -147,10 +148,24 @@ class TaskListState extends State<TaskListScreen> {
   }
 
   displayTask(Task task, int i, Function onComplete) {
-    _totalCount++;
+    _totalCount += getScore(task.priority);
     if (task.completed) {
-      _completedCount++;
+      _completedCount += getScore(task.priority);
     }
     return TaskItem(task: task, index: i, key: ValueKey(task.id!), onComplete: onComplete);
+  }
+
+  int getScore(Priority priority) {
+    if (priority == Priority.high) {
+      return 3;
+    }
+    if (priority == Priority.medium) {
+      return 2;
+    }
+    if (priority == Priority.low) {
+      return 1;
+    }
+    print("Unknown Priority: $priority");
+    return 0;
   }
 }

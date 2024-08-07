@@ -1,6 +1,7 @@
 import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:intl/intl.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/shared/constants.dart';
@@ -47,7 +48,13 @@ class TaskItem extends StatelessWidget {
                               } else {
                                 ScoreService().decrementScore(AuthService().user!.uid);
                               }
+                              const completeTimeFormat =
+                                  "${DateService.stringFmt} ${DateService.dbTimeFormat}";
                               await TaskService().updateTaskByKey({"completed": value}, task);
+                              await TaskService().updateTaskByKey({
+                                "completedTime":
+                                    DateFormat(completeTimeFormat).format(DateTime.now())
+                              }, task);
                             }),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,

@@ -64,7 +64,7 @@ class TaskFormState extends State<TaskForm> {
   String? _dueDate;
   String? _startTime;
   String? _endTime;
-  String _priority = 'low';
+  Priority _priority = Priority.low;
   List<String>? _tags;
   List<String> _initTagLabels = [];
   // List<String> _subTasks = const [];
@@ -143,7 +143,8 @@ class TaskFormState extends State<TaskForm> {
           }
           final colorOptions = priorityColors.entries
               .map((color) => DropdownMenuItem(
-                  value: color.key, child: Text(color.key, style: TextStyle(color: color.value))))
+                  value: color.key,
+                  child: Text(color.key.name, style: TextStyle(color: color.value))))
               .toList();
           // final selectedPriorityOption = Provider.of<String>(context);
           var tags = snapshot.hasError || !snapshot.hasData ? [] as List<Tag> : snapshot.data!;
