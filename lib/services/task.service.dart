@@ -16,16 +16,21 @@ class TaskService {
     return _instance;
   }
 
-  CollectionReference<Map<String, dynamic>> taskCollection(String userId, String date) {
-    return _db.collection('todos').doc(userId).collection('tasks').doc(date).collection("items");
+  CollectionReference<Map<String, dynamic>> taskCollection(String userId, String? date) {
+    return _db
+        .collection('todos')
+        .doc(userId)
+        .collection('tasks')
+        .doc(date ?? defaultUnassignedDate)
+        .collection("items");
   }
 
-  Stream<List<String>> taskOrderStream(String userId, String date) {
+  Stream<List<String>> taskOrderStream(String userId, String? date) {
     return _db
         .collection('todos')
         .doc(userId)
         .collection("tasks")
-        .doc(date)
+        .doc(date ?? defaultUnassignedDate)
         .snapshots()
         .map((snapshot) {
       final d = snapshot.data();
@@ -37,8 +42,13 @@ class TaskService {
     });
   }
 
-  Future<List<String>> getTaskOrder(String userId, String date) async {
-    final ref = await _db.collection('todos').doc(userId).collection("tasks").doc(date).get();
+  Future<List<String>> getTaskOrder(String userId, String? date) async {
+    final ref = await _db
+        .collection('todos')
+        .doc(userId)
+        .collection("tasks")
+        .doc(date ?? defaultUnassignedDate)
+        .get();
     final d = ref.data();
     if (d != null && d.containsKey("taskOrder")) {
       return List<String>.from(d["taskOrder"]);
@@ -47,18 +57,18 @@ class TaskService {
     }
   }
 
-  Future<void> updateTaskOrder(String userId, List<String> updatedOrder, String date) async {
+  Future<void> updateTaskOrder(String userId, List<String> updatedOrder, String? date) async {
     return await _db
         .collection('todos')
         .doc(userId)
         .collection("tasks")
-        .doc(date)
+        .doc(date ?? defaultUnassignedDate)
         .update({"taskOrder": updatedOrder});
   }
 
-  Stream<List<Task>> streamTasks(String userId, String date) {
+  Stream<List<Task>> streamTasks(String userId, String? date) {
     return CombineLatestStream.combine3(
-        taskCollection(userId, date)
+        taskCollection(userId, date ?? defaultUnassignedDate)
             // .orderBy('added', descending: true)
             .snapshots()
             .handleError((error) => print("TASK LIST: $error"))
@@ -68,7 +78,7 @@ class TaskService {
           }).toList();
         }),
         TagService().streamTags(userId),
-        taskOrderStream(userId, date),
+        taskOrderStream(userId, date ?? defaultUnassignedDate),
         (tasks, tags, order) =>
             order.map((id) => tasks.firstWhere((task) => task.id == id)).map((task) {
               final tagList = task.tags
@@ -78,8 +88,10 @@ class TaskService {
             }).toList()).handleError((error) => print(error));
   }
 
-  Future<List<Task>> getTasks(String userId, String date) async {
-    var snapshot = await taskCollection(userId, date).orderBy('added', descending: true).get();
+  Future<List<Task>> getTasks(String userId, String? date) async {
+    var snapshot = await taskCollection(userId, date ?? defaultUnassignedDate)
+        .orderBy('added', descending: true)
+        .get();
     var data = snapshot.docs.map((doc) => ({
           ...doc.data(),
           'id': doc.id,
@@ -87,9 +99,9 @@ class TaskService {
     return data.map((d) => Task.fromJson(d)).toList();
   }
 
-  Future<List<Task>> getTasksInOrder(String userId, String date) async {
-    final order = await getTaskOrder(userId, date);
-    final tasks = await getTasks(userId, date);
+  Future<List<Task>> getTasksInOrder(String userId, String? date) async {
+    final order = await getTaskOrder(userId, date ?? defaultUnassignedDate);
+    final tasks = await getTasks(userId, date ?? defaultUnassignedDate);
     return order.map((id) => tasks.firstWhere((t) => t.id == id)).toList();
   }
 
@@ -98,7 +110,7 @@ class TaskService {
     if (user == null) {
       throw "No user logged in when adding task";
     }
-    final date = task.dueDate == null ? defaultUnassignedDate : task.dueDate!;
+    final date = task.dueDate ?? defaultUnassignedDate;
     final completer = Completer<String>();
 
     // Insert into DB
@@ -161,8 +173,14 @@ class TaskService {
       lowerItems.add(t.id);
     }
     var update = lowerItems;
-    if (index == tasks.length - 1) {
-      update = update + [id];
+    if (tasks.isEmpty) {
+      update = [id];
+    } else if (index == tasks.length - 1) {
+      if (update.contains(id)) {
+        update = update + [id];
+      } else {
+        update = update + tasks.sublist(index).map((t) => t.id!).toList();
+      }
     } else if (index < tasks.length) {
       update = update + tasks.sublist(index).map((t) => t.id!).toList();
     }
@@ -181,14 +199,14 @@ class TaskService {
     if (user == null) {
       throw "No user logged in when adding task";
     }
-    final date = task.dueDate == null ? defaultUnassignedDate : task.dueDate!;
+    final date = task.dueDate ?? defaultUnassignedDate;
     await taskCollection(user.uid, date).doc(id).set(task.removeNulls());
   }
 
   Future<void> updateTaskByKey(Map<String, dynamic> update, Task task) async {
     var user = AuthService().user;
     final taskId = task.id!;
-    final date = task.dueDate == null ? defaultUnassignedDate : task.dueDate!;
+    final date = task.dueDate ?? defaultUnassignedDate;
     if (user == null) {
       throw "No user logged in when completing task";
     } else {
@@ -199,7 +217,7 @@ class TaskService {
   Future<void> deleteTask(Task task) async {
     var user = AuthService().user;
     final taskId = task.id!;
-    final date = task.dueDate == null ? defaultUnassignedDate : task.dueDate!;
+    final date = task.dueDate ?? defaultUnassignedDate;
     if (user == null) {
       throw "No user logged in when deleting task";
     } else {

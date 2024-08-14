@@ -8,7 +8,8 @@ import 'package:taskr/shared/loading.dart';
 
 class AddTaskScreen extends StatelessWidget {
   final Task? task;
-  const AddTaskScreen({super.key, this.task});
+  final bool isBacklog;
+  const AddTaskScreen({super.key, this.task, required this.isBacklog});
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +33,7 @@ class AddTaskScreen extends StatelessWidget {
                         SizedBox(
                           // width: MediaQuery.of(context).size.width * .5,
                           height: 500,
-                          child: TaskForm(task: task),
+                          child: TaskForm(task: task, isBacklog: isBacklog),
                         ),
                         ElevatedButton(
                             onPressed: () {
@@ -48,16 +49,17 @@ class AddTaskScreen extends StatelessWidget {
 
 class TaskForm extends StatefulWidget {
   final Task? task;
-  const TaskForm({super.key, this.task});
+  final bool isBacklog;
+  const TaskForm({super.key, this.task, required this.isBacklog});
 
   @override
-  TaskFormState createState() => TaskFormState(task: task);
+  TaskFormState createState() => TaskFormState(task: task, isBacklog: isBacklog);
 }
 
 class TaskFormState extends State<TaskForm> {
   final _formKey = GlobalKey<FormState>();
   final Task? task;
-
+  final bool isBacklog;
   // String _modified = '';
   final TextEditingController _title = TextEditingController();
   final TextEditingController _description = TextEditingController();
@@ -72,7 +74,7 @@ class TaskFormState extends State<TaskForm> {
   bool apiPending = false;
   bool _showSelectDate = true;
 
-  TaskFormState({this.task}) {
+  TaskFormState({this.task, required this.isBacklog}) {
     if (task != null) {
       _title.text = task!.title;
       _description.text = task!.description ?? '';
@@ -85,7 +87,7 @@ class TaskFormState extends State<TaskForm> {
 
     initialDueDate =
         _dueDate == null ? DateService().getSelectedDate() : DateService().getDate(_dueDate!);
-    _dueDate = DateService().getString(initialDueDate!);
+    _dueDate = isBacklog ? null : DateService().getString(initialDueDate!);
   }
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
@@ -157,6 +159,8 @@ class TaskFormState extends State<TaskForm> {
           return Form(
             key: _formKey, // Assign the form key
             child: Column(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 // Text input fields and other form elements
                 TextFormField(
@@ -174,6 +178,11 @@ class TaskFormState extends State<TaskForm> {
                   decoration: const InputDecoration(labelText: 'Description'),
                   controller: _description,
                 ),
+
+                const Padding(
+                  padding: EdgeInsets.only(right: 8),
+                  child: Text("Effort Level:"),
+                ),
                 DropdownButton(
                   items: colorOptions,
                   hint: const Text('Set Effort'),
@@ -185,48 +194,76 @@ class TaskFormState extends State<TaskForm> {
 
                 if (_showSelectDate)
                   ElevatedButton(
-                      onPressed: () async {
-                        final date = await _selectDate(context, initialDueDate!);
-                        if (date == null) {
-                          return;
-                        }
-                        setState(() => _dueDate = DateService().getString(date));
-                      },
-                      child: const Text('Set a due date')),
-                if (_dueDate != null) Text(_dueDate!),
-                if (_dueDate != null && _showSelectDate)
-                  ElevatedButton(
-                      onPressed: () async {
-                        final initial = _startTime == null
-                            ? TimeOfDay.now()
-                            : DateService().getTime(_startTime!);
-                        final time = await _selectTime(context, initial);
-                        if (time == null) {
-                          return;
-                        }
-                        setState(() {
-                          DateTime tempDateTime = DateTime(2024, 1, 1, time.hour, time.minute);
-                          _startTime = DateService().getTimeStr(tempDateTime);
-                        });
-                      },
-                      child: const Text('Set a start time')),
-                if (_startTime != null) Text(DateService().displayTime(_startTime!)),
-                ElevatedButton(
                     onPressed: () async {
-                      final initial =
-                          _endTime == null ? TimeOfDay.now() : DateService().getTime(_endTime!);
-                      final time = await _selectTime(context, initial);
-                      if (time == null) {
+                      final date = await _selectDate(context, initialDueDate!);
+                      if (date == null) {
                         return;
                       }
-                      // IF END TIME IS EARLIER THAN START TIME, ERROR?
-                      setState(() {
-                        DateTime tempDateTime = DateTime(2024, 1, 1, time.hour, time.minute);
-                        _endTime = DateService().getTimeStr(tempDateTime);
-                      });
+                      setState(() => _dueDate = DateService().getString(date));
                     },
-                    child: const Text('Set an end time')),
-                if (_endTime != null) Text(DateService().displayTime(_endTime!)),
+                    child: Text(_dueDate == null ? 'Set a due date' : _dueDate!),
+                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton(
+                        onPressed: () async {
+                          final initial = _startTime == null
+                              ? TimeOfDay.now()
+                              : DateService().getTime(_startTime!);
+                          final time = await _selectTime(context, initial);
+                          if (time == null) {
+                            return;
+                          }
+                          setState(() {
+                            DateTime tempDateTime = DateTime(2024, 1, 1, time.hour, time.minute);
+                            _startTime = DateService().getTimeStr(tempDateTime);
+                          });
+                        },
+                        child: Text(_startTime == null
+                            ? 'Set a start time'
+                            : DateService().displayTime(_startTime!))),
+                    if (_startTime != null)
+                      IconButton(
+                        onPressed: () => setState(() {
+                          _startTime = null;
+                          _endTime = null;
+                        }),
+                        icon: const Icon(FontAwesomeIcons.xmark),
+                      ),
+                  ],
+                ),
+                if (_startTime != null)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ElevatedButton(
+                          onPressed: () async {
+                            final initial = _endTime == null
+                                ? TimeOfDay.now()
+                                : DateService().getTime(_endTime!);
+                            final time = await _selectTime(context, initial);
+                            if (time == null) {
+                              return;
+                            }
+                            // IF END TIME IS EARLIER THAN START TIME, ERROR?
+                            setState(() {
+                              DateTime tempDateTime = DateTime(2024, 1, 1, time.hour, time.minute);
+                              _endTime = DateService().getTimeStr(tempDateTime);
+                            });
+                          },
+                          child: Text(_endTime == null
+                              ? 'Set an end time'
+                              : DateService().displayTime(_endTime!))),
+                      if (_endTime != null)
+                        IconButton(
+                          onPressed: () => setState(() {
+                            _endTime = null;
+                          }),
+                          icon: const Icon(FontAwesomeIcons.xmark),
+                        ),
+                    ],
+                  ),
 
                 Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                   const Text('Add to backlog'),

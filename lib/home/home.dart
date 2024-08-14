@@ -5,7 +5,8 @@ import 'package:taskr/shared/shared.dart';
 import 'package:taskr/task_list/task_list.dart';
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+  final bool isBacklog;
+  const HomeScreen({super.key, required this.isBacklog});
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +21,7 @@ class HomeScreen extends StatelessWidget {
           );
         } else if (snapshot.hasData) {
           // Will be null if user is not logged in
-          return const TaskListScreen();
+          return TaskListScreen(isBacklog: isBacklog, userId: snapshot.data!.uid);
         } else {
           return const LoginScreen();
         }

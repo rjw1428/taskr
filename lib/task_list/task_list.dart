@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:rxdart/rxdart.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/shared/progress_bar.dart';
@@ -9,7 +8,9 @@ import 'package:taskr/task_list/task_item.dart';
 import '../shared/shared.dart';
 
 class TaskListScreen extends StatefulWidget {
-  const TaskListScreen({super.key});
+  final bool isBacklog;
+  final String userId;
+  const TaskListScreen({super.key, required this.isBacklog, required this.userId});
 
   @override
   TaskListState createState() => TaskListState();
@@ -19,20 +20,13 @@ class TaskListState extends State<TaskListScreen> {
   List<Task>? _tasks;
   int _completedCount = 0;
   int _totalCount = 0;
+  String today = DateService().getString(DateTime.now());
   String selectedDate = DateService().getString(DateTime.now());
-
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<Task>>(
-        stream: AuthService().userStream.switchMap((user) {
-          if (user == null) {
-            return Stream.value([]);
-          }
-          var userId = user.uid;
-          return TaskService().streamTasks(userId, selectedDate);
-        }),
+        stream: TaskService().streamTasks(widget.userId, widget.isBacklog ? null : selectedDate),
         builder: (context, snapshot) {
-          final userId = AuthService().user!.uid;
           if (snapshot.connectionState == ConnectionState.waiting && _tasks == null) {
             return const LoadingScreen(message: 'Loading Tasks...');
           }
@@ -54,23 +48,15 @@ class TaskListState extends State<TaskListScreen> {
               var list = _tasks!.map((task) => task.id!).toList();
               var taskId = list.removeAt(taskIndex);
               list.add(taskId);
-              TaskService().updateTaskOrder(userId, list, selectedDate);
+              TaskService()
+                  .updateTaskOrder(widget.userId, list, widget.isBacklog ? null : selectedDate);
             });
           }
 
           List<Widget> _children = [];
           for (int i = 0; i < _tasks!.length; i++) {
             final task = _tasks![i];
-            _children.add(displayTask(task, i, onComplete));
-            // if (task.dueDate == null) {
-            //   if (DateService().getString(DateTime.now()) == selectedDate) {
-            //     _children.add(displayTask(task, i));
-            //   }
-            // } else {
-            //   if (task.dueDate == selectedDate) {
-            //     _children.add(displayTask(task, i));
-            //   }
-            // }
+            _children.add(displayTask(task, i, onComplete, widget.isBacklog));
           }
 
           return Scaffold(
@@ -84,35 +70,59 @@ class TaskListState extends State<TaskListScreen> {
               ),
               body: ReorderableListView(
                   header: Column(children: [
-                    DailyProgress(numberator: _completedCount, denominator: _totalCount),
+                    if (!widget.isBacklog)
+                      DailyProgress(numberator: _completedCount, denominator: _totalCount),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         Expanded(
-                          child: Center(
-                            child: Text(
-                                DateService().getDayOfWeek(DateService().getDate(selectedDate))),
-                          ),
-                        ),
-                        IconButton(
-                            onPressed: () => setState(() {
-                                  print("LEFT");
-                                  selectedDate = DateService()
-                                      .decrementDate(DateService().getDate(selectedDate));
-                                  DateService()
-                                      .setSelectedDate(DateService().getDate(selectedDate));
-                                }),
-                            icon: const Icon(FontAwesomeIcons.caretLeft)),
-                        Text(selectedDate),
-                        IconButton(
-                            onPressed: () => setState(() {
-                                  print("RIGHT");
-                                  selectedDate = DateService()
-                                      .incrementDate(DateService().getDate(selectedDate));
-                                  DateService()
-                                      .setSelectedDate(DateService().getDate(selectedDate));
-                                }),
-                            icon: const Icon(FontAwesomeIcons.caretRight)),
+                            child: Center(
+                                child: Text(widget.isBacklog
+                                    ? "Backlog"
+                                    : DateService()
+                                        .getDayOfWeek(DateService().getDate(selectedDate))))),
+                        if (!widget.isBacklog)
+                          Row(
+                            children: [
+                              if (DateService().isDateLessThan(today, selectedDate))
+                                IconButton(
+                                    onPressed: () => setState(() {
+                                          print("BACK TO TODAY");
+                                          selectedDate = today;
+                                          DateService()
+                                              .setSelectedDate(DateService().getDate(selectedDate));
+                                        }),
+                                    icon: const Icon(FontAwesomeIcons.backwardStep)),
+                              IconButton(
+                                  onPressed: () => setState(() {
+                                        print("LEFT");
+                                        selectedDate = DateService()
+                                            .decrementDate(DateService().getDate(selectedDate));
+                                        DateService()
+                                            .setSelectedDate(DateService().getDate(selectedDate));
+                                      }),
+                                  icon: const Icon(FontAwesomeIcons.caretLeft)),
+                              Text(selectedDate),
+                              IconButton(
+                                  onPressed: () => setState(() {
+                                        print("RIGHT");
+                                        selectedDate = DateService()
+                                            .incrementDate(DateService().getDate(selectedDate));
+                                        DateService()
+                                            .setSelectedDate(DateService().getDate(selectedDate));
+                                      }),
+                                  icon: const Icon(FontAwesomeIcons.caretRight)),
+                              if (DateService().isDateLessThan(selectedDate, today))
+                                IconButton(
+                                    onPressed: () => setState(() {
+                                          print("FORWARD TO TODAY");
+                                          selectedDate = today;
+                                          DateService()
+                                              .setSelectedDate(DateService().getDate(selectedDate));
+                                        }),
+                                    icon: const Icon(FontAwesomeIcons.forwardStep)),
+                            ],
+                          )
                       ],
                     ),
                   ]),
@@ -135,7 +145,8 @@ class TaskListState extends State<TaskListScreen> {
                         _tasks!.insert(newIndex + delta, swapItem);
                       }
 
-                      TaskService().updateTaskOrder(userId, list, selectedDate);
+                      TaskService().updateTaskOrder(
+                          widget.userId, list, widget.isBacklog ? null : selectedDate);
                     });
                   },
                   children: _children),
@@ -143,16 +154,23 @@ class TaskListState extends State<TaskListScreen> {
               floatingActionButton: FloatingActionButton(
                   child: const Icon(FontAwesomeIcons.plus, size: 20),
                   onPressed: () => showDialog(
-                      context: context, builder: (BuildContext context) => const AddTaskScreen())));
+                      context: context,
+                      builder: (BuildContext context) =>
+                          AddTaskScreen(isBacklog: widget.isBacklog))));
         });
   }
 
-  displayTask(Task task, int i, Function onComplete) {
+  displayTask(Task task, int i, Function onComplete, bool isBacklog) {
     _totalCount += getScore(task.priority);
     if (task.completed) {
       _completedCount += getScore(task.priority);
     }
-    return TaskItem(task: task, index: i, key: ValueKey(task.id!), onComplete: onComplete);
+    return TaskItem(
+        task: task,
+        index: i,
+        key: ValueKey(task.id!),
+        onComplete: onComplete,
+        isBacklog: isBacklog);
   }
 
   int getScore(Priority priority) {

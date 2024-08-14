@@ -87,4 +87,10 @@ class DateService {
     double toDouble(TimeOfDay a) => a.hour + a.minute / 60.0;
     return toDouble(a) < toDouble(b);
   }
+
+  bool isDateLessThan(String a, String b) {
+    final aDate = DateFormat(stringFmt).parse(a);
+    final bDate = DateFormat(stringFmt).parse(b);
+    return aDate.isBefore(bDate);
+  }
 }

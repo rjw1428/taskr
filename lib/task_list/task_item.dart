@@ -6,12 +6,19 @@ import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/shared/constants.dart';
 import 'package:taskr/task_list/add_task.dart';
+import 'package:taskr/task_list/copy_task.dart';
 
 class TaskItem extends StatelessWidget {
   final Task task;
   final int index;
   final Function onComplete;
-  const TaskItem({super.key, required this.task, required this.index, required this.onComplete});
+  final bool isBacklog;
+  const TaskItem(
+      {super.key,
+      required this.task,
+      required this.index,
+      required this.onComplete,
+      required this.isBacklog});
 
   @override
   Widget build(BuildContext context) {
@@ -56,41 +63,44 @@ class TaskItem extends StatelessWidget {
                                     DateFormat(completeTimeFormat).format(DateTime.now())
                               }, task);
                             }),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                if (timeFrame != '')
-                                  Text(timeFrame,
-                                      style: const TextStyle(fontSize: 14, color: Colors.white)),
-                              ],
-                            ),
-                            Text(
-                              task.title,
-                              style: const TextStyle(fontSize: 16, color: Colors.white),
-                            ),
-                            if (task.description != null)
-                              Padding(
-                                  padding: const EdgeInsets.only(bottom: 10),
-                                  child: Text(task.description!,
-                                      style: const TextStyle(fontSize: 12, color: Colors.white))),
-                            if (task.tags.isNotEmpty)
-                              Wrap(
-                                  spacing: 10,
-                                  children: task.tags
-                                      .map((tag) => Chip(
-                                          labelPadding: const EdgeInsets.all(0),
-                                          label: Text(
-                                            tag,
-                                            style: const TextStyle(fontSize: 10),
-                                          )))
-                                      .toList()),
-                          ],
-                        ),
+                        SizedBox(
+                          width: MediaQuery.of(context).size.width * .6,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (timeFrame != '')
+                                Text(timeFrame,
+                                    style: const TextStyle(fontSize: 14, color: Colors.white)),
+                              Text(
+                                task.title,
+                                style: const TextStyle(fontSize: 16, color: Colors.white),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (task.description != null)
+                                Padding(
+                                    padding: const EdgeInsets.only(bottom: 10),
+                                    child: Text(
+                                      task.description!,
+                                      style: const TextStyle(fontSize: 12, color: Colors.white),
+                                    )),
+                              if (task.tags.isNotEmpty)
+                                Wrap(
+                                    spacing: 10,
+                                    children: task.tags
+                                        .map((tag) => Chip(
+                                            labelPadding: const EdgeInsets.all(0),
+                                            label: Text(
+                                              tag,
+                                              style: const TextStyle(fontSize: 10),
+                                            )))
+                                        .toList()),
+                            ],
+                          ),
+                        )
                       ],
                     ),
-                    Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                    Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                      actionButtons(context, isBacklog),
                       ReorderableDragStartListener(
                         index: index,
                         child: IconButton(
@@ -98,7 +108,6 @@ class TaskItem extends StatelessWidget {
                           onPressed: () => print("HERE"),
                         ),
                       ),
-                      actionButtons(context),
                     ])
                   ]))),
       Center(
@@ -117,27 +126,32 @@ class TaskItem extends StatelessWidget {
     ]);
   }
 
-  Widget actionButtons(BuildContext context) {
+  Widget actionButtons(BuildContext context, bool isBacklog) {
     return PopupMenuButton(
         onSelected: (value) {
           if (value == "PUSH") {
             TaskService().pushTask(task);
           } else if (value == "EDIT") {
             showDialog(
-                context: context, builder: (BuildContext context) => AddTaskScreen(task: task));
+                context: context,
+                builder: (BuildContext context) => AddTaskScreen(task: task, isBacklog: isBacklog));
           } else if (value == "REMOVE") {
             TaskService().deleteTask(task);
+          } else if (value == "COPY") {
+            showDialog(
+                context: context, builder: (BuildContext context) => CopyTaskScreen(task: task));
           }
         },
         itemBuilder: (context) => [
-              const PopupMenuItem(
-                  value: "PUSH",
-                  child: Row(
-                    children: [
-                      Icon(FontAwesomeIcons.arrowRightToBracket),
-                      Padding(padding: EdgeInsets.only(left: 8), child: Text('Push'))
-                    ],
-                  )),
+              if (!isBacklog)
+                const PopupMenuItem(
+                    value: "PUSH",
+                    child: Row(
+                      children: [
+                        Icon(FontAwesomeIcons.arrowRightToBracket),
+                        Padding(padding: EdgeInsets.only(left: 8), child: Text('Push'))
+                      ],
+                    )),
 
               const PopupMenuItem(
                   value: "EDIT",
@@ -145,6 +159,14 @@ class TaskItem extends StatelessWidget {
                     children: [
                       Icon(FontAwesomeIcons.penToSquare),
                       Padding(padding: EdgeInsets.only(left: 8), child: Text('Edit'))
+                    ],
+                  )),
+              const PopupMenuItem(
+                  value: "COPY",
+                  child: Row(
+                    children: [
+                      Icon(FontAwesomeIcons.copy),
+                      Padding(padding: EdgeInsets.only(left: 8), child: Text('Copy'))
                     ],
                   )),
               // // ON PUSH TASK
