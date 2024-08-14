@@ -3,11 +3,14 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:taskr/home/home.dart';
 
 class BottomNavBar extends StatelessWidget {
-  const BottomNavBar({super.key});
+  final int selectedIndex;
+  const BottomNavBar({super.key, required this.selectedIndex});
 
   @override
   Widget build(BuildContext context) {
     return BottomNavigationBar(
+      type: BottomNavigationBarType.fixed,
+      currentIndex: selectedIndex,
       selectedItemColor: Colors.white,
       unselectedItemColor: Colors.grey,
       showUnselectedLabels: true,

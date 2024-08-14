@@ -29,7 +29,7 @@ class AddTaskScreen extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(task == null ? "Add a task" : "Edit task",
-                            style: TextStyle(fontSize: 40, color: Colors.black)),
+                            style: const TextStyle(fontSize: 40, color: Colors.black)),
                         SizedBox(
                           // width: MediaQuery.of(context).size.width * .5,
                           height: 500,
@@ -69,10 +69,10 @@ class TaskFormState extends State<TaskForm> {
   Priority _priority = Priority.low;
   List<String>? _tags;
   List<String> _initTagLabels = [];
+  bool _completed = false;
   // List<String> _subTasks = const [];
   DateTime? initialDueDate;
   bool apiPending = false;
-  bool _showSelectDate = true;
 
   TaskFormState({this.task, required this.isBacklog}) {
     if (task != null) {
@@ -83,6 +83,7 @@ class TaskFormState extends State<TaskForm> {
       _endTime = task!.endTime;
       _priority = task!.priority;
       _initTagLabels = task!.tags;
+      _completed = task!.completed;
     }
 
     initialDueDate =
@@ -102,7 +103,7 @@ class TaskFormState extends State<TaskForm> {
         title: _title.value.text,
         description: _description.value.text,
         priority: _priority,
-        completed: false,
+        completed: isBacklog ? _completed : false,
         dueDate: _dueDate,
         startTime: _startTime,
         endTime: _endTime,
@@ -191,18 +192,28 @@ class TaskFormState extends State<TaskForm> {
                   }),
                   value: _priority,
                 ),
-
-                if (_showSelectDate)
-                  ElevatedButton(
-                    onPressed: () async {
-                      final date = await _selectDate(context, initialDueDate!);
-                      if (date == null) {
-                        return;
-                      }
-                      setState(() => _dueDate = DateService().getString(date));
-                    },
-                    child: Text(_dueDate == null ? 'Set a due date' : _dueDate!),
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton(
+                      onPressed: () async {
+                        final date = await _selectDate(context, initialDueDate!);
+                        if (date == null) {
+                          return;
+                        }
+                        setState(() => _dueDate = DateService().getString(date));
+                      },
+                      child: Text(_dueDate == null ? 'Set a due date' : _dueDate!),
+                    ),
+                    if (_dueDate != null)
+                      IconButton(
+                        onPressed: () => setState(() {
+                          _dueDate = null;
+                        }),
+                        icon: const Icon(FontAwesomeIcons.xmark),
+                      ),
+                  ],
+                ),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -265,20 +276,10 @@ class TaskFormState extends State<TaskForm> {
                     ],
                   ),
 
-                Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  const Text('Add to backlog'),
-                  Checkbox(
-                      value: !_showSelectDate,
-                      onChanged: (value) => setState(() {
-                            if (value == true) {
-                              _dueDate = null;
-                              _showSelectDate = false;
-                            } else {
-                              _dueDate = DateService().getString(initialDueDate!);
-                              _showSelectDate = true;
-                            }
-                          }))
-                ]),
+                if (_dueDate == null && !isBacklog)
+                  const Text('Item will be added to the backlog without a due date'),
+                if (_dueDate != null && isBacklog)
+                  const Text('Item will be scheduled on the selected date'),
                 MultiSelectDialogField(
                   title: const Text(
                     "Tags",

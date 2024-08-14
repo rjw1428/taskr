@@ -22,6 +22,7 @@ class TaskListState extends State<TaskListScreen> {
   int _totalCount = 0;
   String today = DateService().getString(DateTime.now());
   String selectedDate = DateService().getString(DateTime.now());
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<Task>>(
@@ -150,7 +151,7 @@ class TaskListState extends State<TaskListScreen> {
                     });
                   },
                   children: _children),
-              bottomNavigationBar: const BottomNavBar(),
+              bottomNavigationBar: BottomNavBar(selectedIndex: widget.isBacklog ? 2 : 0),
               floatingActionButton: FloatingActionButton(
                   child: const Icon(FontAwesomeIcons.plus, size: 20),
                   onPressed: () => showDialog(

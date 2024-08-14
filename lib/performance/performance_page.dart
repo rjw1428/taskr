@@ -22,6 +22,8 @@ class PerformancePage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [Text('Performance things go here')],
         ),
-        bottomNavigationBar: const BottomNavBar());
+        bottomNavigationBar: const BottomNavBar(
+          selectedIndex: 1,
+        ));
   }
 }
