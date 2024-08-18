@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:taskr/shared/constants.dart';
 
 class ScoreService {
   ScoreService._internal();
@@ -21,11 +22,25 @@ class ScoreService {
   }
 
   // NEED TO SET THE CURRENT SCORE
-  Future<void> incrementScore(String userId) {
-    return score(userId).update({'currentScore': FieldValue.increment(1)});
+  Future<void> incrementScore(String userId, int value) {
+    return score(userId).update({'currentScore': FieldValue.increment(value)});
   }
 
-  Future<void> decrementScore(String userId) {
-    return score(userId).update({'currentScore': FieldValue.increment(-1)});
+  Future<void> decrementScore(String userId, int value) {
+    return score(userId).update({'currentScore': FieldValue.increment(-1 * value)});
+  }
+
+  int getScore(Effort priority) {
+    if (priority == Effort.high) {
+      return 3;
+    }
+    if (priority == Effort.medium) {
+      return 2;
+    }
+    if (priority == Effort.low) {
+      return 1;
+    }
+    print("Unknown Priority: $priority");
+    return 0;
   }
 }

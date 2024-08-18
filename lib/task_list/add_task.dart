@@ -66,7 +66,7 @@ class TaskFormState extends State<TaskForm> {
   String? _dueDate;
   String? _startTime;
   String? _endTime;
-  Priority _priority = Priority.low;
+  Effort _priority = Effort.low;
   List<String>? _tags;
   List<String> _initTagLabels = [];
   bool _completed = false;

@@ -12,19 +12,13 @@ Task _$TaskFromJson(Map<String, dynamic> json) => Task(
       title: json['title'] as String? ?? '',
       description: json['description'] as String?,
       completed: json['completed'] as bool? ?? false,
-      tags:
-          (json['tags'] as List<dynamic>?)?.map((e) => e as String).toList() ??
-              const [],
-      priority: $enumDecodeNullable(_$PriorityEnumMap, json['priority']) ??
-          Priority.low,
+      tags: (json['tags'] as List<dynamic>?)?.map((e) => e as String).toList() ?? const [],
+      priority: $enumDecodeNullable(_$PriorityEnumMap, json['priority']) ?? Effort.low,
       dueDate: json['dueDate'] as String?,
       startTime: json['startTime'] as String?,
       endTime: json['endTime'] as String?,
       pushCount: (json['pushCount'] as num?)?.toInt() ?? 0,
-      subtasks: (json['subtasks'] as List<dynamic>?)
-              ?.map((e) => e as String)
-              .toList() ??
-          const [],
+      subtasks: (json['subtasks'] as List<dynamic>?)?.map((e) => e as String).toList() ?? const [],
     )
       ..id = json['id'] as String?
       ..completedTime = json['completedTime'] as String?;
@@ -47,9 +41,9 @@ Map<String, dynamic> _$TaskToJson(Task instance) => <String, dynamic>{
     };
 
 const _$PriorityEnumMap = {
-  Priority.high: 'high',
-  Priority.medium: 'medium',
-  Priority.low: 'low',
+  Effort.high: 'high',
+  Effort.medium: 'medium',
+  Effort.low: 'low',
 };
 
 Tag _$TagFromJson(Map<String, dynamic> json) => Tag(

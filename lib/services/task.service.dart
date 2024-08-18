@@ -161,9 +161,14 @@ class TaskService {
       }
 
       if (t.startTime == null) {
-        lowerItems.add(t.id);
-        continue;
+        lowerItems.add(id);
+        break;
       }
+
+      // if (t.startTime == null) {
+      //   lowerItems.add(t.id);
+      //   continue;
+      // }
 
       if (DateService().isTimeLessThan(
           DateService().getTime(task.startTime!), DateService().getTime(t.startTime!))) {
@@ -176,7 +181,7 @@ class TaskService {
     if (tasks.isEmpty) {
       update = [id];
     } else if (index == tasks.length - 1) {
-      if (update.contains(id)) {
+      if (!update.contains(id)) {
         update = update + [id];
       } else {
         update = update + tasks.sublist(index).map((t) => t.id!).toList();

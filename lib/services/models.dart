@@ -16,7 +16,7 @@ class Task {
   String? endTime;
   String? completedTime;
   List<String> subtasks;
-  Priority priority;
+  Effort priority;
   int pushCount;
   Task(
       {this.added,
@@ -25,7 +25,7 @@ class Task {
       this.description,
       this.completed = false,
       this.tags = const [],
-      this.priority = Priority.low,
+      this.priority = Effort.low,
       this.dueDate,
       this.startTime,
       this.endTime,

@@ -50,10 +50,12 @@ class TaskItem extends StatelessWidget {
                             onChanged: (value) async {
                               if (value!) {
                                 confetti.play();
-                                ScoreService().incrementScore(AuthService().user!.uid);
+                                ScoreService().incrementScore(AuthService().user!.uid,
+                                    ScoreService().getScore(task.priority));
                                 onComplete(index);
                               } else {
-                                ScoreService().decrementScore(AuthService().user!.uid);
+                                ScoreService().decrementScore(AuthService().user!.uid,
+                                    ScoreService().getScore(task.priority));
                               }
                               const completeTimeFormat =
                                   "${DateService.stringFmt} ${DateService.dbTimeFormat}";

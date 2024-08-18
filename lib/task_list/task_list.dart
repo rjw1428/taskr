@@ -72,7 +72,7 @@ class TaskListState extends State<TaskListScreen> {
               body: ReorderableListView(
                   header: Column(children: [
                     if (!widget.isBacklog)
-                      DailyProgress(numberator: _completedCount, denominator: _totalCount),
+                      DailyProgress(numerator: _completedCount, denominator: _totalCount),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
@@ -162,9 +162,9 @@ class TaskListState extends State<TaskListScreen> {
   }
 
   displayTask(Task task, int i, Function onComplete, bool isBacklog) {
-    _totalCount += getScore(task.priority);
+    _totalCount += ScoreService().getScore(task.priority);
     if (task.completed) {
-      _completedCount += getScore(task.priority);
+      _completedCount += ScoreService().getScore(task.priority);
     }
     return TaskItem(
         task: task,
@@ -172,19 +172,5 @@ class TaskListState extends State<TaskListScreen> {
         key: ValueKey(task.id!),
         onComplete: onComplete,
         isBacklog: isBacklog);
-  }
-
-  int getScore(Priority priority) {
-    if (priority == Priority.high) {
-      return 3;
-    }
-    if (priority == Priority.medium) {
-      return 2;
-    }
-    if (priority == Priority.low) {
-      return 1;
-    }
-    print("Unknown Priority: $priority");
-    return 0;
   }
 }

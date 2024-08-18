@@ -8,6 +8,7 @@ class AnimatedProgressbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    print(value);
     return LayoutBuilder(
       // Unknown width
       builder: (BuildContext context, BoxConstraints box) {
@@ -55,14 +56,29 @@ class AnimatedProgressbar extends StatelessWidget {
 }
 
 class DailyProgress extends StatelessWidget {
-  final int numberator;
+  final int numerator;
   final int denominator;
 
-  const DailyProgress({super.key, required this.numberator, required this.denominator});
+  const DailyProgress({super.key, required this.numerator, required this.denominator});
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedProgressbar(value: _calculateProgress(numberator, denominator), height: 8);
+    return Stack(
+      children: [
+        AnimatedProgressbar(value: _calculateProgress(numerator, denominator), height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text("$numerator/$denominator",
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    shadows: [Shadow(color: Colors.black, offset: Offset(2, 2), blurRadius: 4.0)]))
+          ],
+        )
+      ],
+    );
   }
 
   double _calculateProgress(int num, int denom) {
