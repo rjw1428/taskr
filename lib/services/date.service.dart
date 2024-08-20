@@ -47,6 +47,17 @@ class DateService {
     return DateFormat.EEEE().format(d);
   }
 
+  String getMonth(int month) {
+    final now = DateTime.now();
+    return DateFormat('MMM').format(DateTime(now.year, month, 1));
+  }
+
+  String dayAxisLabel(int daysBack) {
+    final now = DateTime.now();
+    final newDate = now.subtract(Duration(days: daysBack));
+    return DateFormat('E').format(newDate);
+  }
+
   String incrementDate(DateTime d) {
     final update = d.add(const Duration(days: 1));
     return DateFormat(stringFmt).format(update);
@@ -62,11 +73,8 @@ class DateService {
       return '';
     }
     try {
-      // final parsedDate = DateFormat(stringFmt).parse(task.dueDate!);
-      // final dueDate = DateFormat('MM/dd').format(parsedDate);
       if (task.startTime == null) {
         return '';
-        // return dueDate;
       }
       final stime = DateFormat(dbTimeFormat).parse(task.startTime!);
       final startTime = DateFormat(displayTimeFormat).format(stime);

@@ -50,20 +50,23 @@ class TaskItem extends StatelessWidget {
                             onChanged: (value) async {
                               if (value!) {
                                 confetti.play();
-                                ScoreService().incrementScore(AuthService().user!.uid,
-                                    ScoreService().getScore(task.priority));
+                                PerformanceService().incrementScore(AuthService().user!.uid,
+                                    PerformanceService().getScore(task.priority));
                                 onComplete(index);
                               } else {
-                                ScoreService().decrementScore(AuthService().user!.uid,
-                                    ScoreService().getScore(task.priority));
+                                PerformanceService().decrementScore(AuthService().user!.uid,
+                                    PerformanceService().getScore(task.priority));
                               }
                               const completeTimeFormat =
                                   "${DateService.stringFmt} ${DateService.dbTimeFormat}";
-                              await TaskService().updateTaskByKey({"completed": value}, task);
                               await TaskService().updateTaskByKey({
+                                "completed": value,
                                 "completedTime":
                                     DateFormat(completeTimeFormat).format(DateTime.now())
                               }, task);
+                              // TAGS HERE ARE NAME, NOT ID
+                              await PerformanceService()
+                                  .updateToday(AuthService().user!.uid, task, value);
                             }),
                         SizedBox(
                           width: MediaQuery.of(context).size.width * .6,
@@ -145,7 +148,7 @@ class TaskItem extends StatelessWidget {
           }
         },
         itemBuilder: (context) => [
-              if (!isBacklog)
+              if (!isBacklog && !task.completed)
                 const PopupMenuItem(
                     value: "PUSH",
                     child: Row(

@@ -162,9 +162,9 @@ class TaskListState extends State<TaskListScreen> {
   }
 
   displayTask(Task task, int i, Function onComplete, bool isBacklog) {
-    _totalCount += ScoreService().getScore(task.priority);
+    _totalCount += PerformanceService().getScore(task.priority);
     if (task.completed) {
-      _completedCount += ScoreService().getScore(task.priority);
+      _completedCount += PerformanceService().getScore(task.priority);
     }
     return TaskItem(
         task: task,

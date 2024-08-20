@@ -103,7 +103,7 @@ class TaskFormState extends State<TaskForm> {
         title: _title.value.text,
         description: _description.value.text,
         priority: _priority,
-        completed: isBacklog ? _completed : false,
+        completed: _completed,
         dueDate: _dueDate,
         startTime: _startTime,
         endTime: _endTime,

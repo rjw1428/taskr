@@ -124,6 +124,7 @@ class TaskService {
       await _db.collection('todos').doc(user.uid).collection("tasks").doc(date).set({
         "taskOrder": FieldValue.arrayUnion([id])
       }, SetOptions(merge: true));
+
       completer.complete(id);
       return completer.future;
     }
@@ -195,6 +196,9 @@ class TaskService {
         .collection("tasks")
         .doc(date)
         .set({"taskOrder": update});
+
+    await PerformanceService().checkRolloverCurrentDay(user.uid);
+
     completer.complete(id);
     return completer.future;
   }
@@ -215,6 +219,7 @@ class TaskService {
     if (user == null) {
       throw "No user logged in when completing task";
     } else {
+      await PerformanceService().checkRolloverCurrentDay(user.uid);
       return await taskCollection(user.uid, date).doc(taskId).update(update);
     }
   }
@@ -229,6 +234,10 @@ class TaskService {
       await _db.collection('todos').doc(user.uid).collection("tasks").doc(date).set({
         "taskOrder": FieldValue.arrayRemove([taskId])
       }, SetOptions(merge: true));
+      await PerformanceService().checkRolloverCurrentDay(user.uid);
+      if (task.completed) {
+        await PerformanceService().updateToday(user.uid, task, false);
+      }
       return await taskCollection(user.uid, date).doc(taskId).delete();
     }
   }
@@ -237,10 +246,15 @@ class TaskService {
     var user = AuthService().user;
     final tags = await TagService().streamTagsArray(user!.uid).first;
     await deleteTask(task);
-    final d = task.dueDate != null ? DateService().getDate(task.dueDate!) : DateTime.now();
+    final now = DateTime.now();
+    final d = task.dueDate != null ? DateService().getDate(task.dueDate!) : now;
+    final decrementScore = d.day == now.day && d.month == now.month && d.year == now.year;
     task.dueDate = DateService().incrementDate(d);
     task.pushCount += 1;
     task.tags = task.tags.map((label) => tags.firstWhere((tag) => tag.label == label).id).toList();
     await addTask(task);
+    if (decrementScore) {
+      await PerformanceService().decrementScore(user.uid, 1);
+    }
   }
 }

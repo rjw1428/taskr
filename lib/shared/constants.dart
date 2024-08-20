@@ -7,3 +7,5 @@ Map<Effort, Color> priorityColors = {
   Effort.medium: Color.fromARGB(255, 177, 148, 23),
   Effort.low: const Color.fromARGB(255, 40, 79, 42),
 };
+
+enum Days { mon, tus, wed, thurs, fri, sat, sun }
