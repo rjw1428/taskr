@@ -221,7 +221,6 @@ class TaskService {
       if (update.containsKey('completed')) {
         await PerformanceService().updatePerfomanceStats(user.uid, task, !!update['completed']);
       }
-      final x = 1;
       return await taskCollection(user.uid, date).doc(taskId).update(update);
     }
   }
