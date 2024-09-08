@@ -50,6 +50,9 @@ class BottomNavBar extends StatelessWidget {
       ],
       backgroundColor: Colors.black,
       onTap: (int idx) {
+        if (idx == selectedIndex) {
+          return;
+        }
         switch (idx) {
           case 0:
             Navigator.pushAndRemoveUntil(

@@ -67,8 +67,8 @@ class TaskFormState extends State<TaskForm> {
   String? _startTime;
   String? _endTime;
   Effort _priority = Effort.low;
-  List<String>? _tags;
-  List<String> _initTagLabels = [];
+  List<Tag>? _tags;
+  List<Tag> _initTags = const [];
   bool _completed = false;
   // List<String> _subTasks = const [];
   DateTime? initialDueDate;
@@ -82,7 +82,7 @@ class TaskFormState extends State<TaskForm> {
       _startTime = task!.startTime;
       _endTime = task!.endTime;
       _priority = task!.priority;
-      _initTagLabels = task!.tags;
+      _initTags = task!.tags;
       _completed = task!.completed;
     }
 
@@ -151,12 +151,8 @@ class TaskFormState extends State<TaskForm> {
               .toList();
           // final selectedPriorityOption = Provider.of<String>(context);
           var tags = snapshot.hasError || !snapshot.hasData ? [] as List<Tag> : snapshot.data!;
-
-          var initTags = _initTagLabels.where((label) => label != '<NOT FOUND>').map((label) {
-            return tags.firstWhere((tag) => tag.label == label).id;
-          }).toList();
-          _tags ??= initTags;
-
+          _tags ??= _initTags;
+          // print(_tags!.map((t) => "${t.id}: ${t.label}").toList());
           return Form(
             key: _formKey, // Assign the form key
             child: Column(
@@ -292,8 +288,9 @@ class TaskFormState extends State<TaskForm> {
                   backgroundColor: Colors.black,
                   items: tags.map((tag) => MultiSelectItem(tag.id, tag.label)).toList(),
                   listType: MultiSelectListType.CHIP,
-                  initialValue: _tags!,
-                  onConfirm: (result) => setState(() => _tags = result),
+                  initialValue: _tags!.map((t) => t.id).toList(), // NEED TO BE ID's
+                  onConfirm: (result) => setState(() =>
+                      _tags = result.map((id) => tags.firstWhere((tag) => id == tag.id)).toList()),
                   buttonIcon: const Icon(
                     FontAwesomeIcons.tag,
                     color: Colors.black,

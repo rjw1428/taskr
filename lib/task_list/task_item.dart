@@ -59,14 +59,12 @@ class TaskItem extends StatelessWidget {
                               }
                               const completeTimeFormat =
                                   "${DateService.stringFmt} ${DateService.dbTimeFormat}";
+                              // TAGS HERE ARE NAME, NOT ID
                               await TaskService().updateTaskByKey({
                                 "completed": value,
                                 "completedTime":
                                     DateFormat(completeTimeFormat).format(DateTime.now())
                               }, task);
-                              // TAGS HERE ARE NAME, NOT ID
-                              await PerformanceService()
-                                  .updateToday(AuthService().user!.uid, task, value);
                             }),
                         SizedBox(
                           width: MediaQuery.of(context).size.width * .6,
@@ -95,7 +93,7 @@ class TaskItem extends StatelessWidget {
                                         .map((tag) => Chip(
                                             labelPadding: const EdgeInsets.all(0),
                                             label: Text(
-                                              tag,
+                                              tag.label,
                                               style: const TextStyle(fontSize: 10),
                                             )))
                                         .toList()),

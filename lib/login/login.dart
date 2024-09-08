@@ -18,9 +18,7 @@ class LoginScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            const FlutterLogo(
-              size: 150,
-            ),
+            Image.asset('logo.png', height: 200, width: 200),
             LoginButton(
               icon: FontAwesomeIcons.google,
               text: "Login with Google",

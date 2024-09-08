@@ -16,12 +16,14 @@ class TagService {
     return _db.collection('todos').doc(userId).collection('tags');
   }
 
-  Stream<Map<String, Tag>> streamTags(String userId) {
+  Stream<Map<String, dynamic>> streamTags(String userId) {
     return tagCollection(userId)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => {doc.id: Tag.fromJson(doc.data())})
-            .reduce((acc, cur) => {...acc, ...cur}))
+        .map((snapshot) => snapshot.docs.map((doc) {
+              final data = doc.data();
+              data['id'] = doc.id;
+              return {doc.id: data};
+            }).reduce((acc, cur) => {...acc, ...cur}))
         .handleError((error) {
       print("TAG WARNING: $error");
       return {};

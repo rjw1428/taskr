@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/services/models.dart';
 import 'package:rxdart/rxdart.dart';
+import 'package:taskr/shared/shared.dart';
 
 class TaskService {
   TaskService._internal();
@@ -69,40 +70,41 @@ class TaskService {
   Stream<List<Task>> streamTasks(String userId, String? date) {
     return CombineLatestStream.combine3(
         taskCollection(userId, date ?? defaultUnassignedDate)
-            // .orderBy('added', descending: true)
             .snapshots()
-            .handleError((error) => print("TASK LIST: $error"))
-            .map((snapshot) {
-          return snapshot.docs.map((doc) {
-            return Task.fromJson({...doc.data(), 'id': doc.id});
-          }).toList();
-        }),
+            .map((snapshot) => snapshot.docs.map((doc) => {...doc.data(), 'id': doc.id}).toList())
+            .handleError((error) => print("TASK LIST: $error")),
         TagService().streamTags(userId),
         taskOrderStream(userId, date ?? defaultUnassignedDate),
         (tasks, tags, order) =>
-            order.map((id) => tasks.firstWhere((task) => task.id == id)).map((task) {
-              final tagList = task.tags
-                  .map((tagId) => tags.containsKey(tagId) ? tags[tagId]!.label : '<NOT FOUND>')
-                  .toList();
-              return Task.fromJson({...task.toJson(), "tags": tagList});
-            }).toList()).handleError((error) => print(error));
+            order.map((id) => tasks.firstWhere((task) => task['id'] == id)).map((task) {
+              final tagList = task['tags'].map((tag) {
+                if (tag is String) {
+                  return tags[tag];
+                } else {
+                  return tags[tag["id"]];
+                }
+              }).toList();
+              task['tags'] = tagList ?? [];
+              return Task.fromJson(task);
+            }).toList()).handleError((error) => print("SHIT: $error"));
   }
 
-  Future<List<Task>> getTasks(String userId, String? date) async {
+  Future<List<Map<String, dynamic>>> getTasks(String userId, String? date) async {
     var snapshot = await taskCollection(userId, date ?? defaultUnassignedDate)
         .orderBy('added', descending: true)
         .get();
-    var data = snapshot.docs.map((doc) => ({
-          ...doc.data(),
-          'id': doc.id,
-        }));
-    return data.map((d) => Task.fromJson(d)).toList();
+    return snapshot.docs
+        .map((doc) => ({
+              ...doc.data(),
+              'id': doc.id,
+            }))
+        .toList();
   }
 
-  Future<List<Task>> getTasksInOrder(String userId, String? date) async {
+  Future<List<Map<String, dynamic>>> getTasksInOrder(String userId, String? date) async {
     final order = await getTaskOrder(userId, date ?? defaultUnassignedDate);
     final tasks = await getTasks(userId, date ?? defaultUnassignedDate);
-    return order.map((id) => tasks.firstWhere((t) => t.id == id)).toList();
+    return order.map((id) => tasks.firstWhere((t) => t['id'] == id)).toList();
   }
 
   Future<String> addTask(Task task) async {
@@ -113,10 +115,9 @@ class TaskService {
     final date = task.dueDate ?? defaultUnassignedDate;
     final completer = Completer<String>();
 
+    final data = removeNulls(task.toDbTask());
     // Insert into DB
-    var id = await taskCollection(user.uid, date)
-        .add(task.removeNulls())
-        .then((DocumentReference ref) => ref.id);
+    var id = await taskCollection(user.uid, date).add(data).then((DocumentReference ref) => ref.id);
 
     // -- Smart Ordering --
     // If backloged, add to end
@@ -129,12 +130,12 @@ class TaskService {
       return completer.future;
     }
 
-    List<Task> tasks = await getTasksInOrder(user.uid, task.dueDate!);
+    List<Map<String, dynamic>> tasks = await getTasksInOrder(user.uid, task.dueDate!);
 
     // If no start time, make the last not-completed task
     if (task.startTime == null) {
-      var completed = tasks.where((t) => t.completed).map((t) => t.id).toList();
-      var notCompleted = tasks.where((t) => !t.completed).map((t) => t.id).toList();
+      var completed = tasks.where((t) => t['completed']).map((t) => t['id']).toList();
+      var notCompleted = tasks.where((t) => !t['completed']).map((t) => t['id']).toList();
       notCompleted.add(id);
       var newOrder = notCompleted + completed;
       await _db
@@ -156,12 +157,12 @@ class TaskService {
       var t = tasks[i];
       index = i;
 
-      if (t.completed) {
+      if (t['completed']) {
         lowerItems.add(id);
         break;
       }
 
-      if (t.startTime == null) {
+      if (t['startTime'] == null) {
         lowerItems.add(id);
         break;
       }
@@ -172,11 +173,11 @@ class TaskService {
       // }
 
       if (DateService().isTimeLessThan(
-          DateService().getTime(task.startTime!), DateService().getTime(t.startTime!))) {
+          DateService().getTime(task.startTime!), DateService().getTime(t['startTime']!))) {
         lowerItems.add(id);
         break;
       }
-      lowerItems.add(t.id);
+      lowerItems.add(t['id']);
     }
     var update = lowerItems;
     if (tasks.isEmpty) {
@@ -185,10 +186,10 @@ class TaskService {
       if (!update.contains(id)) {
         update = update + [id];
       } else {
-        update = update + tasks.sublist(index).map((t) => t.id!).toList();
+        update = update + tasks.sublist(index).map((t) => t['id']!).toList();
       }
     } else if (index < tasks.length) {
-      update = update + tasks.sublist(index).map((t) => t.id!).toList();
+      update = update + tasks.sublist(index).map((t) => t['id']!).toList();
     }
     await _db
         .collection('todos')
@@ -196,8 +197,6 @@ class TaskService {
         .collection("tasks")
         .doc(date)
         .set({"taskOrder": update});
-
-    await PerformanceService().checkRolloverCurrentDay(user.uid);
 
     completer.complete(id);
     return completer.future;
@@ -209,7 +208,7 @@ class TaskService {
       throw "No user logged in when adding task";
     }
     final date = task.dueDate ?? defaultUnassignedDate;
-    await taskCollection(user.uid, date).doc(id).set(task.removeNulls());
+    await taskCollection(user.uid, date).doc(id).set(removeNulls(task.toDbTask()));
   }
 
   Future<void> updateTaskByKey(Map<String, dynamic> update, Task task) async {
@@ -219,7 +218,10 @@ class TaskService {
     if (user == null) {
       throw "No user logged in when completing task";
     } else {
-      await PerformanceService().checkRolloverCurrentDay(user.uid);
+      if (update.containsKey('completed')) {
+        await PerformanceService().updatePerfomanceStats(user.uid, task, !!update['completed']);
+      }
+      final x = 1;
       return await taskCollection(user.uid, date).doc(taskId).update(update);
     }
   }
@@ -234,24 +236,21 @@ class TaskService {
       await _db.collection('todos').doc(user.uid).collection("tasks").doc(date).set({
         "taskOrder": FieldValue.arrayRemove([taskId])
       }, SetOptions(merge: true));
-      await PerformanceService().checkRolloverCurrentDay(user.uid);
       if (task.completed) {
-        await PerformanceService().updateToday(user.uid, task, false);
+        await PerformanceService().updatePerfomanceStats(user.uid, task, false);
       }
       return await taskCollection(user.uid, date).doc(taskId).delete();
     }
   }
 
   Future<void> pushTask(Task task) async {
-    var user = AuthService().user;
-    final tags = await TagService().streamTagsArray(user!.uid).first;
+    var user = AuthService().user!;
     await deleteTask(task);
     final now = DateTime.now();
     final d = task.dueDate != null ? DateService().getDate(task.dueDate!) : now;
     final decrementScore = d.day == now.day && d.month == now.month && d.year == now.year;
     task.dueDate = DateService().incrementDate(d);
     task.pushCount += 1;
-    task.tags = task.tags.map((label) => tags.firstWhere((tag) => tag.label == label).id).toList();
     await addTask(task);
     if (decrementScore) {
       await PerformanceService().decrementScore(user.uid, 1);

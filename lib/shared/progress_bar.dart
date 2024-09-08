@@ -8,7 +8,6 @@ class AnimatedProgressbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    print(value);
     return LayoutBuilder(
       // Unknown width
       builder: (BuildContext context, BoxConstraints box) {

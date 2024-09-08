@@ -68,6 +68,10 @@ class DateService {
     return DateFormat(stringFmt).format(update);
   }
 
+  DateTime daysAgo(DateTime startDate, int days) {
+    return startDate.subtract(Duration(days: days));
+  }
+
   String timeFrameBuilder(Task task) {
     if (task.dueDate == null || task.dueDate == '') {
       return '';

@@ -10,7 +10,7 @@ class Task {
   String title;
   String? description;
   bool completed;
-  List<String> tags;
+  List<Tag> tags;
   String? dueDate;
   String? startTime;
   String? endTime;
@@ -35,10 +35,10 @@ class Task {
   factory Task.fromJson(Map<String, dynamic> json) => _$TaskFromJson(json);
   Map<String, dynamic> toJson() => _$TaskToJson(this);
 
-  Map<String, dynamic> removeNulls() {
+  Map<String, dynamic> toDbTask() {
     var obj = toJson();
-    obj.removeWhere((key, value) => value == null || value == '');
-    return obj;
+    obj['tags'] = tags.map((tag) => tag.id).toList();
+    return (obj);
   }
 }
 
@@ -47,7 +47,7 @@ class Tag {
   String id;
   String label;
 
-  Tag({this.id = '', this.label = ''});
+  Tag({required this.id, required this.label});
 
   factory Tag.fromJson(Map<String, dynamic> json) => _$TagFromJson(json);
   Map<String, dynamic> toJson() => _$TagToJson(this);

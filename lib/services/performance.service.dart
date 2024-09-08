@@ -12,33 +12,17 @@ class PerformanceService {
     return _instance;
   }
 
-  Future<void> checkRolloverCurrentDay(userId) async {
-    final ref = await score(userId).get();
-    final lastAccessed = ref.data()!['lastAccessDate'];
-    final current = DateService().getString(DateTime.now());
-    if (lastAccessed == null) {
-      final update = {'lastAccessDate': current};
-      await score(userId).set(update, SetOptions(merge: true));
-    } else if (lastAccessed != current) {
-      final data = ref.data()!['currentDay'];
-      await score(userId)
-          .collection('performance')
-          .doc(lastAccessed)
-          .set({'completed': data, 'date': DateService().getDate(lastAccessed)});
-      await score(userId)
-          .set({'currentDay': {}, 'lastAccessDate': current}, SetOptions(merge: true));
-      print('Rollover tasks for $lastAccessed');
-    }
-    print('Rollover completed Tasks check completed');
-  }
-
   DocumentReference<Map<String, dynamic>> score(String userId) {
     return _db.collection('todos').doc(userId);
   }
 
-  Stream<Map<String, dynamic>> streamPerformance(String userId) {
-    return score(userId).snapshots().map((snapshot) {
-      return snapshot.data()!;
+  Stream<List<Map<String, dynamic>>> streamPerformance(String userId, DateTime timestamp) {
+    return score(userId)
+        .collection('performance')
+        .where("date", isGreaterThan: Timestamp.fromDate(timestamp))
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) => doc.data()).toList();
     });
   }
 
@@ -50,11 +34,12 @@ class PerformanceService {
     return score(userId).update({'currentScore': FieldValue.increment(-1 * value)});
   }
 
-  Future<void> updateToday(String userId, Task task, bool shouldAdd) async {
-    final currentRef = await score(userId).get();
-    final currentDay = currentRef.data()!['currentDay'] as Map;
+  Future<void> updatePerfomanceStats(String userId, Task task, bool shouldAdd) async {
+    final date = task.dueDate ?? DateService().getString(DateTime.now());
+    final currentRef = await score(userId).collection('performance').doc(date).get();
+    final completed = currentRef.exists ? currentRef.data()!['completed'] : {};
     final points = getScore(task.priority);
-    var update = Map.from(currentDay);
+    var update = Map.from(completed);
     if (update.containsKey('ALL')) {
       update['ALL'] += points * (shouldAdd ? 1 : -1);
     } else {
@@ -67,15 +52,18 @@ class PerformanceService {
         update['Other'] = points;
       }
     }
-    for (final tagId in task.tags) {
-      if (update.containsKey(tagId)) {
-        update[tagId] += points * (shouldAdd ? 1 : -1);
+    for (final tag in task.tags) {
+      if (update.containsKey(tag.id)) {
+        update[tag.id] += points * (shouldAdd ? 1 : -1);
       } else {
-        update[tagId] = points;
+        update[tag.id] = points;
       }
     }
 
-    await score(userId).set({'currentDay': update}, SetOptions(merge: true));
+    await score(userId)
+        .collection('performance')
+        .doc(date)
+        .set({'completed': update, 'date': DateService().getDate(date)}, SetOptions(merge: true));
   }
 
   int getScore(Effort priority) {
