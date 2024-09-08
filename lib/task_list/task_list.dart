@@ -23,7 +23,6 @@ class TaskListState extends State<TaskListScreen> {
   int _totalCount = 0;
   String today = DateService().getString(DateTime.now());
   String selectedDate = DateService().getString(DateTime.now());
-  Offset? _dragStart;
 
   @override
   Widget build(BuildContext context) {
@@ -60,7 +59,7 @@ class TaskListState extends State<TaskListScreen> {
             final task = _tasks![i];
             _children.add(displayTask(task, i, onComplete, widget.isBacklog));
           }
-          double? _dragStart;
+          double? dragStart;
           return Scaffold(
               appBar: AppBar(
                 title: const Text('Taskr'),
@@ -71,10 +70,10 @@ class TaskListState extends State<TaskListScreen> {
                 ],
               ),
               body: GestureDetector(
-                  onHorizontalDragStart: (details) => _dragStart = details.globalPosition.dx,
+                  onHorizontalDragStart: (details) => dragStart = details.globalPosition.dx,
                   onHorizontalDragEnd: (details) {
-                    final _dragEnd = details.globalPosition.dx;
-                    final dragDelta = _dragEnd - _dragStart!;
+                    final dragEnd = details.globalPosition.dx;
+                    final dragDelta = dragEnd - dragStart!;
                     if (dragDelta > 10) {
                       setState(() {
                         selectedDate =

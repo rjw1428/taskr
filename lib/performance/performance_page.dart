@@ -65,10 +65,13 @@ class CurrentScoreState extends State<CurrentScore> {
           final chartData =
               performace.map((days) => days['completed'] as Map<String, dynamic>).toList();
 
-          final maxYAxis = chartData
-                  .map((day) => day['ALL'] as int)
-                  .reduce((value, element) => value > element ? value : element) *
-              1.2;
+          final maxYAxis = (chartData
+                      .map((day) => day['ALL'] as int)
+                      .reduce((value, element) => value > element ? value : element) *
+                  (isShowingAll ? 1.2 : 0.6))
+              .toInt();
+
+          print(maxYAxis);
           return Scaffold(
               appBar: AppBar(
                 title: const Text('Performance'),
@@ -79,8 +82,17 @@ class CurrentScoreState extends State<CurrentScore> {
                 ],
               ),
               body: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
+                  const Text(
+                    'Daily Progress',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 2,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
                   Stack(
                     children: [
                       Center(
@@ -92,8 +104,15 @@ class CurrentScoreState extends State<CurrentScore> {
                                   lineTouchData: LineTouchData(
                                     handleBuiltInTouches: true,
                                     touchTooltipData: LineTouchTooltipData(
+                                      fitInsideHorizontally: true,
+                                      fitInsideVertically: true,
                                       getTooltipColor: (touchedSpot) =>
                                           Colors.blueGrey.withOpacity(0.8),
+                                      getTooltipItems: (data) => data.map((spot) {
+                                        // print(spot.toString());
+                                        return LineTooltipItem(
+                                            spot.y.toString(), const TextStyle(color: Colors.red));
+                                      }).toList(),
                                     ),
                                   ),
                                   gridData: const FlGridData(show: false),
@@ -114,10 +133,11 @@ class CurrentScoreState extends State<CurrentScore> {
                                     ),
                                     leftTitles: const AxisTitles(
                                       sideTitles: SideTitles(
-                                        getTitlesWidget: leftTitleWidgets,
-                                        showTitles: true,
-                                        reservedSize: 40,
-                                      ),
+                                          getTitlesWidget: leftTitleWidgets,
+                                          showTitles: true,
+                                          interval: 2
+                                          // reservedSize: 40,
+                                          ),
                                     ),
                                   ),
                                   borderData: FlBorderData(
@@ -137,23 +157,30 @@ class CurrentScoreState extends State<CurrentScore> {
                                   // maxX: chartData.length + 1,
                                   // minX: chartData.length.toDouble(),
                                   // maxX: -1,
-                                  maxY: maxYAxis,
+                                  maxY: maxYAxis.toDouble(),
                                   minY: 0,
                                 ),
                                 // swapAnimationDuration: Duration(milliseconds: 150), // Optional
                                 // swapAnimationCurve: Curves.linear, // Optional
                               ))),
-                      IconButton(
-                        icon: Icon(
-                          Icons.refresh,
-                          color: Colors.white.withOpacity(isShowingAll ? 1.0 : 0.5),
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            isShowingAll = !isShowingAll;
-                          });
-                        },
-                      )
+                      Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              IconButton(
+                                icon: Icon(
+                                  Icons.refresh,
+                                  color: Colors.white.withOpacity(isShowingAll ? 1.0 : 0.5),
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    isShowingAll = !isShowingAll;
+                                  });
+                                },
+                              )
+                            ],
+                          ))
                     ],
                   )
                 ],
@@ -181,84 +208,45 @@ Widget leftTitleWidgets(double value, TitleMeta meta) {
     fontSize: 14,
   );
 
-  return Text(value.toString(), style: style, textAlign: TextAlign.center);
+  return Text(value.toInt().toString(), style: style, textAlign: TextAlign.center);
 }
 
 List<LineChartBarData> lineChartBarData1(List<Map<String, dynamic>> chartData, bool showAll) {
-  List<FlSpot> values = [];
+  List<LineChartBarData> lines2 = [];
 
-  if (showAll) {
-    for (int i = 0; i < chartData.length; i++) {
-      // print('${chartData.length - 1 - i}, ${chartData[i]['ALL']}');
-      final element = chartData[i]['ALL'] as int;
-      values.add(FlSpot(i.toDouble(), element.toDouble()));
-    }
-
-    return [
-      LineChartBarData(
-          isCurved: true,
-          preventCurveOverShooting: false,
-          gradient: LinearGradient(
-            colors: [
-              Colors.green.withOpacity(0),
-              Colors.green,
-            ],
-            stops: [0.0, .5],
-          ),
-          barWidth: 4,
-          isStrokeCapRound: true,
-          dotData: const FlDotData(show: false),
-          belowBarData: BarAreaData(show: true),
-          spots: values)
-    ];
-  } else {
-    List<LineChartBarData> lines2 = [];
-    Map<String, List<FlSpot>> lines = {};
-    for (int i = 0; i < chartData.length; i++) {
-      chartData[i].keys.where((key) => key != 'ALL').forEach((key) {
-        int value = chartData[i][key];
-        final point = FlSpot(i.toDouble(), value.toDouble());
-        if (lines.containsKey(key)) {
-          lines[key]!.add(point);
-        } else {
-          lines[key] = [point];
-        }
-      });
-    }
-    print(lines.toString());
-    return lines2;
+  Set uniqueKeys = {};
+  for (int i = 0; i < chartData.length; i++) {
+    uniqueKeys.addAll(chartData[i].keys);
   }
+
+  Map<String, List<FlSpot>> lines = {};
+  for (int i = 0; i < chartData.length; i++) {
+    for (var key in uniqueKeys) {
+      int value = chartData[i][key] ?? 0;
+      final point = FlSpot(i.toDouble(), value.toDouble());
+      if (lines.containsKey(key)) {
+        lines[key]!.add(point);
+      } else if (value != 0) {
+        lines[key] = [point];
+      }
+    }
+  }
+
+  for (int j = 0; j < lines.keys.length; j++) {
+    final key = lines.keys.toList()[j];
+    final show = showAll ? key == 'ALL' : key != 'ALL';
+    final values = lines.values.toList()[j];
+    Color c = showAll ? chartColors[0] : chartColors[j];
+    lines2.add(LineChartBarData(
+        isCurved: true,
+        show: show,
+        preventCurveOverShooting: true,
+        color: c,
+        barWidth: 4,
+        isStrokeCapRound: true,
+        dotData: FlDotData(show: show),
+        belowBarData: BarAreaData(show: showAll),
+        spots: values));
+  }
+  return lines2;
 }
-
-// LineChartBarData get lineChartBarData1_2 => LineChartBarData(
-//       isCurved: true,
-//       color: Colors.pink,
-//       barWidth: 8,
-//       isStrokeCapRound: true,
-//       dotData: const FlDotData(show: false),
-//       belowBarData: BarAreaData(show: false, color: Colors.pink),
-//       spots: const [
-//         FlSpot(1, 1),
-//         FlSpot(3, 2.8),
-//         FlSpot(7, 1.2),
-//         FlSpot(10, 2.8),
-//         FlSpot(12, 2.6),
-//         FlSpot(13, 3.9),
-//       ],
-//     );
-
-// LineChartBarData get lineChartBarData1_3 => LineChartBarData(
-//       isCurved: true,
-//       color: Colors.cyan,
-//       barWidth: 8,
-//       isStrokeCapRound: true,
-//       dotData: const FlDotData(show: false),
-//       belowBarData: BarAreaData(show: false),
-//       spots: const [
-//         FlSpot(1, 2.8),
-//         FlSpot(3, 1.9),
-//         FlSpot(6, 3),
-//         FlSpot(10, 1.3),
-//         FlSpot(13, 2.5),
-//       ],
-//     );

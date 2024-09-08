@@ -202,13 +202,17 @@ class TaskService {
     return completer.future;
   }
 
-  Future<void> updateTask(String id, Task task) async {
+  Future<void> updateTask(String id, Task newTask, Task oldTask) async {
     var user = AuthService().user;
     if (user == null) {
       throw "No user logged in when adding task";
     }
-    final date = task.dueDate ?? defaultUnassignedDate;
-    await taskCollection(user.uid, date).doc(id).set(removeNulls(task.toDbTask()));
+    final date = newTask.dueDate ?? defaultUnassignedDate;
+    if (oldTask.completed && newTask.priority != oldTask.priority) {
+      await PerformanceService().updatePerfomanceStats(user.uid, oldTask, false);
+      await PerformanceService().updatePerfomanceStats(user.uid, newTask, true);
+    }
+    await taskCollection(user.uid, date).doc(id).set(removeNulls(newTask.toDbTask()));
   }
 
   Future<void> updateTaskByKey(Map<String, dynamic> update, Task task) async {

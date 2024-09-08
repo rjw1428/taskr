@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:taskr/home/home.dart';
 
+//TODO: Add NavigationRail for web view
 class BottomNavBar extends StatelessWidget {
   final int selectedIndex;
   const BottomNavBar({super.key, required this.selectedIndex});

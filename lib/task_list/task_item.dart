@@ -8,7 +8,7 @@ import 'package:taskr/shared/constants.dart';
 import 'package:taskr/task_list/add_task.dart';
 import 'package:taskr/task_list/copy_task.dart';
 
-class TaskItem extends StatelessWidget {
+class TaskItem extends StatefulWidget {
   final Task task;
   final int index;
   final Function onComplete;
@@ -21,15 +21,29 @@ class TaskItem extends StatelessWidget {
       required this.isBacklog});
 
   @override
+  TaskItemState createState() => TaskItemState();
+}
+
+class TaskItemState extends State<TaskItem> {
+  // final Task task;
+  // final int index;
+  // final Function onComplete;
+  bool expanded = false;
+  bool isExpandable = false;
+  TaskItemState();
+
+  @override
   Widget build(BuildContext context) {
     final confetti = ConfettiController(duration: const Duration(seconds: 1));
-    final timeFrame = DateService().timeFrameBuilder(task);
+    final timeFrame = DateService().timeFrameBuilder(widget.task);
 
+    isExpandable = widget.task.description != null || widget.task.tags.isNotEmpty;
     return Stack(children: [
       Container(
           // width: MediaQuery.of(context).size.width * .7,
           decoration: BoxDecoration(
-            color: priorityColors[task.priority]!.withOpacity(task.completed ? 0.5 : 1),
+            color:
+                priorityColors[widget.task.priority]!.withOpacity(widget.task.completed ? 0.5 : 1),
             border: Border.all(color: Colors.black45),
             borderRadius: BorderRadius.circular(10),
             boxShadow: const [
@@ -39,80 +53,98 @@ class TaskItem extends StatelessWidget {
           margin: const EdgeInsets.all(4),
           child: Padding(
               padding: const EdgeInsets.only(top: 4, bottom: 4),
-              child: Row(
-                  // TASK
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
+              child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    setState(() => expanded = !expanded);
+                    print("${widget.task.title}: $expanded");
+                  },
+                  child: Row(
+                      // TASK
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Checkbox(
-                            value: task.completed,
-                            onChanged: (value) async {
-                              if (value!) {
-                                confetti.play();
-                                PerformanceService().incrementScore(AuthService().user!.uid,
-                                    PerformanceService().getScore(task.priority));
-                                onComplete(index);
-                              } else {
-                                PerformanceService().decrementScore(AuthService().user!.uid,
-                                    PerformanceService().getScore(task.priority));
-                              }
-                              const completeTimeFormat =
-                                  "${DateService.stringFmt} ${DateService.dbTimeFormat}";
-                              // TAGS HERE ARE NAME, NOT ID
-                              await TaskService().updateTaskByKey({
-                                "completed": value,
-                                "completedTime":
-                                    DateFormat(completeTimeFormat).format(DateTime.now())
-                              }, task);
-                            }),
-                        SizedBox(
-                          width: MediaQuery.of(context).size.width * .6,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (timeFrame != '')
-                                Text(timeFrame,
-                                    style: const TextStyle(fontSize: 14, color: Colors.white)),
-                              Text(
-                                task.title,
-                                style: const TextStyle(fontSize: 16, color: Colors.white),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              if (task.description != null)
-                                Padding(
-                                    padding: const EdgeInsets.only(bottom: 10),
-                                    child: Text(
-                                      task.description!,
-                                      style: const TextStyle(fontSize: 12, color: Colors.white),
+                        Row(
+                          children: [
+                            Checkbox(
+                                value: widget.task.completed,
+                                onChanged: (value) async {
+                                  if (value!) {
+                                    confetti.play();
+                                    PerformanceService().incrementScore(AuthService().user!.uid,
+                                        PerformanceService().getScore(widget.task.priority));
+                                    widget.onComplete(widget.index);
+                                  } else {
+                                    PerformanceService().decrementScore(AuthService().user!.uid,
+                                        PerformanceService().getScore(widget.task.priority));
+                                  }
+                                  const completeTimeFormat =
+                                      "${DateService.stringFmt} ${DateService.dbTimeFormat}";
+                                  // TAGS HERE ARE NAME, NOT ID
+                                  await TaskService().updateTaskByKey({
+                                    "completed": value,
+                                    "completedTime":
+                                        DateFormat(completeTimeFormat).format(DateTime.now())
+                                  }, widget.task);
+                                }),
+                            SizedBox(
+                              width: MediaQuery.of(context).size.width * .6,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.max,
+                                children: [
+                                  if (timeFrame != '')
+                                    Text(timeFrame,
+                                        style: const TextStyle(fontSize: 14, color: Colors.white)),
+                                  Row(children: [
+                                    Flexible(
+                                        // width: MediaQuery.of(context).size.width * .5,
+                                        child: Text(
+                                      widget.task.title,
+                                      style: const TextStyle(fontSize: 16, color: Colors.white),
+                                      overflow: TextOverflow.ellipsis,
                                     )),
-                              if (task.tags.isNotEmpty)
-                                Wrap(
-                                    spacing: 10,
-                                    children: task.tags
-                                        .map((tag) => Chip(
-                                            labelPadding: const EdgeInsets.all(0),
-                                            label: Text(
-                                              tag.label,
-                                              style: const TextStyle(fontSize: 10),
-                                            )))
-                                        .toList()),
-                            ],
-                          ),
-                        )
-                      ],
-                    ),
-                    Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                      actionButtons(context, isBacklog),
-                      ReorderableDragStartListener(
-                        index: index,
-                        child: IconButton(
-                          icon: const Icon(FontAwesomeIcons.gripLines),
-                          onPressed: () => print("HERE"),
+                                    if (isExpandable && !expanded)
+                                      const Padding(
+                                          padding: EdgeInsets.only(left: 8),
+                                          child: Icon(
+                                            FontAwesomeIcons.solidCircle,
+                                            size: 4,
+                                          ))
+                                  ]),
+                                  if (widget.task.description != null && expanded)
+                                    Padding(
+                                        padding: const EdgeInsets.only(bottom: 10),
+                                        child: Text(
+                                          widget.task.description!,
+                                          style: const TextStyle(fontSize: 12, color: Colors.white),
+                                        )),
+                                  if (widget.task.tags.isNotEmpty && expanded)
+                                    Wrap(
+                                        spacing: 10,
+                                        children: widget.task.tags
+                                            .map((tag) => Chip(
+                                                labelPadding: const EdgeInsets.all(0),
+                                                label: Text(
+                                                  tag.label,
+                                                  style: const TextStyle(fontSize: 10),
+                                                )))
+                                            .toList()),
+                                ],
+                              ),
+                            )
+                          ],
                         ),
-                      ),
-                    ])
-                  ]))),
+                        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                          actionButtons(context, widget.isBacklog),
+                          ReorderableDragStartListener(
+                            index: widget.index,
+                            child: IconButton(
+                              icon: const Icon(FontAwesomeIcons.gripLines),
+                              onPressed: () => print("HERE"),
+                            ),
+                          ),
+                        ])
+                      ])))),
       Center(
         child: ConfettiWidget(
           maximumSize: const Size(20, 10),
@@ -133,20 +165,22 @@ class TaskItem extends StatelessWidget {
     return PopupMenuButton(
         onSelected: (value) {
           if (value == "PUSH") {
-            TaskService().pushTask(task);
+            TaskService().pushTask(widget.task);
           } else if (value == "EDIT") {
             showDialog(
                 context: context,
-                builder: (BuildContext context) => AddTaskScreen(task: task, isBacklog: isBacklog));
+                builder: (BuildContext context) =>
+                    AddTaskScreen(task: widget.task, isBacklog: isBacklog));
           } else if (value == "REMOVE") {
-            TaskService().deleteTask(task);
+            TaskService().deleteTask(widget.task);
           } else if (value == "COPY") {
             showDialog(
-                context: context, builder: (BuildContext context) => CopyTaskScreen(task: task));
+                context: context,
+                builder: (BuildContext context) => CopyTaskScreen(task: widget.task));
           }
         },
         itemBuilder: (context) => [
-              if (!isBacklog && !task.completed)
+              if (!isBacklog && !widget.task.completed)
                 const PopupMenuItem(
                     value: "PUSH",
                     child: Row(

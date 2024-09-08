@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:rxdart/rxdart.dart';
+import 'package:taskr/services/auth.service.dart';
 import 'package:taskr/services/models.dart';
 
 class TagService {
@@ -32,10 +33,38 @@ class TagService {
 
   Stream<List<Tag>> streamTagsArray(String userId) {
     return tagCollection(userId)
+        .where('deleted', isEqualTo: false)
+        .orderBy("label")
         .snapshots()
-        .map((snapshot) =>
-            snapshot.docs.map((doc) => Tag.fromJson({'id': doc.id, ...doc.data()})).toList())
+        .map((snapshot) => snapshot.docs
+            .map((doc) => Tag.fromJson({'id': doc.id, ...doc.data()}))
+            .where((tag) => tag.label != "Other")
+            .toList())
         .handleError((error) => print(error))
         .shareReplay(maxSize: 1);
+  }
+
+  Future addTag(String label) {
+    var user = AuthService().user;
+    if (user == null) {
+      throw "No user logged in when adding task";
+    }
+    return tagCollection(user.uid).add({'label': label, 'deleted': false, 'archived': false});
+  }
+
+  Future deleteTag(String id) {
+    var user = AuthService().user;
+    if (user == null) {
+      throw "No user logged in when adding task";
+    }
+    return tagCollection(user.uid).doc(id).update({'deleted': true});
+  }
+
+  Future updateTag(String id, String label) {
+    var user = AuthService().user;
+    if (user == null) {
+      throw "No user logged in when adding task";
+    }
+    return tagCollection(user.uid).doc(id).update({'label': label});
   }
 }

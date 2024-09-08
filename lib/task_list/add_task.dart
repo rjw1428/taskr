@@ -67,6 +67,7 @@ class TaskFormState extends State<TaskForm> {
   String? _startTime;
   String? _endTime;
   Effort _priority = Effort.low;
+  Effort _initialPriority = Effort.low;
   List<Tag>? _tags;
   List<Tag> _initTags = const [];
   bool _completed = false;
@@ -84,6 +85,7 @@ class TaskFormState extends State<TaskForm> {
       _priority = task!.priority;
       _initTags = task!.tags;
       _completed = task!.completed;
+      _initialPriority = task!.priority;
     }
 
     initialDueDate =
@@ -121,7 +123,7 @@ class TaskFormState extends State<TaskForm> {
         await TaskService().addTask(newTask);
       } else {
         // UPDATE WITHIN THE SAME DAY
-        await TaskService().updateTask(task!.id!, newTask);
+        await TaskService().updateTask(task!.id!, newTask, task!);
       }
     }
 
@@ -147,7 +149,9 @@ class TaskFormState extends State<TaskForm> {
           final colorOptions = priorityColors.entries
               .map((color) => DropdownMenuItem(
                   value: color.key,
-                  child: Text(color.key.name, style: TextStyle(color: color.value))))
+                  child: Text(color.key.name,
+                      style:
+                          TextStyle(color: color.key == Effort.info ? Colors.white : color.value))))
               .toList();
           // final selectedPriorityOption = Provider.of<String>(context);
           var tags = snapshot.hasError || !snapshot.hasData ? [] as List<Tag> : snapshot.data!;
