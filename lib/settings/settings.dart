@@ -67,7 +67,8 @@ class SettingsPageState extends State<SettingsForm> {
                       icon: const Icon(FontAwesomeIcons.userAstronaut))
                 ],
               ),
-              body: Column(
+              body: ListView(
+                scrollDirection: Axis.vertical,
                 children: [
                   const Text("Tags", style: TextStyle(fontSize: 32)),
                   Container(

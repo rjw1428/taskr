@@ -41,7 +41,6 @@ class AuthService {
   }
 
   Future<void> googleLogin() async {
-    print("ANDROID");
     if (bool.parse(dotenv.env['DEV_MODE'] ?? 'true')) {
       try {
         final googleProvider = GoogleAuthProvider();

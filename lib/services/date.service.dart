@@ -29,6 +29,10 @@ class DateService {
     return DateFormat(dbTimeFormat).format(t);
   }
 
+  String getShortDay(DateTime t) {
+    return DateFormat('MM/dd').format(t);
+  }
+
   TimeOfDay getTime(String time) {
     final t = DateFormat(dbTimeFormat).parse(time);
     return TimeOfDay(hour: t.hour, minute: t.minute);
@@ -104,5 +108,22 @@ class DateService {
     final aDate = DateFormat(stringFmt).parse(a);
     final bDate = DateFormat(stringFmt).parse(b);
     return aDate.isBefore(bDate);
+  }
+
+  TimeOfDay getRoundedTime(TimeOfDay t) {
+    return TimeOfDay(hour: t.hour + 1, minute: 0);
+  }
+
+  String getDayOfWeekByIndex(int index) {
+    final daysOfWeek = [
+      "Mon",
+      "Tues",
+      "Wed",
+      "Thurs",
+      "Fri",
+      "Sat",
+      "Sun",
+    ];
+    return daysOfWeek[index];
   }
 }

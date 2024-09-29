@@ -18,7 +18,7 @@ class LoginScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            Image.asset('logo.png', height: 200, width: 200),
+            Image.asset('images/logo.png', height: 200, width: 200),
             LoginButton(
               icon: FontAwesomeIcons.google,
               text: "Login with Google",

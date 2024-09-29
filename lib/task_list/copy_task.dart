@@ -56,6 +56,8 @@ class TaskFormState extends State<TaskForm> {
   String? _dueDate;
   bool apiPending = false;
   DateTime? initialDueDate;
+  List<bool> repeatDayValues = List.generate(7, (index) => false);
+  List<DateTime> repeatedDates = List.generate(7, (index) => DateTime(index));
   final TextEditingController _title = TextEditingController();
 
   TaskFormState({required this.task}) {
@@ -63,7 +65,30 @@ class TaskFormState extends State<TaskForm> {
         _dueDate == null ? DateService().getSelectedDate() : DateService().getDate(_dueDate!);
     _dueDate = DateService().getString(initialDueDate!);
     _title.text = task.title;
+    if (initialDueDate != null) {
+      _updateRepeatedDays(initialDueDate!, true);
+    }
   }
+
+  List<bool> _updateRepeatDays(int index, bool value) {
+    repeatDayValues[index] = value;
+    print(repeatedDates[index]);
+    return repeatDayValues;
+  }
+
+  List<DateTime> _updateRepeatedDays(DateTime selectedDate, bool initial) {
+    final offset = selectedDate.weekday - 1;
+    DateTime prev = selectedDate.subtract(Duration(days: offset));
+    repeatedDates = List.generate(7, (index) => prev.add(Duration(days: index)));
+
+    // Reset current selection except for selected date
+    for (int i = 0; i < repeatDayValues.length; i++) {
+      repeatDayValues[i] = initial ? false : i == selectedDate.weekday - 1;
+    }
+
+    return repeatedDates;
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -73,18 +98,27 @@ class TaskFormState extends State<TaskForm> {
     });
 
     _formKey.currentState!.save();
-    Task newTask = Task(
-        title: _title.value.text,
-        description: task.description,
-        priority: task.priority,
-        completed: false,
-        dueDate: _dueDate,
-        startTime: task.startTime,
-        endTime: task.endTime,
-        added: DateTime.now().millisecondsSinceEpoch,
-        tags: task.tags,
-        subtasks: []);
-    await TaskService().addTask(newTask);
+
+    List<Future> tasks = [];
+    for (int i = 0; i < repeatDayValues.length; i++) {
+      if (repeatDayValues[i]) {
+        Task newTask = Task(
+            title: _title.value.text,
+            description: task.description,
+            priority: task.priority,
+            completed: false,
+            dueDate: _dueDate,
+            startTime: task.startTime,
+            endTime: task.endTime,
+            added: DateTime.now().millisecondsSinceEpoch,
+            tags: task.tags,
+            subtasks: []);
+        newTask.dueDate = DateService().getString(repeatedDates[i]);
+        tasks.add(TaskService().addTask(newTask));
+      }
+    }
+
+    await Future.forEach(tasks, (x) => print(x));
 
     setState(() {
       apiPending = false;
@@ -118,10 +152,31 @@ class TaskFormState extends State<TaskForm> {
                 if (date == null) {
                   return;
                 }
-                setState(() => _dueDate = DateService().getString(date));
+                setState(() {
+                  _dueDate = DateService().getString(date);
+                  repeatedDates = _updateRepeatedDays(date, false);
+                });
               },
               child: const Text('Set a due date')),
           if (_dueDate != null) Text(_dueDate!),
+          if (_dueDate != null)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                  7,
+                  (index) => Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Column(
+                          children: [
+                            Text(DateService().getDayOfWeekByIndex(index)),
+                            Text(DateService().getShortDay(repeatedDates[index])),
+                            Checkbox(
+                                value: repeatDayValues[index],
+                                onChanged: (val) => setState(() => _updateRepeatDays(index, val!)))
+                          ],
+                        ),
+                      )),
+            ),
           ElevatedButton(
             onPressed: apiPending ? null : () => _submit(),
             child: const Text('Submit'),

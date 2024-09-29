@@ -220,7 +220,7 @@ class TaskFormState extends State<TaskForm> {
                     ElevatedButton(
                         onPressed: () async {
                           final initial = _startTime == null
-                              ? TimeOfDay.now()
+                              ? DateService().getRoundedTime(TimeOfDay.now())
                               : DateService().getTime(_startTime!);
                           final time = await _selectTime(context, initial);
                           if (time == null) {
@@ -251,7 +251,7 @@ class TaskFormState extends State<TaskForm> {
                       ElevatedButton(
                           onPressed: () async {
                             final initial = _endTime == null
-                                ? TimeOfDay.now()
+                                ? DateService().getRoundedTime(DateService().getTime(_startTime!))
                                 : DateService().getTime(_endTime!);
                             final time = await _selectTime(context, initial);
                             if (time == null) {
