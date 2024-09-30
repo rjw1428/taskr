@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -5,6 +7,7 @@ import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/shared/progress_bar.dart';
 import 'package:taskr/task_list/add_task.dart';
+import 'package:taskr/task_list/coaching.dart';
 import 'package:taskr/task_list/task_item.dart';
 import '../shared/shared.dart';
 
@@ -26,6 +29,11 @@ class TaskListState extends State<TaskListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DateTime now = DateTime.now();
+    DateTime coachingNotificationTime = new DateTime(now.year, now.month, now.day, 22, 0, 0);
+    // DateTime coachingNotificationTime = now.add(const Duration(seconds: 5));
+    Duration delay = coachingNotificationTime.difference(now);
+
     return StreamBuilder<List<Task>>(
         stream: TaskService().streamTasks(widget.userId, widget.isBacklog ? null : selectedDate),
         builder: (context, snapshot) {
@@ -58,6 +66,15 @@ class TaskListState extends State<TaskListScreen> {
           for (int i = 0; i < _tasks!.length; i++) {
             final task = _tasks![i];
             _children.add(displayTask(task, i, onComplete, widget.isBacklog));
+          }
+
+          if (_tasks != null) {
+            Timer(delay, () async {
+              final response = await AIService().giveFeedback(_tasks!);
+              showDialog(
+                  context: context,
+                  builder: (BuildContext context) => CoachingDialog(response: response));
+            });
           }
           double? dragStart;
           return Scaffold(

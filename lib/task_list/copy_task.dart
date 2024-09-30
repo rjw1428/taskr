@@ -160,22 +160,42 @@ class TaskFormState extends State<TaskForm> {
               child: const Text('Set a due date')),
           if (_dueDate != null) Text(_dueDate!),
           if (_dueDate != null)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(
-                  7,
-                  (index) => Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Column(
-                          children: [
-                            Text(DateService().getDayOfWeekByIndex(index)),
-                            Text(DateService().getShortDay(repeatedDates[index])),
-                            Checkbox(
-                                value: repeatDayValues[index],
-                                onChanged: (val) => setState(() => _updateRepeatDays(index, val!)))
-                          ],
-                        ),
-                      )),
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.only(left: 8.0),
+                    child: Text(
+                      'Repeat:',
+                      style: TextStyle(fontSize: 16),
+                    ),
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(
+                        7,
+                        (index) => Column(
+                              children: [
+                                Text(
+                                  DateService().getDayOfWeekByIndex(index),
+                                  style: const TextStyle(fontSize: 14),
+                                ),
+                                Text(
+                                  DateService().getShortDay(repeatedDates[index]),
+                                  style: const TextStyle(fontSize: 14),
+                                ),
+                                Checkbox(
+                                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    value: repeatDayValues[index],
+                                    onChanged: (val) =>
+                                        setState(() => _updateRepeatDays(index, val!)))
+                              ],
+                            )),
+                  ),
+                ],
+              ),
             ),
           ElevatedButton(
             onPressed: apiPending ? null : () => _submit(),
