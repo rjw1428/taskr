@@ -1,7 +1,11 @@
 // import 'dart:io';
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_vertexai/firebase_vertexai.dart';
+import 'package:flutter/material.dart';
 import 'package:taskr/services/models.dart';
+import 'package:taskr/task_list/coaching.dart';
 
 class AIService {
   AIService._internal();
@@ -17,13 +21,26 @@ class AIService {
 
   final model = FirebaseVertexAI.instance
       .generativeModel(model: 'gemini-1.5-flash', systemInstruction: systemInstruction);
+  // Timer timer = Timer(Duration.zero, callback);
 
   factory AIService() {
     return _instance;
   }
 
   CollectionReference<Map<String, dynamic>> feedbackCollection(String userId) {
-    return _db.collection('todos').doc(userId).collection('coaching');
+    return _db.collection('todos').doc(userId).collection('feedback');
+  }
+
+  setEndOfDayNotification(List<Task> tasks) {
+    DateTime now = DateTime.now();
+    DateTime coachingNotificationTime = DateTime(now.year, now.month, now.day, 22, 0, 0);
+    // DateTime coachingNotificationTime = now.add(const Duration(seconds: 5));
+    Duration delay = coachingNotificationTime.difference(now);
+    // timer = Timer(delay, () async {
+    //   final response = await AIService().giveFeedback(tasks);
+    //   showDialog(
+    //       context: context, builder: (BuildContext context) => CoachingDialog(response: response));
+    // });
   }
 
   Future<String> giveFeedback(List<Task> tasks) async {
@@ -34,12 +51,10 @@ class AIService {
     final prompt = [
       Content.text('I completed the following tasks today: $completed'),
       if (incompleted.length > 0)
-        Content.text('I was unable to do the following tasks today: $completed')
+        Content.text('I was unable to do the following tasks today: $incompleted')
       else
         Content.text("I completed all my tasks today!")
     ];
-
-    print(prompt.map((e) => e.toString()));
 
     try {
       final response = await model.generateContent(prompt);

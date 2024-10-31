@@ -1,0 +1,13 @@
+{
+    "flutter": {
+        "platforms": {
+            "android": {
+                "default": {
+                    "projectId": "taskr-1428",
+                    "appId": "1:1070956843093:android:8be9d4f73f5570296604dc",
+                    "fileOutput": "android/app/google-services.json"
+                }
+            }
+        }
+    }
+}
