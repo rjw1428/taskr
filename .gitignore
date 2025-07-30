@@ -45,3 +45,5 @@ app.*.map.json
 *.env
 
 cache/
+
+service-account-key.json

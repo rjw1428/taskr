@@ -26,6 +26,20 @@ class PerformanceService {
     });
   }
 
+  Stream<List<Map<String, dynamic>>> streamPerformanceForMonth(
+      String userId, DateTime startDate, DateTime endDate) {
+
+      print('streamPerformanceForMonth: $startDate to $endDate');
+    return score(userId)
+        .collection('performance')
+        .where("date", isGreaterThanOrEqualTo: startDate)
+        .where("date", isLessThanOrEqualTo: endDate)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) => doc.data()).toList();
+    });
+  }
+
   Future<void> incrementScore(String userId, int value) {
     return score(userId).update({'currentScore': FieldValue.increment(value)});
   }

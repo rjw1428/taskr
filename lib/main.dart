@@ -14,7 +14,7 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  await FirebaseMessageService().initNotifiactions();
+  // await FirebaseMessageService().initNotifiactions();
 
   if (bool.parse(dotenv.env['DEV_MODE'] ?? 'true')) {
     try {

@@ -7,6 +7,7 @@ import 'package:taskr/login/login.dart';
 import 'package:taskr/services/services.dart';
 import '../shared/shared.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:taskr/performance/performance_heatmap.dart';
 
 class PerformancePage extends StatelessWidget {
   const PerformancePage({super.key});
@@ -93,6 +94,8 @@ class CurrentScoreState extends State<CurrentScore> {
                     ),
                     textAlign: TextAlign.center,
                   ),
+                  PerformanceHeatmap(userId: widget.userId),
+                  const SizedBox(height: 16),
                   Stack(
                     children: [
                       Center(
@@ -180,9 +183,9 @@ class CurrentScoreState extends State<CurrentScore> {
                                 },
                               )
                             ],
-                          ))
+                          )),
                     ],
-                  )
+                  ),
                 ],
               ),
               bottomNavigationBar: const BottomNavBar(
