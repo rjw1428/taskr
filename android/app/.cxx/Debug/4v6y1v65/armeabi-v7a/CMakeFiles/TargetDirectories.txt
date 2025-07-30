@@ -1,0 +1,2 @@
+/Users/rjw/GitProjects/taskr/android/app/.cxx/Debug/4v6y1v65/armeabi-v7a/CMakeFiles/edit_cache.dir
+/Users/rjw/GitProjects/taskr/android/app/.cxx/Debug/4v6y1v65/armeabi-v7a/CMakeFiles/rebuild_cache.dir

@@ -1,0 +1,2 @@
+/Users/rjw/GitProjects/taskr/android/app/.cxx/RelWithDebInfo/g3l4g6w2/x86_64/CMakeFiles/edit_cache.dir
+/Users/rjw/GitProjects/taskr/android/app/.cxx/RelWithDebInfo/g3l4g6w2/x86_64/CMakeFiles/rebuild_cache.dir
