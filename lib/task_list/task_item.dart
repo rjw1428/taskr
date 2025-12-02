@@ -14,11 +14,7 @@ class TaskItem extends StatefulWidget {
   final Function onComplete;
   final bool isBacklog;
   const TaskItem(
-      {super.key,
-      required this.task,
-      required this.index,
-      required this.onComplete,
-      required this.isBacklog});
+      {super.key, required this.task, required this.index, required this.onComplete, required this.isBacklog});
 
   @override
   TaskItemState createState() => TaskItemState();
@@ -42,13 +38,10 @@ class TaskItemState extends State<TaskItem> {
       Container(
           // width: MediaQuery.of(context).size.width * .7,
           decoration: BoxDecoration(
-            color:
-                priorityColors[widget.task.priority]!.withOpacity(widget.task.completed ? 0.5 : 1),
+            color: priorityColors[widget.task.priority]!.withOpacity(widget.task.completed ? 0.5 : 1),
             border: Border.all(color: Colors.black45),
             borderRadius: BorderRadius.circular(10),
-            boxShadow: const [
-              BoxShadow(color: Colors.black45, offset: Offset(2.0, 4.0), blurRadius: 5.0)
-            ],
+            boxShadow: const [BoxShadow(color: Colors.black45, offset: Offset(2.0, 4.0), blurRadius: 5.0)],
           ),
           margin: const EdgeInsets.all(4),
           child: Padding(
@@ -70,20 +63,18 @@ class TaskItemState extends State<TaskItem> {
                                 onChanged: (value) async {
                                   if (value!) {
                                     confetti.play();
-                                    PerformanceService().incrementScore(AuthService().user!.uid,
-                                        PerformanceService().getScore(widget.task.priority));
+                                    PerformanceService().incrementScore(
+                                        AuthService().user!.uid, PerformanceService().getScore(widget.task.priority));
                                     widget.onComplete(widget.index);
                                   } else {
-                                    PerformanceService().decrementScore(AuthService().user!.uid,
-                                        PerformanceService().getScore(widget.task.priority));
+                                    PerformanceService().decrementScore(
+                                        AuthService().user!.uid, PerformanceService().getScore(widget.task.priority));
                                   }
-                                  const completeTimeFormat =
-                                      "${DateService.stringFmt} ${DateService.dbTimeFormat}";
+                                  const completeTimeFormat = "${DateService.stringFmt} ${DateService.dbTimeFormat}";
                                   // TAGS HERE ARE NAME, NOT ID
                                   await TaskService().updateTaskByKey({
                                     "completed": value,
-                                    "completedTime":
-                                        DateFormat(completeTimeFormat).format(DateTime.now())
+                                    "completedTime": DateFormat(completeTimeFormat).format(DateTime.now())
                                   }, widget.task);
                                 }),
                             SizedBox(
@@ -93,8 +84,7 @@ class TaskItemState extends State<TaskItem> {
                                 mainAxisSize: MainAxisSize.max,
                                 children: [
                                   if (timeFrame != '')
-                                    Text(timeFrame,
-                                        style: const TextStyle(fontSize: 14, color: Colors.white)),
+                                    Text(timeFrame, style: const TextStyle(fontSize: 14, color: Colors.white)),
                                   Row(children: [
                                     Flexible(
                                         // width: MediaQuery.of(context).size.width * .5,
@@ -167,16 +157,15 @@ class TaskItemState extends State<TaskItem> {
           if (value == "PUSH") {
             TaskService().pushTask(widget.task);
           } else if (value == "EDIT") {
-            showDialog(
+            showModalBottomSheet(
+                useSafeArea: true,
+                isScrollControlled: true,
                 context: context,
-                builder: (BuildContext context) =>
-                    AddTaskScreen(task: widget.task, isBacklog: isBacklog));
+                builder: (BuildContext context) => AddTaskScreen(task: widget.task, isBacklog: isBacklog));
           } else if (value == "REMOVE") {
             TaskService().deleteTask(widget.task);
           } else if (value == "COPY") {
-            showDialog(
-                context: context,
-                builder: (BuildContext context) => CopyTaskScreen(task: widget.task));
+            showDialog(context: context, builder: (BuildContext context) => CopyTaskScreen(task: widget.task));
           }
         },
         itemBuilder: (context) => [

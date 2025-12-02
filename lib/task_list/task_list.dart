@@ -48,8 +48,7 @@ class TaskListState extends State<TaskListScreen> {
               var list = _tasks!.map((task) => task.id!).toList();
               var taskId = list.removeAt(taskIndex);
               list.add(taskId);
-              TaskService()
-                  .updateTaskOrder(widget.userId, list, widget.isBacklog ? null : selectedDate);
+              TaskService().updateTaskOrder(widget.userId, list, widget.isBacklog ? null : selectedDate);
             });
           }
 
@@ -76,9 +75,7 @@ class TaskListState extends State<TaskListScreen> {
               appBar: AppBar(
                 title: const Text('Taskr'),
                 actions: [
-                  IconButton(
-                      onPressed: () => AuthService().signOut(),
-                      icon: const Icon(FontAwesomeIcons.userAstronaut))
+                  IconButton(onPressed: () => AuthService().signOut(), icon: const Icon(FontAwesomeIcons.userAstronaut))
                 ],
               ),
               body: GestureDetector(
@@ -88,22 +85,19 @@ class TaskListState extends State<TaskListScreen> {
                     final dragDelta = dragEnd - dragStart!;
                     if (dragDelta > 10) {
                       setState(() {
-                        selectedDate =
-                            DateService().decrementDate(DateService().getDate(selectedDate));
+                        selectedDate = DateService().decrementDate(DateService().getDate(selectedDate));
                         DateService().setSelectedDate(DateService().getDate(selectedDate));
                       });
                     } else if (dragDelta < -10) {
                       setState(() {
-                        selectedDate =
-                            DateService().incrementDate(DateService().getDate(selectedDate));
+                        selectedDate = DateService().incrementDate(DateService().getDate(selectedDate));
                         DateService().setSelectedDate(DateService().getDate(selectedDate));
                       });
                     }
                   },
                   child: ReorderableListView(
                       header: Column(children: [
-                        if (!widget.isBacklog)
-                          DailyProgress(numerator: _completedCount, denominator: _totalCount),
+                        if (!widget.isBacklog) DailyProgress(numerator: _completedCount, denominator: _totalCount),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.end,
                           children: [
@@ -111,8 +105,7 @@ class TaskListState extends State<TaskListScreen> {
                                 child: Center(
                                     child: Text(widget.isBacklog
                                         ? "Backlog"
-                                        : DateService()
-                                            .getDayOfWeek(DateService().getDate(selectedDate))))),
+                                        : DateService().getDayOfWeek(DateService().getDate(selectedDate))))),
                             if (!widget.isBacklog)
                               Row(
                                 children: [
@@ -121,27 +114,24 @@ class TaskListState extends State<TaskListScreen> {
                                         onPressed: () => setState(() {
                                               print("BACK TO TODAY");
                                               selectedDate = today;
-                                              DateService().setSelectedDate(
-                                                  DateService().getDate(selectedDate));
+                                              DateService().setSelectedDate(DateService().getDate(selectedDate));
                                             }),
                                         icon: const Icon(FontAwesomeIcons.backwardStep)),
                                   IconButton(
                                       onPressed: () => setState(() {
                                             print("LEFT");
-                                            selectedDate = DateService()
-                                                .decrementDate(DateService().getDate(selectedDate));
-                                            DateService().setSelectedDate(
-                                                DateService().getDate(selectedDate));
+                                            selectedDate =
+                                                DateService().decrementDate(DateService().getDate(selectedDate));
+                                            DateService().setSelectedDate(DateService().getDate(selectedDate));
                                           }),
                                       icon: const Icon(FontAwesomeIcons.caretLeft)),
                                   Text(selectedDate),
                                   IconButton(
                                       onPressed: () => setState(() {
                                             print("RIGHT");
-                                            selectedDate = DateService()
-                                                .incrementDate(DateService().getDate(selectedDate));
-                                            DateService().setSelectedDate(
-                                                DateService().getDate(selectedDate));
+                                            selectedDate =
+                                                DateService().incrementDate(DateService().getDate(selectedDate));
+                                            DateService().setSelectedDate(DateService().getDate(selectedDate));
                                           }),
                                       icon: const Icon(FontAwesomeIcons.caretRight)),
                                   if (DateService().isDateLessThan(selectedDate, today))
@@ -149,8 +139,7 @@ class TaskListState extends State<TaskListScreen> {
                                         onPressed: () => setState(() {
                                               print("FORWARD TO TODAY");
                                               selectedDate = today;
-                                              DateService().setSelectedDate(
-                                                  DateService().getDate(selectedDate));
+                                              DateService().setSelectedDate(DateService().getDate(selectedDate));
                                             }),
                                         icon: const Icon(FontAwesomeIcons.forwardStep)),
                                 ],
@@ -177,18 +166,18 @@ class TaskListState extends State<TaskListScreen> {
                             _tasks!.insert(newIndex + delta, swapItem);
                           }
 
-                          TaskService().updateTaskOrder(
-                              widget.userId, list, widget.isBacklog ? null : selectedDate);
+                          TaskService().updateTaskOrder(widget.userId, list, widget.isBacklog ? null : selectedDate);
                         });
                       },
                       children: children)),
               bottomNavigationBar: BottomNavBar(selectedIndex: widget.isBacklog ? 2 : 0),
               floatingActionButton: FloatingActionButton(
                   child: const Icon(FontAwesomeIcons.plus, size: 20),
-                  onPressed: () => showDialog(
+                  onPressed: () => showModalBottomSheet(
+                      isScrollControlled: true,
+                      useSafeArea: true,
                       context: context,
-                      builder: (BuildContext context) =>
-                          AddTaskScreen(isBacklog: widget.isBacklog))));
+                      builder: (BuildContext context) => AddTaskScreen(isBacklog: widget.isBacklog))));
         });
   }
 
@@ -197,11 +186,6 @@ class TaskListState extends State<TaskListScreen> {
     if (task.completed) {
       _completedCount += PerformanceService().getScore(task.priority);
     }
-    return TaskItem(
-        task: task,
-        index: i,
-        key: ValueKey(task.id!),
-        onComplete: onComplete,
-        isBacklog: isBacklog);
+    return TaskItem(task: task, index: i, key: ValueKey(task.id!), onComplete: onComplete, isBacklog: isBacklog);
   }
 }
