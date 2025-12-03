@@ -28,19 +28,21 @@ class FirebaseMessageService {
 
   void handleMessage(
     RemoteMessage? message,
-    BuildContext c,
+    BuildContext? c,
   ) async {
     if (message == null) return;
 
-    print(message);
+    print("FCM Message Received: ${message.data}");
+    print("FCM Notification: ${message.notification?.title} - ${message.notification?.body}");
 
-    final text = await AIService().giveFeedback(_tasks);
-    return showDialog(
-        context: c, builder: (BuildContext context) => CoachingDialog(response: text));
+    // if (c != null) {
+    //   final text = await AIService().giveFeedback(_tasks);
+    //   return showDialog(
+    //       context: c, builder: (BuildContext context) => CoachingDialog(response: text));
+    // }
   }
 
-  Future initPushNotifications(BuildContext c, List<Task> tasks) async {
-    _tasks = tasks;
+  Future initPushNotifications(BuildContext c) async {
     if (init) return;
     RemoteMessage? initialMessage = await _fbMessaging.getInitialMessage();
     if (initialMessage != null) {
@@ -52,7 +54,7 @@ class FirebaseMessageService {
     });
 
     FirebaseMessaging.onBackgroundMessage((message) async {
-      print(message.messageId);
+      handleMessage(message, null);
     });
 
     init = true;
