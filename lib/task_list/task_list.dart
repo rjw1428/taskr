@@ -1,3 +1,4 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:taskr/services/models.dart';
@@ -22,6 +23,29 @@ class TaskListState extends State<TaskListScreen> {
   int _totalCount = 0;
   String today = DateService().getString(DateTime.now());
   String selectedDate = DateService().getString(DateTime.now());
+
+  @override
+  void initState() {
+    super.initState();
+    setFcmToken();
+  }
+
+  setFcmToken() async {
+    print('[Update FCM] checking FCM');
+    final user = await AuthService().getUserProfile(widget.userId);
+    if (user == null) {
+      print('[Update FCM] no profile');
+      return;
+    }
+    await FirebaseMessaging.instance.requestPermission();
+    final fcmToken = await FirebaseMessaging.instance.getToken();
+    if (fcmToken != null && fcmToken != user['fcmToken']) {
+      print('[Update FCM] Updating token');
+      await AuthService().updateFcmToken(widget.userId, fcmToken);
+    } else {
+      print('[Update FCM] No update required');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -52,7 +76,6 @@ class TaskListState extends State<TaskListScreen> {
             });
           }
 
-          FirebaseMessageService().initPushNotifications(context, _tasks!);
           List<Widget> children = [];
           for (int i = 0; i < _tasks!.length; i++) {
             final task = _tasks![i];

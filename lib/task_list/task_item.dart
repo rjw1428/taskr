@@ -166,6 +166,8 @@ class TaskItemState extends State<TaskItem> {
             TaskService().deleteTask(widget.task);
           } else if (value == "COPY") {
             showDialog(context: context, builder: (BuildContext context) => CopyTaskScreen(task: widget.task));
+          } else if (value == "CHECK_TIME") {
+            TaskService().checkTrainStatus();
           }
         },
         itemBuilder: (context) => [
@@ -203,7 +205,21 @@ class TaskItemState extends State<TaskItem> {
                       Icon(FontAwesomeIcons.trashCan),
                       Padding(padding: EdgeInsets.only(left: 8), child: Text('Remove'))
                     ],
-                  ))
+                  )),
+
+              if (widget.task.title == 'Work Train' &&
+                  !widget.task.completed &&
+                  !isBacklog &&
+                  widget.task.startTime != null &&
+                  DateService().isToday(widget.task.dueDate!))
+                const PopupMenuItem(
+                    value: "CHECK_TIME",
+                    child: Row(
+                      children: [
+                        Icon(FontAwesomeIcons.trainSubway),
+                        Padding(padding: EdgeInsets.only(left: 8), child: Text('Check Status'))
+                      ],
+                    )),
             ]);
   }
 }

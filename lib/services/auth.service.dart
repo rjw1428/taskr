@@ -1,4 +1,5 @@
 // import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:rxdart/rxdart.dart';
@@ -53,8 +54,7 @@ class AuthService {
       }
     } else {
       try {
-        await FirebaseAuth.instance
-            .signInWithEmailAndPassword(email: "rjw1428@gmail.com", password: "123456");
+        await FirebaseAuth.instance.signInWithEmailAndPassword(email: "rjw1428@gmail.com", password: "123456");
         user = await userStream.first;
       } on FirebaseAuthException catch (e) {
         if (e.code == 'user-not-found') {
@@ -64,6 +64,18 @@ class AuthService {
         }
       }
     }
+  }
+
+  Future<Map<String, dynamic>?> getUserProfile(userId) async {
+    final docRef = FirebaseFirestore.instance.collection('todos').doc(userId);
+    final doc = await docRef.get();
+    return doc.data();
+  }
+
+  Future<void> updateFcmToken(String userId, String fcmToken) async {
+    final userDoc = FirebaseFirestore.instance.collection('todos').doc(userId);
+    await userDoc.update({'fcmToken': fcmToken});
+    print('FCM token updated for user $userId');
   }
 
   Future<void> signOut() async {

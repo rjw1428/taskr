@@ -5,6 +5,7 @@ import 'package:taskr/services/services.dart';
 import 'package:taskr/services/models.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:taskr/shared/shared.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class TaskService {
   TaskService._internal();
@@ -44,12 +45,7 @@ class TaskService {
   }
 
   Future<List<String>> getTaskOrder(String userId, String? date) async {
-    final ref = await _db
-        .collection('todos')
-        .doc(userId)
-        .collection("tasks")
-        .doc(date ?? defaultUnassignedDate)
-        .get();
+    final ref = await _db.collection('todos').doc(userId).collection("tasks").doc(date ?? defaultUnassignedDate).get();
     final d = ref.data();
     if (d != null && d.containsKey("taskOrder")) {
       return List<String>.from(d["taskOrder"]);
@@ -75,8 +71,7 @@ class TaskService {
             .handleError((error) => print("TASK LIST: $error")),
         TagService().streamTags(userId),
         taskOrderStream(userId, date ?? defaultUnassignedDate),
-        (tasks, tags, order) =>
-            order.map((id) => tasks.firstWhere((task) => task['id'] == id)).map((task) {
+        (tasks, tags, order) => order.map((id) => tasks.firstWhere((task) => task['id'] == id)).map((task) {
               final tagList = task['tags'].map((tag) {
                 if (tag is String) {
                   return tags[tag];
@@ -90,9 +85,7 @@ class TaskService {
   }
 
   Future<List<Map<String, dynamic>>> getTasks(String userId, String? date) async {
-    var snapshot = await taskCollection(userId, date ?? defaultUnassignedDate)
-        .orderBy('added', descending: true)
-        .get();
+    var snapshot = await taskCollection(userId, date ?? defaultUnassignedDate).orderBy('added', descending: true).get();
     return snapshot.docs
         .map((doc) => ({
               ...doc.data(),
@@ -138,12 +131,7 @@ class TaskService {
       var notCompleted = tasks.where((t) => !t['completed']).map((t) => t['id']).toList();
       notCompleted.add(id);
       var newOrder = notCompleted + completed;
-      await _db
-          .collection('todos')
-          .doc(user.uid)
-          .collection("tasks")
-          .doc(date)
-          .set({"taskOrder": newOrder});
+      await _db.collection('todos').doc(user.uid).collection("tasks").doc(date).set({"taskOrder": newOrder});
       completer.complete(id);
       return completer.future;
     }
@@ -172,8 +160,8 @@ class TaskService {
       //   continue;
       // }
 
-      if (DateService().isTimeLessThan(
-          DateService().getTime(task.startTime!), DateService().getTime(t['startTime']!))) {
+      if (DateService()
+          .isTimeLessThan(DateService().getTime(task.startTime!), DateService().getTime(t['startTime']!))) {
         lowerItems.add(id);
         break;
       }
@@ -191,12 +179,7 @@ class TaskService {
     } else if (index < tasks.length) {
       update = update + tasks.sublist(index).map((t) => t['id']!).toList();
     }
-    await _db
-        .collection('todos')
-        .doc(user.uid)
-        .collection("tasks")
-        .doc(date)
-        .set({"taskOrder": update});
+    await _db.collection('todos').doc(user.uid).collection("tasks").doc(date).set({"taskOrder": update});
 
     completer.complete(id);
     return completer.future;
@@ -257,6 +240,19 @@ class TaskService {
     await addTask(task);
     if (decrementScore) {
       await PerformanceService().decrementScore(user.uid, 1);
+    }
+  }
+
+  Future<void> checkTrainStatus() async {
+    try {
+      final userId = AuthService().user!.uid;
+      final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('trainScheduleTest');
+      final result = await callable.call(["userId", userId]);
+      print('trainScheduleTest result: ${result.data}');
+    } on FirebaseFunctionsException catch (e) {
+      print('Firebase Functions Exception: ${e.code} - ${e.message}');
+    } catch (e) {
+      print('Generic Exception: $e');
     }
   }
 }

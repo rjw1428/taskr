@@ -7,7 +7,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:taskr/firebase_options.dart';
 import 'package:taskr/routing.dart';
+import 'package:taskr/services/auth.service.dart';
 import 'package:taskr/theme.dart';
+
+// Global navigator key
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,19 +28,7 @@ void main() async {
     } catch (e) {}
   }
 
-  if (kIsWeb) {
-    print('Skipping cloud messaging');
-    return;
-  }
-
-  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-    print('Got a message whilst in the foreground!');
-    print('Message data: ${message.data}');
-
-    if (message.notification != null) {
-      print('Message also contained a notification: ${message.notification}');
-    }
-  });
+  // Handle background messages
   FirebaseMessaging.onBackgroundMessage((message) async {
     print('Handling a background message: ${message.data}');
   });
@@ -44,12 +36,65 @@ void main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  @override
+  void initState() {
+    super.initState();
+    if (!kIsWeb) {
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        print('Got a message whilst in the foreground!');
+        print('Message data: ${message.data}');
+
+        final notification = message.notification;
+        if (notification != null) {
+          print('Message also contained a notification: $notification');
+          final context = navigatorKey.currentContext;
+          if (context != null) {
+            showDialog(
+              context: context,
+              builder: (BuildContext context) {
+                return AlertDialog(
+                  title: Text(notification.title ?? 'New Message'),
+                  content: SingleChildScrollView(
+                    child: ListBody(
+                      children: <Widget>[
+                        Text(
+                          notification.body ?? '',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                  actions: <Widget>[
+                    TextButton(
+                      child: const Text('Ok'),
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                      },
+                    ),
+                  ],
+                );
+              },
+            );
+          }
+        }
+      });
+    } else {
+      print('Skipping cloud messaging for web');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey, // Set the navigator key
       debugShowCheckedModeBanner: false,
       theme: appTheme,
       title: 'Taskr: To-Do App',

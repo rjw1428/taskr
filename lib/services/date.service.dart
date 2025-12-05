@@ -126,4 +126,10 @@ class DateService {
     ];
     return daysOfWeek[index];
   }
+
+  bool isToday(String date) {
+    final today = DateTime.now();
+    final parsedDate = DateFormat(stringFmt).parse(date);
+    return parsedDate.year == today.year && parsedDate.month == today.month && parsedDate.day == today.day;
+  }
 }
