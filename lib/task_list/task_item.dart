@@ -13,8 +13,14 @@ class TaskItem extends StatefulWidget {
   final int index;
   final Function onComplete;
   final bool isBacklog;
+  final TaskService taskService;
   const TaskItem(
-      {super.key, required this.task, required this.index, required this.onComplete, required this.isBacklog});
+      {super.key,
+      required this.task,
+      required this.index,
+      required this.onComplete,
+      required this.isBacklog,
+      required this.taskService});
 
   @override
   TaskItemState createState() => TaskItemState();
@@ -72,7 +78,7 @@ class TaskItemState extends State<TaskItem> {
                                   }
                                   const completeTimeFormat = "${DateService.stringFmt} ${DateService.dbTimeFormat}";
                                   // TAGS HERE ARE NAME, NOT ID
-                                  await TaskService().updateTaskByKey({
+                                  await widget.taskService.updateTaskByKey({
                                     "completed": value,
                                     "completedTime": DateFormat(completeTimeFormat).format(DateTime.now())
                                   }, widget.task);
@@ -155,7 +161,7 @@ class TaskItemState extends State<TaskItem> {
     return PopupMenuButton(
         onSelected: (value) {
           if (value == "PUSH") {
-            TaskService().pushTask(widget.task);
+            widget.taskService.pushTask(widget.task);
           } else if (value == "EDIT") {
             showModalBottomSheet(
                 useSafeArea: true,
@@ -163,11 +169,11 @@ class TaskItemState extends State<TaskItem> {
                 context: context,
                 builder: (BuildContext context) => AddTaskScreen(task: widget.task, isBacklog: isBacklog));
           } else if (value == "REMOVE") {
-            TaskService().deleteTask(widget.task);
+            widget.taskService.deleteTask(widget.task);
           } else if (value == "COPY") {
             showDialog(context: context, builder: (BuildContext context) => CopyTaskScreen(task: widget.task));
           } else if (value == "CHECK_TIME") {
-            TaskService().checkTrainStatus();
+            widget.taskService.checkTrainStatus();
           }
         },
         itemBuilder: (context) => [
@@ -207,7 +213,7 @@ class TaskItemState extends State<TaskItem> {
                     ],
                   )),
 
-              if (widget.task.title == 'Work Train' &&
+              if (widget.task.title.trim() == 'Work Train' &&
                   !widget.task.completed &&
                   !isBacklog &&
                   widget.task.startTime != null &&

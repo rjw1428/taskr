@@ -1,8 +1,11 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
+import 'package:taskr/services/tag.provider.dart';
 import 'package:taskr/shared/progress_bar.dart';
 import 'package:taskr/task_list/add_task.dart';
 import 'package:taskr/task_list/task_item.dart';
@@ -23,6 +26,7 @@ class TaskListState extends State<TaskListScreen> {
   int _totalCount = 0;
   String today = DateService().getString(DateTime.now());
   String selectedDate = DateService().getString(DateTime.now());
+  final TaskService _taskService = TaskService();
 
   @override
   void initState() {
@@ -37,6 +41,9 @@ class TaskListState extends State<TaskListScreen> {
       print('[Update FCM] no profile');
       return;
     }
+    if (kIsWeb) {
+      return;
+    }
     await FirebaseMessaging.instance.requestPermission();
     final fcmToken = await FirebaseMessaging.instance.getToken();
     if (fcmToken != null && fcmToken != user['fcmToken']) {
@@ -49,8 +56,10 @@ class TaskListState extends State<TaskListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    var tagProvider = Provider.of<TagProvider>(context);
+    var tags = tagProvider.tags;
     return StreamBuilder<List<Task>>(
-        stream: TaskService().streamTasks(widget.userId, widget.isBacklog ? null : selectedDate),
+        stream: _taskService.streamTasks(widget.userId, widget.isBacklog ? null : selectedDate, tags),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting && _tasks == null) {
             return const LoadingScreen(message: 'Loading Tasks...');
@@ -72,14 +81,14 @@ class TaskListState extends State<TaskListScreen> {
               var list = _tasks!.map((task) => task.id!).toList();
               var taskId = list.removeAt(taskIndex);
               list.add(taskId);
-              TaskService().updateTaskOrder(widget.userId, list, widget.isBacklog ? null : selectedDate);
+              _taskService.updateTaskOrder(widget.userId, list, widget.isBacklog ? null : selectedDate);
             });
           }
 
           List<Widget> children = [];
           for (int i = 0; i < _tasks!.length; i++) {
             final task = _tasks![i];
-            children.add(displayTask(task, i, onComplete, widget.isBacklog));
+            children.add(displayTask(task, i, onComplete, widget.isBacklog, _taskService));
           }
 
           if (children.isEmpty) {
@@ -189,7 +198,7 @@ class TaskListState extends State<TaskListScreen> {
                             _tasks!.insert(newIndex + delta, swapItem);
                           }
 
-                          TaskService().updateTaskOrder(widget.userId, list, widget.isBacklog ? null : selectedDate);
+                          _taskService.updateTaskOrder(widget.userId, list, widget.isBacklog ? null : selectedDate);
                         });
                       },
                       children: children)),
@@ -204,11 +213,17 @@ class TaskListState extends State<TaskListScreen> {
         });
   }
 
-  displayTask(Task task, int i, Function onComplete, bool isBacklog) {
+  displayTask(Task task, int i, Function onComplete, bool isBacklog, TaskService taskService) {
     _totalCount += PerformanceService().getScore(task.priority);
     if (task.completed) {
       _completedCount += PerformanceService().getScore(task.priority);
     }
-    return TaskItem(task: task, index: i, key: ValueKey(task.id!), onComplete: onComplete, isBacklog: isBacklog);
+    return TaskItem(
+        task: task,
+        index: i,
+        key: ValueKey(task.id!),
+        onComplete: onComplete,
+        isBacklog: isBacklog,
+        taskService: taskService);
   }
 }

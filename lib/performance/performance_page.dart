@@ -2,9 +2,11 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:taskr/login/login.dart';
 import 'package:taskr/services/services.dart';
+import 'package:taskr/services/tag.provider.dart';
 import '../shared/shared.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:taskr/performance/performance_heatmap.dart';
@@ -47,11 +49,10 @@ class CurrentScoreState extends State<CurrentScore> {
   @override
   Widget build(BuildContext context) {
     DateTime selectedMinDate = DateService().daysAgo(DateTime.now(), 7);
+    var tagProvider = Provider.of<TagProvider>(context);
+    var tags = tagProvider.tags;
     return StreamBuilder(
-        stream: CombineLatestStream.combine2(
-            PerformanceService().streamPerformance(widget.userId, selectedMinDate),
-            TagService().streamTags(widget.userId),
-            (currentPerformance, tags) => [currentPerformance, tags]),
+        stream: PerformanceService().streamPerformance(widget.userId, selectedMinDate),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const LoadingScreen(message: 'Loading Tasks...');
@@ -61,7 +62,7 @@ class CurrentScoreState extends State<CurrentScore> {
             print(snapshot.error);
             return const Text("ERROR");
           }
-          final performace = snapshot.data![0]
+          final performace = snapshot.data!
               as List<Map<String, dynamic>>; //as Map<String, List<Map<String, int>>>;
           final chartData =
               performace.map((days) => days['completed'] as Map<String, dynamic>).toList();

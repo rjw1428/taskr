@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
+import 'package:taskr/services/tag.provider.dart';
 import 'package:taskr/shared/constants.dart';
 import 'package:multi_select_flutter/multi_select_flutter.dart';
 
@@ -28,12 +30,14 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   // List<String> _subTasks = const [];
   DateTime? initialDueDate;
   bool apiPending = false;
-  List<DropdownMenuItem> colorOptions = priorityColors.entries
+  List<DropdownMenuItem> colorOptions = dropdownColors.entries
       .map((color) => DropdownMenuItem(
           value: color.key,
           child: Text(color.key.name, style: TextStyle(color: color.key == Effort.info ? Colors.white : color.value))))
       .toList();
-  late List<Tag>? _tags = [];
+  late List<Tag> _allTags = [];
+  late List<Tag> _selectedTags = [];
+  final TaskService _taskService = TaskService();
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
@@ -53,20 +57,20 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
         startTime: _startTime,
         endTime: _endTime,
         added: DateTime.now().millisecondsSinceEpoch,
-        tags: _tags ?? [],
+        tags: _selectedTags,
         subtasks: []);
 
     if (widget.task == null) {
       // ADD NEW TASK
-      await TaskService().addTask(newTask);
+      await _taskService.addTask(newTask);
     } else {
       if (widget.task!.dueDate != newTask.dueDate) {
         // MOVE TO NEW DAY
-        await TaskService().deleteTask(widget.task!);
-        await TaskService().addTask(newTask);
+        await _taskService.deleteTask(widget.task!);
+        await _taskService.addTask(newTask);
       } else {
         // UPDATE WITHIN THE SAME DAY
-        await TaskService().updateTask(widget.task!.id!, newTask, widget.task!);
+        await _taskService.updateTask(widget.task!.id!, newTask, widget.task!);
       }
     }
 
@@ -81,7 +85,10 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   void initState() {
     super.initState();
 
+    _allTags = Provider.of<TagProvider>(context, listen: false).tags;
+
     if (widget.task != null) {
+      print(widget.task!.tags);
       _title.text = widget.task!.title;
       _description.text = widget.task!.description ?? '';
       _dueDate = widget.task!.dueDate;
@@ -90,16 +97,13 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
       _priority = widget.task!.priority;
       _completed = widget.task!.completed;
       initialPriority = widget.task!.priority;
+      _selectedTags = widget.task!.tags;
     }
 
-    DateTime initialDueDate =
-        _dueDate == null ? DateService().getSelectedDate() : DateService().getDate(widget.task!.dueDate!);
-    _dueDate = widget.isBacklog ? null : DateService().getString(initialDueDate);
-
-    // TagService().streamTagsArray(AuthService().user!.uid).first.then((tagList) {
-    //   print(tagList);
-    //   _tags = tagList;
-    // });
+    initialDueDate = _dueDate == null ? DateService().getSelectedDate() : DateService().getDate(widget.task!.dueDate!);
+    if (initialDueDate != null) {
+      _dueDate = widget.isBacklog ? null : DateService().getString(initialDueDate!);
+    }
   }
 
   @override
@@ -140,75 +144,69 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                           controller: _description,
                           style: Theme.of(context).textTheme.titleSmall,
                         ),
-
-                        const Padding(
-                          padding: EdgeInsets.only(right: 8),
-                          child: Text("Effort Level:"),
-                        ),
-                        DropdownButton(
-                          items: colorOptions,
-                          hint: const Text('Set Effort'),
-                          onChanged: (value) => setState(() {
-                            _priority = value!;
-                          }),
-                          value: _priority,
-                        ),
-                        Row(
+                        Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            ElevatedButton(
-                              onPressed: () async {
-                                final date = await _selectDate(context, initialDueDate!);
-                                if (date == null) {
-                                  return;
-                                }
-                                setState(() => _dueDate = DateService().getString(date));
-                              },
-                              child: Text(_dueDate == null ? 'Set a due date' : _dueDate!),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                ElevatedButton(
+                                  onPressed: () async {
+                                    final date = await _selectDate(context, initialDueDate!);
+                                    if (date == null) {
+                                      return;
+                                    }
+                                    setState(() => _dueDate = DateService().getString(date));
+                                  },
+                                  child: Text(
+                                    _dueDate == null ? 'Set a due date' : _dueDate!,
+                                    style: Theme.of(context).textTheme.titleSmall,
+                                  ),
+                                ),
+                                if (_dueDate != null)
+                                  IconButton(
+                                    onPressed: () => setState(() {
+                                      _dueDate = null;
+                                    }),
+                                    icon: const Icon(FontAwesomeIcons.xmark),
+                                  ),
+                              ],
                             ),
-                            if (_dueDate != null)
-                              IconButton(
-                                onPressed: () => setState(() {
-                                  _dueDate = null;
-                                }),
-                                icon: const Icon(FontAwesomeIcons.xmark),
-                              ),
-                          ],
-                        ),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            ElevatedButton(
-                                onPressed: () async {
-                                  final initial = _startTime == null
-                                      ? DateService().getRoundedTime(TimeOfDay.now())
-                                      : DateService().getTime(_startTime!);
-                                  final time = await _selectTime(context, initial);
-                                  if (time == null) {
-                                    return;
-                                  }
-                                  setState(() {
-                                    DateTime tempDateTime = DateTime(2024, 1, 1, time.hour, time.minute);
-                                    _startTime = DateService().getTimeStr(tempDateTime);
-                                  });
-                                },
-                                child: Text(
-                                    _startTime == null ? 'Set a start time' : DateService().displayTime(_startTime!))),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                ElevatedButton(
+                                  onPressed: () async {
+                                    final initial = _startTime == null
+                                        ? DateService().getRoundedTime(TimeOfDay.now())
+                                        : DateService().getTime(_startTime!);
+                                    final time = await _selectTime(context, initial);
+                                    if (time == null) {
+                                      return;
+                                    }
+                                    setState(() {
+                                      DateTime tempDateTime = DateTime(2024, 1, 1, time.hour, time.minute);
+                                      _startTime = DateService().getTimeStr(tempDateTime);
+                                    });
+                                  },
+                                  child: Text(
+                                    _startTime == null ? 'Set a start time' : DateService().displayTime(_startTime!),
+                                    style: Theme.of(context).textTheme.titleSmall,
+                                  ),
+                                ),
+                                if (_startTime != null)
+                                  IconButton(
+                                    onPressed: () => setState(() {
+                                      _startTime = null;
+                                      _endTime = null;
+                                    }),
+                                    icon: const Icon(FontAwesomeIcons.xmark),
+                                  ),
+                              ],
+                            ),
                             if (_startTime != null)
-                              IconButton(
-                                onPressed: () => setState(() {
-                                  _startTime = null;
-                                  _endTime = null;
-                                }),
-                                icon: const Icon(FontAwesomeIcons.xmark),
-                              ),
-                          ],
-                        ),
-                        if (_startTime != null)
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              ElevatedButton(
+                              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                ElevatedButton(
                                   onPressed: () async {
                                     final initial = _endTime == null
                                         ? DateService().getRoundedTime(DateService().getTime(_startTime!))
@@ -224,46 +222,63 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                                     });
                                   },
                                   child: Text(
-                                      _endTime == null ? 'Set an end time' : DateService().displayTime(_endTime!))),
-                              if (_endTime != null)
-                                IconButton(
-                                  onPressed: () => setState(() {
-                                    _endTime = null;
-                                  }),
-                                  icon: const Icon(FontAwesomeIcons.xmark),
+                                    _endTime == null ? 'Set an end time' : DateService().displayTime(_endTime!),
+                                    style: Theme.of(context).textTheme.titleSmall,
+                                  ),
                                 ),
-                            ],
-                          ),
+                                if (_endTime != null)
+                                  IconButton(
+                                    onPressed: () => setState(() {
+                                      _endTime = null;
+                                    }),
+                                    icon: const Icon(FontAwesomeIcons.xmark),
+                                  ),
+                              ]),
+                          ],
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: Text(
+                                "Effort Level:",
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                            ),
+                            DropdownButton(
+                              items: colorOptions,
+                              onChanged: (value) => setState(() {
+                                _priority = value!;
+                              }),
+                              value: _priority,
+                            ),
+                          ],
+                        ),
 
                         if (_dueDate == null && !widget.isBacklog)
                           const Text('Item will be added to the backlog without a due date'),
                         if (_dueDate != null && widget.isBacklog)
                           const Text('Item will be scheduled on the selected date'),
-                        if (_tags != null)
+                        if (_allTags.isNotEmpty)
                           MultiSelectDialogField(
-                            title: const Text(
-                              "Tags",
-                              style: TextStyle(color: Colors.white),
-                            ),
                             isDismissible: true,
                             itemsTextStyle: const TextStyle(color: Colors.white),
                             selectedColor: Colors.red,
                             selectedItemsTextStyle: const TextStyle(color: Colors.black),
                             backgroundColor: Colors.black,
-                            items: _tags!.map((tag) => MultiSelectItem(tag.id, tag.label)).toList(),
+                            items: _allTags.map((tag) => MultiSelectItem(tag.id, tag.label)).toList(),
                             listType: MultiSelectListType.CHIP,
-                            initialValue: _tags!.map((t) => t.id).toList(), // NEED TO BE ID's
-                            onConfirm: (result) => setState(
-                                () => _tags = result.map((id) => _tags!.firstWhere((tag) => id == tag.id)).toList()),
+                            initialValue: _selectedTags.map((t) => t.id).toList(), // NEED TO BE ID's
+                            onConfirm: (result) => setState(() => _selectedTags =
+                                result.map((id) => _allTags.firstWhere((tag) => id == tag.id)).toList()),
                             buttonIcon: const Icon(
                               FontAwesomeIcons.tag,
-                              color: Colors.black,
+                              color: Colors.white,
                             ),
-                            buttonText: const Text(
+                            buttonText: Text(
                               "Tags",
-                              style: TextStyle(
-                                fontSize: 16,
-                              ),
+                              style: Theme.of(context).textTheme.titleSmall,
                             ),
                           )
                       ])),

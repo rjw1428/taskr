@@ -46,8 +46,14 @@ class Task {
 class Tag {
   String id;
   String label;
+  bool deleted;
+  bool archived;
 
-  Tag({required this.id, required this.label});
+  Tag(
+      {required this.id,
+      required this.label,
+      this.deleted = false,
+      this.archived = false});
 
   factory Tag.fromJson(Map<String, dynamic> json) => _$TagFromJson(json);
   Map<String, dynamic> toJson() => _$TagToJson(this);

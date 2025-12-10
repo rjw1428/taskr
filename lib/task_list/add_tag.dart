@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:taskr/services/models.dart';
-import 'package:taskr/services/services.dart';
+import 'package:taskr/services/tag.provider.dart';
 
 class AddTagScreen extends StatelessWidget {
   final Tag? tag;
@@ -48,10 +49,11 @@ class TagFormState extends State<TagForm> {
     if (_label.text.isEmpty) {
       return Future.error('Tag label missing');
     }
+    var tagProvider = Provider.of<TagProvider>(context, listen: false);
     if (widget.tag == null) {
-      await TagService().addTag(_label.text);
+      await tagProvider.addTag(_label.text);
     } else {
-      await TagService().updateTag(widget.tag!.id, _label.text);
+      await tagProvider.updateTag(widget.tag!.id, _label.text);
     }
     setState(() => apiPending = false);
 
@@ -93,3 +95,4 @@ class TagFormState extends State<TagForm> {
     ));
   }
 }
+

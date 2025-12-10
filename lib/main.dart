@@ -5,9 +5,12 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:provider/provider.dart';
 import 'package:taskr/firebase_options.dart';
 import 'package:taskr/routing.dart';
 import 'package:taskr/services/auth.service.dart';
+import 'package:taskr/services/models.dart';
+import 'package:taskr/services/tag.provider.dart';
 import 'package:taskr/theme.dart';
 
 // Global navigator key
@@ -93,12 +96,23 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      navigatorKey: navigatorKey, // Set the navigator key
-      debugShowCheckedModeBanner: false,
-      theme: appTheme,
-      title: 'Taskr: To-Do App',
-      routes: appRoutes,
+    return MultiProvider(
+      providers: [
+        StreamProvider<User?>.value(
+          value: AuthService().userStream,
+          initialData: null,
+        ),
+        ChangeNotifierProvider<TagProvider>(
+          create: (_) => TagProvider(),
+        ),
+      ],
+      child: MaterialApp(
+        navigatorKey: navigatorKey, // Set the navigator key
+        debugShowCheckedModeBanner: false,
+        theme: appTheme,
+        title: 'Taskr: To-Do App',
+        routes: appRoutes,
+      ),
     );
   }
 }

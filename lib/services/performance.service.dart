@@ -26,10 +26,8 @@ class PerformanceService {
     });
   }
 
-  Stream<List<Map<String, dynamic>>> streamPerformanceForMonth(
-      String userId, DateTime startDate, DateTime endDate) {
-
-      print('streamPerformanceForMonth: $startDate to $endDate');
+  Stream<List<Map<String, dynamic>>> streamPerformanceForMonth(String userId, DateTime startDate, DateTime endDate) {
+    print('streamPerformanceForMonth: $startDate to $endDate');
     return score(userId)
         .collection('performance')
         .where("date", isGreaterThanOrEqualTo: startDate)
@@ -89,6 +87,9 @@ class PerformanceService {
     }
     if (priority == Effort.low) {
       return 1;
+    }
+    if (priority == Effort.info) {
+      return 0;
     }
     print("Unknown Priority: $priority");
     return 0;

@@ -8,15 +8,8 @@ import 'package:taskr/shared/shared.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 class TaskService {
-  TaskService._internal();
-
   final _db = FirebaseFirestore.instance;
   static const defaultUnassignedDate = "unassigned";
-  static final TaskService _instance = TaskService._internal();
-
-  factory TaskService() {
-    return _instance;
-  }
 
   CollectionReference<Map<String, dynamic>> taskCollection(String userId, String? date) {
     return _db
@@ -63,23 +56,28 @@ class TaskService {
         .update({"taskOrder": updatedOrder});
   }
 
-  Stream<List<Task>> streamTasks(String userId, String? date) {
-    return CombineLatestStream.combine3(
+  Stream<List<Task>> streamTasks(String userId, String? date, List<Tag> tags) {
+    final tagMap = tags.fold({}, (acc, cur) => {...acc, cur.id: cur.toJson()});
+    return CombineLatestStream.combine2(
         taskCollection(userId, date ?? defaultUnassignedDate)
             .snapshots()
             .map((snapshot) => snapshot.docs.map((doc) => {...doc.data(), 'id': doc.id}).toList())
             .handleError((error) => print("TASK LIST: $error")),
-        TagService().streamTags(userId),
         taskOrderStream(userId, date ?? defaultUnassignedDate),
-        (tasks, tags, order) => order.map((id) => tasks.firstWhere((task) => task['id'] == id)).map((task) {
-              final tagList = task['tags'].map((tag) {
+        (tasks, order) => order.map((id) => tasks.firstWhere((task) => task['id'] == id)).map((task) {
+              final tagList = (task['tags'] as List).map((tag) {
                 if (tag is String) {
-                  return tags[tag];
+                  return tagMap[tag];
                 } else {
-                  return tags[tag["id"]];
+                  return tagMap[tag["id"]];
                 }
               }).toList();
-              task['tags'] = tagList ?? [];
+
+              task['tags'] = tagList
+                  .where((t) => t != null)
+                  // .map((t) => )
+                  .toList();
+
               return Task.fromJson(task);
             }).toList()).handleError((error) => print("SHIT: $error"));
   }

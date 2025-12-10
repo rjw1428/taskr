@@ -59,6 +59,7 @@ class TaskFormState extends State<TaskForm> {
   List<bool> repeatDayValues = List.generate(7, (index) => false);
   List<DateTime> repeatedDates = List.generate(7, (index) => DateTime(index));
   final TextEditingController _title = TextEditingController();
+  final TaskService _taskService = TaskService();
 
   TaskFormState({required this.task}) {
     initialDueDate =
@@ -114,7 +115,7 @@ class TaskFormState extends State<TaskForm> {
             tags: task.tags,
             subtasks: []);
         newTask.dueDate = DateService().getString(repeatedDates[i]);
-        tasks.add(TaskService().addTask(newTask));
+        tasks.add(_taskService.addTask(newTask));
       }
     }
 

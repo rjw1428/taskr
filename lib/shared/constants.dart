@@ -9,6 +9,13 @@ Map<Effort, Color> priorityColors = {
   Effort.info: const Color.fromARGB(255, 0, 0, 0),
 };
 
+Map<Effort, Color> dropdownColors = {
+  Effort.high: Colors.red,
+  Effort.medium: Colors.yellow,
+  Effort.low: Colors.green,
+  Effort.info: Colors.white
+};
+
 enum Days { mon, tus, wed, thurs, fri, sat, sun }
 
 List<Color> chartColors = [
