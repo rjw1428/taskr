@@ -23,8 +23,7 @@ class CopyTaskScreen extends StatelessWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text("Copy Task",
-                            style: TextStyle(fontSize: 40, color: Colors.black)),
+                        const Text("Copy Task", style: TextStyle(fontSize: 40, color: Colors.black)),
                         SizedBox(
                           // width: MediaQuery.of(context).size.width * .5,
                           height: 500,
@@ -47,12 +46,12 @@ class TaskForm extends StatefulWidget {
   const TaskForm({super.key, required this.task});
 
   @override
-  TaskFormState createState() => TaskFormState(task: task);
+  TaskFormState createState() => TaskFormState();
 }
 
 class TaskFormState extends State<TaskForm> {
   final _formKey = GlobalKey<FormState>();
-  final Task task;
+  late Task task;
   String? _dueDate;
   bool apiPending = false;
   DateTime? initialDueDate;
@@ -61,11 +60,11 @@ class TaskFormState extends State<TaskForm> {
   final TextEditingController _title = TextEditingController();
   final TaskService _taskService = TaskService();
 
-  TaskFormState({required this.task}) {
-    initialDueDate =
-        _dueDate == null ? DateService().getSelectedDate() : DateService().getDate(_dueDate!);
+  TaskFormState() {
+    initialDueDate = _dueDate == null ? DateService().getSelectedDate() : DateService().getDate(_dueDate!);
     _dueDate = DateService().getString(initialDueDate!);
-    _title.text = task.title;
+    _title.text = widget.task.title;
+    task = widget.task;
     if (initialDueDate != null) {
       _updateRepeatedDays(initialDueDate!, true);
     }
@@ -73,7 +72,7 @@ class TaskFormState extends State<TaskForm> {
 
   List<bool> _updateRepeatDays(int index, bool value) {
     repeatDayValues[index] = value;
-    print(repeatedDates[index]);
+    debugPrint(repeatedDates[index].toString());
     return repeatDayValues;
   }
 
@@ -119,13 +118,15 @@ class TaskFormState extends State<TaskForm> {
       }
     }
 
-    await Future.forEach(tasks, (x) => print(x));
+    await Future.forEach(tasks, (x) => debugPrint(x.toString()));
 
     setState(() {
       apiPending = false;
     });
 
-    Navigator.of(context).pop();
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
   }
 
   @override
@@ -190,8 +191,7 @@ class TaskFormState extends State<TaskForm> {
                                 Checkbox(
                                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                     value: repeatDayValues[index],
-                                    onChanged: (val) =>
-                                        setState(() => _updateRepeatDays(index, val!)))
+                                    onChanged: (val) => setState(() => _updateRepeatDays(index, val!)))
                               ],
                             )),
                   ),

@@ -2,14 +2,11 @@ import 'dart:convert';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
-import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
-import 'package:taskr/task_list/coaching.dart';
 
 class FirebaseMessageService {
   final _fbMessaging = FirebaseMessaging.instance;
   bool init = false;
-  List<Task> _tasks = [];
   Future<void> initNotifiactions() async {
     final settings = await _fbMessaging.requestPermission(
       alert: true,
@@ -21,9 +18,9 @@ class FirebaseMessageService {
       sound: true,
     );
 
-    print('User granted permission: ${settings.authorizationStatus}');
+    debugPrint('User granted permission: ${settings.authorizationStatus}');
     final fcmToken = await _fbMessaging.getToken();
-    print("TOKEN: $fcmToken");
+    debugPrint("TOKEN: $fcmToken");
 
     await FirebaseMessaging.instance.setAutoInitEnabled(true);
   }
@@ -34,8 +31,8 @@ class FirebaseMessageService {
   ) async {
     if (message == null) return;
 
-    print("FCM Message Received: ${message.data}");
-    print("FCM Notification: ${message.notification?.title} - ${message.notification?.body}");
+    debugPrint("FCM Message Received: ${message.data}");
+    debugPrint("FCM Notification: ${message.notification?.title} - ${message.notification?.body}");
 
     if (message.data.containsKey('actions')) {
       final actions = json.decode(message.data['actions']);

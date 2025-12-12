@@ -54,9 +54,7 @@ class SettingsPageState extends State<SettingsForm> {
         appBar: AppBar(
           title: const Text('Settings'),
           actions: [
-            IconButton(
-                onPressed: () => AuthService().signOut(),
-                icon: const Icon(FontAwesomeIcons.userAstronaut))
+            IconButton(onPressed: () => AuthService().signOut(), icon: const Icon(FontAwesomeIcons.userAstronaut))
           ],
         ),
         body: ListView(
@@ -74,10 +72,8 @@ class SettingsPageState extends State<SettingsForm> {
                       tag.label,
                     ),
                     IconButton(
-                        onPressed: () => showDialog(
-                            context: context,
-                            builder: (BuildContext context) =>
-                                AddTagScreen(tag: tag)),
+                        onPressed: () =>
+                            showDialog(context: context, builder: (BuildContext context) => AddTagScreen(tag: tag)),
                         icon: const Icon(FontAwesomeIcons.penToSquare)),
                     IconButton(
                       onPressed: () => tagProvider.deleteTag(tag.id),
@@ -94,9 +90,6 @@ class SettingsPageState extends State<SettingsForm> {
         ),
         floatingActionButton: FloatingActionButton(
             child: const Icon(FontAwesomeIcons.plus, size: 20),
-            onPressed: () => showDialog(
-                context: context,
-                builder: (BuildContext context) => AddTagScreen())));
+            onPressed: () => showDialog(context: context, builder: (BuildContext context) => const AddTagScreen())));
   }
 }
-

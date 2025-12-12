@@ -44,7 +44,7 @@ class TaskItemState extends State<TaskItem> {
       Container(
           // width: MediaQuery.of(context).size.width * .7,
           decoration: BoxDecoration(
-            color: priorityColors[widget.task.priority]!.withOpacity(widget.task.completed ? 0.5 : 1),
+            color: priorityColors[widget.task.priority]!.withAlpha(widget.task.completed ? 128 : 255),
             border: Border.all(color: Colors.black45),
             borderRadius: BorderRadius.circular(10),
             boxShadow: const [BoxShadow(color: Colors.black45, offset: Offset(2.0, 4.0), blurRadius: 5.0)],
@@ -56,7 +56,7 @@ class TaskItemState extends State<TaskItem> {
                   behavior: HitTestBehavior.opaque,
                   onTap: () {
                     setState(() => expanded = !expanded);
-                    print("${widget.task.title}: $expanded");
+                    debugPrint("${widget.task.title}: $expanded");
                   },
                   child: Row(
                       // TASK
@@ -94,10 +94,10 @@ class TaskItemState extends State<TaskItem> {
                                   Row(children: [
                                     Flexible(
                                         // width: MediaQuery.of(context).size.width * .5,
-                                        child: Text(
+                                        child: SelectableText(
                                       widget.task.title,
-                                      style: const TextStyle(fontSize: 16, color: Colors.white),
-                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                          fontSize: 16, color: Colors.white, overflow: TextOverflow.ellipsis),
                                     )),
                                     if (isExpandable && !expanded)
                                       const Padding(
@@ -110,7 +110,7 @@ class TaskItemState extends State<TaskItem> {
                                   if (widget.task.description != null && expanded)
                                     Padding(
                                         padding: const EdgeInsets.only(bottom: 10),
-                                        child: Text(
+                                        child: SelectableText(
                                           widget.task.description!,
                                           style: const TextStyle(fontSize: 12, color: Colors.white),
                                         )),
@@ -136,7 +136,7 @@ class TaskItemState extends State<TaskItem> {
                             index: widget.index,
                             child: IconButton(
                               icon: const Icon(FontAwesomeIcons.gripLines),
-                              onPressed: () => print("HERE"),
+                              onPressed: () => debugPrint("HERE"),
                             ),
                           ),
                         ])

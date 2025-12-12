@@ -1,12 +1,7 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:provider/provider.dart';
-import 'package:rxdart/rxdart.dart';
 import 'package:taskr/login/login.dart';
 import 'package:taskr/services/services.dart';
-import 'package:taskr/services/tag.provider.dart';
 import '../shared/shared.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:taskr/performance/performance_heatmap.dart';
@@ -49,8 +44,8 @@ class CurrentScoreState extends State<CurrentScore> {
   @override
   Widget build(BuildContext context) {
     DateTime selectedMinDate = DateService().daysAgo(DateTime.now(), 7);
-    var tagProvider = Provider.of<TagProvider>(context);
-    var tags = tagProvider.tags;
+    // var tagProvider = Provider.of<TagProvider>(context);
+    // var tags = tagProvider.tags;
     return StreamBuilder(
         stream: PerformanceService().streamPerformance(widget.userId, selectedMinDate),
         builder: (context, snapshot) {
@@ -59,28 +54,23 @@ class CurrentScoreState extends State<CurrentScore> {
           }
 
           if (snapshot.hasError) {
-            print(snapshot.error);
+            debugPrint(snapshot.error.toString());
             return const Text("ERROR");
           }
-          final performace = snapshot.data!
-              as List<Map<String, dynamic>>; //as Map<String, List<Map<String, int>>>;
-          final chartData =
-              performace.map((days) => days['completed'] as Map<String, dynamic>).toList();
+          final performace = snapshot.data!; //as Map<String, List<Map<String, int>>>;
+          final chartData = performace.map((days) => days['completed'] as Map<String, dynamic>).toList();
 
-          final maxYAxis = (chartData
-                      .map((day) => day['ALL'] as int)
-                      .reduce((value, element) => value > element ? value : element) *
-                  (isShowingAll ? 1.2 : 0.6))
-              .toInt();
+          final maxYAxis =
+              (chartData.map((day) => day['ALL'] as int).reduce((value, element) => value > element ? value : element) *
+                      (isShowingAll ? 1.2 : 0.6))
+                  .toInt();
 
-          print(maxYAxis);
+          debugPrint(maxYAxis.toString());
           return Scaffold(
               appBar: AppBar(
                 title: const Text('Performance'),
                 actions: [
-                  IconButton(
-                      onPressed: () => AuthService().signOut(),
-                      icon: const Icon(FontAwesomeIcons.userAstronaut))
+                  IconButton(onPressed: () => AuthService().signOut(), icon: const Icon(FontAwesomeIcons.userAstronaut))
                 ],
               ),
               body: Column(
@@ -110,12 +100,10 @@ class CurrentScoreState extends State<CurrentScore> {
                                     touchTooltipData: LineTouchTooltipData(
                                       fitInsideHorizontally: true,
                                       fitInsideVertically: true,
-                                      getTooltipColor: (touchedSpot) =>
-                                          Colors.blueGrey.withOpacity(0.8),
+                                      getTooltipColor: (touchedSpot) => Colors.blueGrey.withValues(alpha: 0.8),
                                       getTooltipItems: (data) => data.map((spot) {
-                                        // print(spot.toString());
-                                        return LineTooltipItem(
-                                            spot.y.toString(), const TextStyle(color: Colors.red));
+                                        // debugPrint(spot.toString());
+                                        return LineTooltipItem(spot.y.toString(), const TextStyle(color: Colors.red));
                                       }).toList(),
                                     ),
                                   ),
@@ -136,12 +124,10 @@ class CurrentScoreState extends State<CurrentScore> {
                                       sideTitles: SideTitles(showTitles: false),
                                     ),
                                     leftTitles: const AxisTitles(
-                                      sideTitles: SideTitles(
-                                          getTitlesWidget: leftTitleWidgets,
-                                          showTitles: true,
-                                          interval: 2
-                                          // reservedSize: 40,
-                                          ),
+                                      sideTitles:
+                                          SideTitles(getTitlesWidget: leftTitleWidgets, showTitles: true, interval: 2
+                                              // reservedSize: 40,
+                                              ),
                                     ),
                                   ),
                                   borderData: FlBorderData(
@@ -175,7 +161,7 @@ class CurrentScoreState extends State<CurrentScore> {
                               IconButton(
                                 icon: Icon(
                                   Icons.refresh,
-                                  color: Colors.white.withOpacity(isShowingAll ? 1.0 : 0.5),
+                                  color: Colors.white.withValues(alpha: isShowingAll ? 1.0 : 0.5),
                                 ),
                                 onPressed: () {
                                   setState(() {

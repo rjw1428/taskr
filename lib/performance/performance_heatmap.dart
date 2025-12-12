@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:taskr/services/services.dart';
-import 'package:taskr/shared/loading.dart';
 import 'package:taskr/shared/error.dart';
 
 class PerformanceHeatmap extends StatefulWidget {
@@ -28,9 +27,9 @@ class _PerformanceHeatmapState extends State<PerformanceHeatmap> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           // return const LoadingScreen();
-          print('Loading performance data...');
+          debugPrint('Loading performance data...');
         } else if (snapshot.hasError) {
-          print(snapshot.error);
+          debugPrint(snapshot.error.toString());
           return const ErrorMessage();
         } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return const Center(child: Text('No performance data for this month.'));
@@ -52,7 +51,7 @@ class _PerformanceHeatmapState extends State<PerformanceHeatmap> {
 
         final totalCells = daysInMonth + adjustedFirstDayWeekday;
         final numberOfWeeks = (totalCells / 7).ceil();
-        
+
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Column(
@@ -84,17 +83,17 @@ class _PerformanceHeatmapState extends State<PerformanceHeatmap> {
                 itemBuilder: (context, index) {
                   final dayOfWeekIndex = index % 7; // 0 for Monday, 6 for Sunday
                   final weekIndex = index ~/ 7;
-          
+
                   final dayOfMonth = (weekIndex * 7) + dayOfWeekIndex - adjustedFirstDayWeekday + 1;
-          
+
                   if (dayOfMonth < 1 || dayOfMonth > daysInMonth) {
                     // Empty cells before the first day and after the last day of the month
                     return Container();
                   }
-            
+
                   final score = dailyScores[dayOfMonth] ?? 0;
                   final color = _getColorForScore(score);
-            
+
                   return Container(
                     decoration: BoxDecoration(
                       color: color,

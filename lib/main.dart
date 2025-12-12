@@ -9,7 +9,6 @@ import 'package:provider/provider.dart';
 import 'package:taskr/firebase_options.dart';
 import 'package:taskr/routing.dart';
 import 'package:taskr/services/auth.service.dart';
-import 'package:taskr/services/models.dart';
 import 'package:taskr/services/tag.provider.dart';
 import 'package:taskr/theme.dart';
 
@@ -25,15 +24,17 @@ void main() async {
 
   if (bool.parse(dotenv.env['DEV_MODE'] ?? 'true')) {
     try {
-      print('Using local setup');
+      debugPrint('Using local setup');
       FirebaseFirestore.instance.useFirestoreEmulator('localhost', 8080);
       await FirebaseAuth.instance.useAuthEmulator('localhost', 9099);
-    } catch (e) {}
+    } catch (e) {
+      debugPrint(e.toString());
+    }
   }
 
   // Handle background messages
   FirebaseMessaging.onBackgroundMessage((message) async {
-    print('Handling a background message: ${message.data}');
+    debugPrint('Handling a background message: ${message.data}');
   });
 
   runApp(const MyApp());
@@ -52,12 +53,12 @@ class _MyAppState extends State<MyApp> {
     super.initState();
     if (!kIsWeb) {
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-        print('Got a message whilst in the foreground!');
-        print('Message data: ${message.data}');
+        debugPrint('Got a message whilst in the foreground!');
+        debugPrint('Message data: ${message.data}');
 
         final notification = message.notification;
         if (notification != null) {
-          print('Message also contained a notification: $notification');
+          debugPrint('Message also contained a notification: $notification');
           final context = navigatorKey.currentContext;
           if (context != null) {
             showDialog(
@@ -90,7 +91,7 @@ class _MyAppState extends State<MyApp> {
         }
       });
     } else {
-      print('Skipping cloud messaging for web');
+      debugPrint('Skipping cloud messaging for web');
     }
   }
 

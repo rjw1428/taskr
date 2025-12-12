@@ -35,10 +35,10 @@ class TaskListState extends State<TaskListScreen> {
   }
 
   setFcmToken() async {
-    print('[Update FCM] checking FCM');
+    debugPrint('[Update FCM] checking FCM');
     final user = await AuthService().getUserProfile(widget.userId);
     if (user == null) {
-      print('[Update FCM] no profile');
+      debugPrint('[Update FCM] no profile');
       return;
     }
     if (kIsWeb) {
@@ -47,10 +47,10 @@ class TaskListState extends State<TaskListScreen> {
     await FirebaseMessaging.instance.requestPermission();
     final fcmToken = await FirebaseMessaging.instance.getToken();
     if (fcmToken != null && fcmToken != user['fcmToken']) {
-      print('[Update FCM] Updating token');
+      debugPrint('[Update FCM] Updating token');
       await AuthService().updateFcmToken(widget.userId, fcmToken);
     } else {
-      print('[Update FCM] No update required');
+      debugPrint('[Update FCM] No update required');
     }
   }
 
@@ -65,10 +65,10 @@ class TaskListState extends State<TaskListScreen> {
             return const LoadingScreen(message: 'Loading Tasks...');
           }
           if (snapshot.hasError) {
-            print("LIST ERROR: ${snapshot.error}");
+            debugPrint("LIST ERROR: ${snapshot.error}");
             return const ErrorMessage(message: 'Oh Shit');
           }
-          print("FETCHING NEW TASK DATA");
+          debugPrint("FETCHING NEW TASK DATA");
           if (snapshot.hasError || !snapshot.hasData) {
             _tasks = [];
           }
@@ -144,14 +144,14 @@ class TaskListState extends State<TaskListScreen> {
                                   if (DateService().isDateLessThan(today, selectedDate))
                                     IconButton(
                                         onPressed: () => setState(() {
-                                              print("BACK TO TODAY");
+                                              debugPrint("BACK TO TODAY");
                                               selectedDate = today;
                                               DateService().setSelectedDate(DateService().getDate(selectedDate));
                                             }),
                                         icon: const Icon(FontAwesomeIcons.backwardStep)),
                                   IconButton(
                                       onPressed: () => setState(() {
-                                            print("LEFT");
+                                            debugPrint("LEFT");
                                             selectedDate =
                                                 DateService().decrementDate(DateService().getDate(selectedDate));
                                             DateService().setSelectedDate(DateService().getDate(selectedDate));
@@ -160,7 +160,7 @@ class TaskListState extends State<TaskListScreen> {
                                   Text(selectedDate),
                                   IconButton(
                                       onPressed: () => setState(() {
-                                            print("RIGHT");
+                                            debugPrint("RIGHT");
                                             selectedDate =
                                                 DateService().incrementDate(DateService().getDate(selectedDate));
                                             DateService().setSelectedDate(DateService().getDate(selectedDate));
@@ -169,7 +169,7 @@ class TaskListState extends State<TaskListScreen> {
                                   if (DateService().isDateLessThan(selectedDate, today))
                                     IconButton(
                                         onPressed: () => setState(() {
-                                              print("FORWARD TO TODAY");
+                                              debugPrint("FORWARD TO TODAY");
                                               selectedDate = today;
                                               DateService().setSelectedDate(DateService().getDate(selectedDate));
                                             }),

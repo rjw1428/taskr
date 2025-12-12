@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/shared/constants.dart';
@@ -27,7 +28,7 @@ class PerformanceService {
   }
 
   Stream<List<Map<String, dynamic>>> streamPerformanceForMonth(String userId, DateTime startDate, DateTime endDate) {
-    print('streamPerformanceForMonth: $startDate to $endDate');
+    debugPrint('streamPerformanceForMonth: $startDate to $endDate');
     return score(userId)
         .collection('performance')
         .where("date", isGreaterThanOrEqualTo: startDate)
@@ -91,7 +92,7 @@ class PerformanceService {
     if (priority == Effort.info) {
       return 0;
     }
-    print("Unknown Priority: $priority");
+    debugPrint("Unknown Priority: $priority");
     return 0;
   }
 }

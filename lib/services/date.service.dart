@@ -93,8 +93,8 @@ class DateService {
       final endTime = DateFormat(displayTimeFormat).format(etime);
       return "$startTime - $endTime";
     } catch (e) {
-      print("Error: ${task.dueDate}");
-      print(e);
+      debugPrint("Error: ${task.dueDate}");
+      debugPrint(e.toString());
       return '';
     }
   }

@@ -1,9 +1,11 @@
 // import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:rxdart/rxdart.dart';
 
+// ignore: non_constant_identifier_names
 final WEB_CLIENT_ID = dotenv.env['WEB_CLIENT_ID'];
 
 class AuthService {
@@ -32,12 +34,12 @@ class AuthService {
       user = await userStream.first;
     } on FirebaseAuthException catch (e) {
       if (e.code == 'weak-password') {
-        print('The password provided is too weak.');
+        debugPrint('The password provided is too weak.');
       } else if (e.code == 'email-already-in-use') {
-        print('The account already exists for that email.');
+        debugPrint('The account already exists for that email.');
       }
     } catch (e) {
-      print(e);
+      debugPrint(e.toString());
     }
   }
 
@@ -50,7 +52,7 @@ class AuthService {
         await FirebaseAuth.instance.signInWithPopup(googleProvider);
         user = FirebaseAuth.instance.currentUser;
       } on FirebaseAuthException catch (e) {
-        print('Unknown exception: $e');
+        debugPrint('Unknown exception: $e');
       }
     } else {
       try {
@@ -58,9 +60,9 @@ class AuthService {
         user = await userStream.first;
       } on FirebaseAuthException catch (e) {
         if (e.code == 'user-not-found') {
-          print('No user found for that email.');
+          debugPrint('No user found for that email.');
         } else if (e.code == 'wrong-password') {
-          print('Wrong password provided for that user.');
+          debugPrint('Wrong password provided for that user.');
         }
       }
     }
@@ -75,7 +77,7 @@ class AuthService {
   Future<void> updateFcmToken(String userId, String fcmToken) async {
     final userDoc = FirebaseFirestore.instance.collection('todos').doc(userId);
     await userDoc.update({'fcmToken': fcmToken});
-    print('FCM token updated for user $userId');
+    debugPrint('FCM token updated for user $userId');
   }
 
   Future<void> signOut() async {

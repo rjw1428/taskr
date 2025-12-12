@@ -8,7 +8,7 @@ class ErrorMessage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16.0),
-      color: Colors.redAccent.withOpacity(0.1),
+      color: Colors.redAccent.withAlpha(25),
       child: Text(
         message,
         style: const TextStyle(color: Colors.red, fontSize: 16.0),

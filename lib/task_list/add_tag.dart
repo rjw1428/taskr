@@ -18,7 +18,7 @@ class AddTagScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10.0),
                 ),
                 child: Padding(
-                  padding: EdgeInsets.all(4),
+                  padding: const EdgeInsets.all(4),
                   child: Column(children: [
                     Text(tag == null ? "Add tag" : "Edit tag",
                         style: const TextStyle(fontSize: 40, color: Colors.black)),
@@ -57,7 +57,9 @@ class TagFormState extends State<TagForm> {
     }
     setState(() => apiPending = false);
 
-    Navigator.of(context).pop();
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
   }
 
   @override
@@ -95,4 +97,3 @@ class TagFormState extends State<TagForm> {
     ));
   }
 }
-

@@ -16,8 +16,7 @@ class BottomNavBar extends StatelessWidget {
       unselectedItemColor: Colors.grey,
       showUnselectedLabels: true,
       selectedLabelStyle: TextStyle(shadows: [
-        Shadow(
-            blurRadius: 4.0, offset: const Offset(3.0, 3.0), color: Colors.grey.withOpacity(0.5)),
+        Shadow(blurRadius: 4.0, offset: const Offset(3.0, 3.0), color: Colors.grey.withAlpha(128)),
       ]),
       items: const [
         BottomNavigationBarItem(
@@ -59,8 +58,7 @@ class BottomNavBar extends StatelessWidget {
             Navigator.pushAndRemoveUntil(
                 context,
                 PageRouteBuilder(
-                  pageBuilder: (context, animation, secondaryAnimation) =>
-                      const HomeScreen(isBacklog: false),
+                  pageBuilder: (context, animation, secondaryAnimation) => const HomeScreen(isBacklog: false),
                   transitionsBuilder: (context, animation, secondaryAnimation, child) {
                     return FadeTransition(
                         opacity: animation,
@@ -82,8 +80,7 @@ class BottomNavBar extends StatelessWidget {
             Navigator.pushAndRemoveUntil(
                 context,
                 PageRouteBuilder(
-                  pageBuilder: (context, animation, secondaryAnimation) =>
-                      const HomeScreen(isBacklog: true),
+                  pageBuilder: (context, animation, secondaryAnimation) => const HomeScreen(isBacklog: true),
                   transitionsBuilder: (context, animation, secondaryAnimation, child) {
                     return FadeTransition(
                         opacity: animation,

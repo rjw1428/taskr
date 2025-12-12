@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/services/models.dart';
 import 'package:rxdart/rxdart.dart';
@@ -62,7 +63,7 @@ class TaskService {
         taskCollection(userId, date ?? defaultUnassignedDate)
             .snapshots()
             .map((snapshot) => snapshot.docs.map((doc) => {...doc.data(), 'id': doc.id}).toList())
-            .handleError((error) => print("TASK LIST: $error")),
+            .handleError((error) => debugPrint("TASK LIST: $error")),
         taskOrderStream(userId, date ?? defaultUnassignedDate),
         (tasks, order) => order.map((id) => tasks.firstWhere((task) => task['id'] == id)).map((task) {
               final tagList = (task['tags'] as List).map((tag) {
@@ -79,7 +80,7 @@ class TaskService {
                   .toList();
 
               return Task.fromJson(task);
-            }).toList()).handleError((error) => print("SHIT: $error"));
+            }).toList()).handleError((error) => debugPrint("SHIT: $error"));
   }
 
   Future<List<Map<String, dynamic>>> getTasks(String userId, String? date) async {
@@ -246,11 +247,11 @@ class TaskService {
       final userId = AuthService().user!.uid;
       final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('trainScheduleTest');
       final result = await callable.call(["userId", userId]);
-      print('trainScheduleTest result: ${result.data}');
+      debugPrint('trainScheduleTest result: ${result.data}');
     } on FirebaseFunctionsException catch (e) {
-      print('Firebase Functions Exception: ${e.code} - ${e.message}');
+      debugPrint('Firebase Functions Exception: ${e.code} - ${e.message}');
     } catch (e) {
-      print('Generic Exception: $e');
+      debugPrint('Generic Exception: $e');
     }
   }
 
@@ -258,11 +259,11 @@ class TaskService {
     try {
       final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('addWindTaskFromNotification');
       final result = await callable.call(data);
-      print('addWindTaskFromNotification result: ${result.data}');
+      debugPrint('addWindTaskFromNotification result: ${result.data}');
     } on FirebaseFunctionsException catch (e) {
-      print('Firebase Functions Exception: ${e.code} - ${e.message}');
+      debugPrint('Firebase Functions Exception: ${e.code} - ${e.message}');
     } catch (e) {
-      print('Generic Exception: $e');
+      debugPrint('Generic Exception: $e');
     }
   }
 }

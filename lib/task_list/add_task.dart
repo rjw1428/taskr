@@ -78,7 +78,9 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
       apiPending = false;
     });
 
-    Navigator.of(context).pop();
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
   }
 
   @override
@@ -88,7 +90,6 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
     _allTags = Provider.of<TagProvider>(context, listen: false).tags;
 
     if (widget.task != null) {
-      print(widget.task!.tags);
       _title.text = widget.task!.title;
       _description.text = widget.task!.description ?? '';
       _dueDate = widget.task!.dueDate;
@@ -172,38 +173,39 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                                   ),
                               ],
                             ),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                ElevatedButton(
-                                  onPressed: () async {
-                                    final initial = _startTime == null
-                                        ? DateService().getRoundedTime(TimeOfDay.now())
-                                        : DateService().getTime(_startTime!);
-                                    final time = await _selectTime(context, initial);
-                                    if (time == null) {
-                                      return;
-                                    }
-                                    setState(() {
-                                      DateTime tempDateTime = DateTime(2024, 1, 1, time.hour, time.minute);
-                                      _startTime = DateService().getTimeStr(tempDateTime);
-                                    });
-                                  },
-                                  child: Text(
-                                    _startTime == null ? 'Set a start time' : DateService().displayTime(_startTime!),
-                                    style: Theme.of(context).textTheme.titleSmall,
+                            if (_dueDate != null)
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  ElevatedButton(
+                                    onPressed: () async {
+                                      final initial = _startTime == null
+                                          ? DateService().getRoundedTime(TimeOfDay.now())
+                                          : DateService().getTime(_startTime!);
+                                      final time = await _selectTime(context, initial);
+                                      if (time == null) {
+                                        return;
+                                      }
+                                      setState(() {
+                                        DateTime tempDateTime = DateTime(2024, 1, 1, time.hour, time.minute);
+                                        _startTime = DateService().getTimeStr(tempDateTime);
+                                      });
+                                    },
+                                    child: Text(
+                                      _startTime == null ? 'Set a start time' : DateService().displayTime(_startTime!),
+                                      style: Theme.of(context).textTheme.titleSmall,
+                                    ),
                                   ),
-                                ),
-                                if (_startTime != null)
-                                  IconButton(
-                                    onPressed: () => setState(() {
-                                      _startTime = null;
-                                      _endTime = null;
-                                    }),
-                                    icon: const Icon(FontAwesomeIcons.xmark),
-                                  ),
-                              ],
-                            ),
+                                  if (_startTime != null)
+                                    IconButton(
+                                      onPressed: () => setState(() {
+                                        _startTime = null;
+                                        _endTime = null;
+                                      }),
+                                      icon: const Icon(FontAwesomeIcons.xmark),
+                                    ),
+                                ],
+                              ),
                             if (_startTime != null)
                               Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                                 ElevatedButton(
@@ -304,11 +306,12 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   Future<DateTime?> _selectDate(BuildContext context, DateTime initial) async {
     final now = DateTime.now();
     final DateTime? selectedDate = await showDatePicker(
-        context: context,
-        initialDate: initial,
-        initialDatePickerMode: DatePickerMode.day,
-        firstDate: DateTime(now.year - 1),
-        lastDate: DateTime(now.year + 1));
+      context: context,
+      initialDate: initial,
+      initialDatePickerMode: DatePickerMode.day,
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
     return selectedDate;
   }
 
