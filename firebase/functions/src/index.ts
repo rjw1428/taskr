@@ -301,18 +301,6 @@ async function getWindspeed(userId: string) {
     }
     const fcmToken = await getUserFcmToken(userId)
 
-    const message = {
-      token: fcmToken,
-      notification: {
-        title: `Batten Down the Decorations!`,
-        body: body + " A task has been added to your list.",
-      },
-    };
-
-    await admin.messaging().send(message);
-    logger.info(`Notification sent regarding high winds`);
-
-
     const toHourMinute = (t: string) => {
       const n = parseInt(t, 10);
       if (Number.isNaN(n)) return t;
@@ -331,13 +319,52 @@ async function getWindspeed(userId: string) {
     if (highWinds.length === 1) {
       endHour = (parseInt(lastHighWindHour.time) + 100).toString()
     }
-    await addWindTask(userId, date, body, startHour, toHourMinute(endHour));
+
+    const message = {
+      token: fcmToken,
+      notification: {
+        title: "Batten Down the Decorations!",
+        body: body,
+      },
+      data: {
+        actions: JSON.stringify([
+          {
+            action: "add-wind-task",
+            title: "Yes",
+          },
+          {
+            action: "dismiss",
+            title: "No",
+          },
+        ]),
+        date: date,
+        body: body,
+        startHour: startHour,
+        endHour: toHourMinute(endHour),
+      },
+    };
+
+    await admin.messaging().send(message);
+    logger.info(`Notification sent regarding high winds`);
+
     return body;
   } catch (e) {
    logger.error(e);
    return "Something went wrong"
   }
 }
+
+export const addWindTaskFromNotification = onRequest({cors: false}, async (req, res) => {
+  const {uid, date, body, startHour, endHour} = req.query;
+
+  if (!uid || !date || !body) {
+    res.status(400).send("Missing required parameters");
+    return;
+  }
+
+  await addWindTask(uid as string, date as string, body as string, startHour as string | undefined, endHour as string | undefined);
+  res.status(200).send("Task added");
+});
 
 async function addWindTask(uid: string, date: string, body: string, startHour?: string, endHour?: string) {
     const task = {

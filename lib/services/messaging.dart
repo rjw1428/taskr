@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:taskr/services/models.dart';
@@ -35,11 +37,20 @@ class FirebaseMessageService {
     print("FCM Message Received: ${message.data}");
     print("FCM Notification: ${message.notification?.title} - ${message.notification?.body}");
 
-    // if (c != null) {
-    //   final text = await AIService().giveFeedback(_tasks);
-    //   return showDialog(
-    //       context: c, builder: (BuildContext context) => CoachingDialog(response: text));
-    // }
+    if (message.data.containsKey('actions')) {
+      final actions = json.decode(message.data['actions']);
+      final action = actions[0]['action'];
+      if (action == 'add-wind-task') {
+        final taskData = {
+          'uid': AuthService().user!.uid,
+          'date': message.data['date'],
+          'body': message.data['body'],
+          'startHour': message.data['startHour'],
+          'endHour': message.data['endHour'],
+        };
+        await TaskService().addWindTask(taskData);
+      }
+    }
   }
 
   Future initPushNotifications(BuildContext c) async {

@@ -116,7 +116,7 @@ class TaskItemState extends State<TaskItem> {
                                         )),
                                   if (widget.task.tags.isNotEmpty && expanded)
                                     Wrap(
-                                        spacing: 10,
+                                        spacing: 4,
                                         children: widget.task.tags
                                             .map((tag) => Chip(
                                                 labelPadding: const EdgeInsets.all(0),

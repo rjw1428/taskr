@@ -253,4 +253,16 @@ class TaskService {
       print('Generic Exception: $e');
     }
   }
+
+  Future<void> addWindTask(Map<String, dynamic> data) async {
+    try {
+      final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('addWindTaskFromNotification');
+      final result = await callable.call(data);
+      print('addWindTaskFromNotification result: ${result.data}');
+    } on FirebaseFunctionsException catch (e) {
+      print('Firebase Functions Exception: ${e.code} - ${e.message}');
+    } catch (e) {
+      print('Generic Exception: $e');
+    }
+  }
 }
