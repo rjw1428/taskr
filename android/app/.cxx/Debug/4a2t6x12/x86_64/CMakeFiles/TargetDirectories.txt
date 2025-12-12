@@ -1,0 +1,2 @@
+/Volumes/Samsung SSD 990 EVO/rjw/GitProjects/taskr/android/app/.cxx/Debug/4a2t6x12/x86_64/CMakeFiles/edit_cache.dir
+/Volumes/Samsung SSD 990 EVO/rjw/GitProjects/taskr/android/app/.cxx/Debug/4a2t6x12/x86_64/CMakeFiles/rebuild_cache.dir
