@@ -13,6 +13,7 @@ class TaskItem extends StatefulWidget {
   final int index;
   final Function onComplete;
   final bool isBacklog;
+  final Function(Task) onDelete;
   final TaskService taskService;
   const TaskItem(
       {super.key,
@@ -20,7 +21,8 @@ class TaskItem extends StatefulWidget {
       required this.index,
       required this.onComplete,
       required this.isBacklog,
-      required this.taskService});
+      required this.taskService,
+      required this.onDelete});
 
   @override
   TaskItemState createState() => TaskItemState();
@@ -166,7 +168,7 @@ class TaskItemState extends State<TaskItem> {
                 context: context,
                 builder: (BuildContext context) => AddTaskScreen(task: widget.task, isBacklog: isBacklog));
           } else if (value == "REMOVE") {
-            widget.taskService.deleteTask(widget.task);
+            widget.onDelete(widget.task);
           } else if (value == "COPY") {
             showDialog(context: context, builder: (BuildContext context) => CopyTaskScreen(task: widget.task));
           } else if (value == "CHECK_TIME") {

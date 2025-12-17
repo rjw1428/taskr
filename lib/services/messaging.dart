@@ -27,7 +27,6 @@ class FirebaseMessageService {
 
   void handleMessage(
     RemoteMessage? message,
-    BuildContext? c,
   ) async {
     if (message == null) return;
 
@@ -54,15 +53,15 @@ class FirebaseMessageService {
     if (init) return;
     RemoteMessage? initialMessage = await _fbMessaging.getInitialMessage();
     if (initialMessage != null) {
-      handleMessage(initialMessage, c);
+      handleMessage(initialMessage);
     }
-    FirebaseMessaging.onMessageOpenedApp.listen((message) => handleMessage(message, c));
+    FirebaseMessaging.onMessageOpenedApp.listen((message) => handleMessage(message));
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      handleMessage(message, c);
+      handleMessage(message);
     });
 
     FirebaseMessaging.onBackgroundMessage((message) async {
-      handleMessage(message, null);
+      handleMessage(message);
     });
 
     init = true;

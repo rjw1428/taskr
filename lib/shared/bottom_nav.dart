@@ -47,13 +47,6 @@ class BottomNavBar extends StatelessWidget {
             ),
             label: 'Backlog',
             tooltip: 'Backlog'),
-        BottomNavigationBarItem(
-            icon: Icon(
-              FontAwesomeIcons.gear,
-              size: 20,
-            ),
-            label: 'Settings',
-            tooltip: 'Settings'),
       ],
       backgroundColor: Colors.black,
       onTap: (int idx) {
@@ -104,9 +97,6 @@ class BottomNavBar extends StatelessWidget {
                   },
                 ),
                 (route) => false);
-            break;
-          case 4:
-            Navigator.pushNamedAndRemoveUntil(context, '/settings', (route) => false);
             break;
         }
       },

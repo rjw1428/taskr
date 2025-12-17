@@ -228,6 +228,27 @@ class TaskService {
     }
   }
 
+  Future<void> restoreTask(Task task) async {
+    var user = AuthService().user;
+    if (user == null) {
+      throw "No user logged in when restoring task";
+    }
+    final date = task.dueDate ?? defaultUnassignedDate;
+
+    // Re-create the document
+    await taskCollection(user.uid, date).doc(task.id!).set(removeNulls(task.toDbTask()));
+
+    // Add the task ID back to the taskOrder array
+    await _db.collection('todos').doc(user.uid).collection("tasks").doc(date).set({
+      "taskOrder": FieldValue.arrayUnion([task.id!])
+    }, SetOptions(merge: true));
+
+    // Restore performance stats if the task was completed
+    if (task.completed) {
+      await PerformanceService().updatePerfomanceStats(user.uid, task, true);
+    }
+  }
+
   Future<void> pushTask(Task task) async {
     var user = AuthService().user!;
     await deleteTask(task);

@@ -9,7 +9,7 @@ class EditAccomplishmentPage extends StatefulWidget {
   const EditAccomplishmentPage({super.key, required this.accomplishment});
 
   @override
-  _EditAccomplishmentPageState createState() => _EditAccomplishmentPageState();
+  State<EditAccomplishmentPage> createState() => _EditAccomplishmentPageState();
 }
 
 class _EditAccomplishmentPageState extends State<EditAccomplishmentPage> {

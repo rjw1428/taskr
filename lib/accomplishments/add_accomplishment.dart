@@ -7,7 +7,7 @@ class AddAccomplishmentPage extends StatefulWidget {
   const AddAccomplishmentPage({super.key});
 
   @override
-  _AddAccomplishmentPageState createState() => _AddAccomplishmentPageState();
+  State<AddAccomplishmentPage> createState() => _AddAccomplishmentPageState();
 }
 
 class _AddAccomplishmentPageState extends State<AddAccomplishmentPage> {

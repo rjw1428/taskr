@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:taskr/accomplishments/add_accomplishment.dart';
 import 'package:taskr/accomplishments/edit_accomplishment.dart';
 import 'package:taskr/services/accomplishment.provider.dart';
-import 'package:taskr/services/models.dart';
+
 import 'package:taskr/shared/bottom_nav.dart';
 
 class AccomplishmentsPage extends StatelessWidget {

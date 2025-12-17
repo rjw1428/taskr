@@ -88,7 +88,7 @@ class TaskListState extends State<TaskListScreen> {
           List<Widget> children = [];
           for (int i = 0; i < _tasks!.length; i++) {
             final task = _tasks![i];
-            children.add(displayTask(task, i, onComplete, widget.isBacklog, _taskService));
+            children.add(displayTask(task, i, onComplete, widget.isBacklog, _taskService, deleteTaskWithUndo));
           }
 
           if (children.isEmpty) {
@@ -107,7 +107,26 @@ class TaskListState extends State<TaskListScreen> {
               appBar: AppBar(
                 title: const Text('Taskr'),
                 actions: [
-                  IconButton(onPressed: () => AuthService().signOut(), icon: const Icon(FontAwesomeIcons.userAstronaut))
+                  PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'settings') {
+                        Navigator.pushNamedAndRemoveUntil(context, '/settings', (route) => false);
+                      } else if (value == 'logout') {
+                        AuthService().signOut();
+                      }
+                    },
+                    itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                      const PopupMenuItem<String>(
+                        value: 'settings',
+                        child: Text('Settings'),
+                      ),
+                      const PopupMenuItem<String>(
+                        value: 'logout',
+                        child: Text('Logout'),
+                      ),
+                    ],
+                    icon: const Icon(FontAwesomeIcons.bars),
+                  ),
                 ],
               ),
               body: GestureDetector(
@@ -213,7 +232,22 @@ class TaskListState extends State<TaskListScreen> {
         });
   }
 
-  displayTask(Task task, int i, Function onComplete, bool isBacklog, TaskService taskService) {
+  void deleteTaskWithUndo(Task task) {
+    _taskService.deleteTask(task);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Task removed'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () {
+            _taskService.restoreTask(task);
+          },
+        ),
+      ),
+    );
+  }
+
+  displayTask(Task task, int i, Function onComplete, bool isBacklog, TaskService taskService, Function(Task) onDelete) {
     _totalCount += PerformanceService().getScore(task.priority);
     if (task.completed) {
       _completedCount += PerformanceService().getScore(task.priority);
@@ -224,6 +258,7 @@ class TaskListState extends State<TaskListScreen> {
         key: ValueKey(task.id!),
         onComplete: onComplete,
         isBacklog: isBacklog,
-        taskService: taskService);
+        taskService: taskService,
+        onDelete: onDelete);
   }
 }

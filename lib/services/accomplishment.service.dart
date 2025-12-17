@@ -11,7 +11,7 @@ class AccomplishmentService {
     if (user == null) {
       return Stream.value([]);
     }
-    var ref = _db.collection('users').doc(user.uid).collection('accomplishments');
+    var ref = _db.collection('todos').doc(user.uid).collection('accomplishments');
     return ref.snapshots().map((list) =>
         list.docs.map((doc) {
           var data = doc.data();
@@ -25,7 +25,7 @@ class AccomplishmentService {
     if (user == null) {
       throw Exception('User is not authenticated');
     }
-    var ref = _db.collection('users').doc(user.uid).collection('accomplishments');
+    var ref = _db.collection('todos').doc(user.uid).collection('accomplishments');
     return ref.add(accomplishment.toJson());
   }
 
@@ -34,7 +34,7 @@ class AccomplishmentService {
     if (user == null) {
       throw Exception('User is not authenticated');
     }
-    var ref = _db.collection('users').doc(user.uid).collection('accomplishments').doc(accomplishment.id);
+    var ref = _db.collection('todos').doc(user.uid).collection('accomplishments').doc(accomplishment.id);
     return ref.update(accomplishment.toJson());
   }
 
@@ -43,7 +43,7 @@ class AccomplishmentService {
     if (user == null) {
       throw Exception('User is not authenticated');
     }
-    var ref = _db.collection('users').doc(user.uid).collection('accomplishments').doc(accomplishmentId);
+    var ref = _db.collection('todos').doc(user.uid).collection('accomplishments').doc(accomplishmentId);
     return ref.delete();
   }
 }

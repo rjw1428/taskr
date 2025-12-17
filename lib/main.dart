@@ -60,14 +60,15 @@ class _MyAppState extends State<MyApp> {
         debugPrint('Got a message whilst in the foreground!');
         debugPrint('Message data: ${message.data}');
 
-        final notification = message.notification;
-        if (notification != null) {
-          debugPrint('Message also contained a notification: $notification');
-          final context = navigatorKey.currentContext;
-          if (context != null) {
-            showDialog(
-              context: context,
-              builder: (BuildContext context) {
+                  final notification = message.notification;
+                if (notification != null) {
+                  debugPrint('Message also contained a notification: $notification');
+                  if (!mounted) return;
+                  final context = navigatorKey.currentContext;
+                  if (context != null) {
+                    showDialog(
+                      // ignore: use_build_context_synchronously
+                      context: context,              builder: (BuildContext context) {
                 return AlertDialog(
                   title: Text(notification.title ?? 'New Message'),
                   content: SingleChildScrollView(

@@ -79,6 +79,12 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
     });
 
     if (mounted) {
+      final message = widget.task == null ? 'Task added' : 'Task updated';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+        ),
+      );
       Navigator.of(context).pop();
     }
   }
