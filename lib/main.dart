@@ -8,12 +8,18 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import 'package:taskr/firebase_options.dart';
 import 'package:taskr/routing.dart';
+import 'package:taskr/services/accomplishment.provider.dart';
 import 'package:taskr/services/auth.service.dart';
 import 'package:taskr/services/tag.provider.dart';
 import 'package:taskr/theme.dart';
 
 // Global navigator key
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  debugPrint('Handling a background message: ${message.data}');
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,9 +39,7 @@ void main() async {
   }
 
   // Handle background messages
-  FirebaseMessaging.onBackgroundMessage((message) async {
-    debugPrint('Handling a background message: ${message.data}');
-  });
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   runApp(const MyApp());
 }
@@ -105,6 +109,9 @@ class _MyAppState extends State<MyApp> {
         ),
         ChangeNotifierProvider<TagProvider>(
           create: (_) => TagProvider(),
+        ),
+        ChangeNotifierProvider<AccomplishmentProvider>(
+          create: (_) => AccomplishmentProvider(),
         ),
       ],
       child: MaterialApp(

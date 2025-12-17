@@ -27,9 +27,6 @@ class TaskItem extends StatefulWidget {
 }
 
 class TaskItemState extends State<TaskItem> {
-  // final Task task;
-  // final int index;
-  // final Function onComplete;
   bool expanded = false;
   bool isExpandable = false;
   TaskItemState();

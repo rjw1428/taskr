@@ -60,11 +60,13 @@ class TaskFormState extends State<TaskForm> {
   final TextEditingController _title = TextEditingController();
   final TaskService _taskService = TaskService();
 
-  TaskFormState() {
+  @override
+  void initState() {
+    super.initState();
+    task = widget.task;
     initialDueDate = _dueDate == null ? DateService().getSelectedDate() : DateService().getDate(_dueDate!);
     _dueDate = DateService().getString(initialDueDate!);
     _title.text = widget.task.title;
-    task = widget.task;
     if (initialDueDate != null) {
       _updateRepeatedDays(initialDueDate!, true);
     }

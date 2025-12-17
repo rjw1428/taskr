@@ -6,6 +6,32 @@ part of 'models.dart';
 // JsonSerializableGenerator
 // **************************************************************************
 
+Accomplishment _$AccomplishmentFromJson(Map<String, dynamic> json) =>
+    Accomplishment(
+      id: json['id'] as String?,
+      title: json['title'] as String,
+      description: json['description'] as String?,
+      date: json['date'] as String,
+      difficulty:
+          $enumDecodeNullable(_$DifficultyEnumMap, json['difficulty']) ??
+              Difficulty.low,
+    );
+
+Map<String, dynamic> _$AccomplishmentToJson(Accomplishment instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'title': instance.title,
+      'description': instance.description,
+      'date': instance.date,
+      'difficulty': _$DifficultyEnumMap[instance.difficulty]!,
+    };
+
+const _$DifficultyEnumMap = {
+  Difficulty.low: 'low',
+  Difficulty.medium: 'medium',
+  Difficulty.high: 'high',
+};
+
 Task _$TaskFromJson(Map<String, dynamic> json) => Task(
       added: (json['added'] as num?)?.toInt(),
       modified: json['modified'] as String? ?? '',

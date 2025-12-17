@@ -86,7 +86,7 @@ class SettingsPageState extends State<SettingsForm> {
           ],
         ),
         bottomNavigationBar: const BottomNavBar(
-          selectedIndex: 3,
+          selectedIndex: 4,
         ),
         floatingActionButton: FloatingActionButton(
             child: const Icon(FontAwesomeIcons.plus, size: 20),

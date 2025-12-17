@@ -2,6 +2,33 @@ import 'package:json_annotation/json_annotation.dart';
 import 'package:taskr/shared/constants.dart';
 part 'models.g.dart';
 
+enum Difficulty {
+  low,
+  medium,
+  high,
+}
+
+@JsonSerializable()
+class Accomplishment {
+  String? id;
+  String title;
+  String? description;
+  String date;
+  Difficulty difficulty;
+
+  Accomplishment({
+    this.id,
+    required this.title,
+    this.description,
+    required this.date,
+    this.difficulty = Difficulty.low,
+  });
+
+  factory Accomplishment.fromJson(Map<String, dynamic> json) =>
+      _$AccomplishmentFromJson(json);
+  Map<String, dynamic> toJson() => _$AccomplishmentToJson(this);
+}
+
 @JsonSerializable()
 class Task {
   String? id;

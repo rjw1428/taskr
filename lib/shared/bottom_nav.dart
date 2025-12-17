@@ -35,6 +35,13 @@ class BottomNavBar extends StatelessWidget {
             tooltip: 'Performance'),
         BottomNavigationBarItem(
             icon: Icon(
+              FontAwesomeIcons.trophy,
+              size: 20,
+            ),
+            label: 'Accomplishments',
+            tooltip: 'Accomplishments'),
+        BottomNavigationBarItem(
+            icon: Icon(
               FontAwesomeIcons.tableColumns,
               size: 20,
             ),
@@ -77,6 +84,9 @@ class BottomNavBar extends StatelessWidget {
             Navigator.pushNamedAndRemoveUntil(context, '/performance', (route) => false);
             break;
           case 2:
+            Navigator.pushNamedAndRemoveUntil(context, '/accomplishments', (route) => false);
+            break;
+          case 3:
             Navigator.pushAndRemoveUntil(
                 context,
                 PageRouteBuilder(
@@ -95,7 +105,7 @@ class BottomNavBar extends StatelessWidget {
                 ),
                 (route) => false);
             break;
-          case 3:
+          case 4:
             Navigator.pushNamedAndRemoveUntil(context, '/settings', (route) => false);
             break;
         }

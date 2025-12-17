@@ -202,7 +202,7 @@ class TaskListState extends State<TaskListScreen> {
                         });
                       },
                       children: children)),
-              bottomNavigationBar: BottomNavBar(selectedIndex: widget.isBacklog ? 2 : 0),
+              bottomNavigationBar: BottomNavBar(selectedIndex: widget.isBacklog ? 3 : 0),
               floatingActionButton: FloatingActionButton(
                   child: const Icon(FontAwesomeIcons.plus, size: 20),
                   onPressed: () => showModalBottomSheet(
