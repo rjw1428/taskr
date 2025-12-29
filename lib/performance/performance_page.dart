@@ -67,15 +67,6 @@ class CurrentScoreState extends State<CurrentScore> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const Text(
-            'Daily Progress',
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 2,
-            ),
-            textAlign: TextAlign.center,
-          ),
           PerformanceHeatmap(userId: widget.userId),
           const SizedBox(height: 16),
           const Text(
@@ -104,7 +95,7 @@ class CurrentScoreState extends State<CurrentScore> {
                               fitInsideVertically: true,
                               getTooltipColor: (touchedSpot) => Colors.blueGrey.withValues(alpha: 0.8),
                               getTooltipItems: (data) => data.map((spot) {
-                                return LineTooltipItem(spot.y.toString(), const TextStyle(color: Colors.red));
+                                return LineTooltipItem(spot.y.toString(), const TextStyle(color: Colors.white));
                               }).toList(),
                             ),
                           ),
@@ -228,7 +219,7 @@ List<LineChartBarData> lineChartBarData1(List<Map<String, dynamic>> chartData, b
 }
 
 class _AccomplishmentsSummary extends StatelessWidget {
-  const _AccomplishmentsSummary({super.key});
+  const _AccomplishmentsSummary();
 
   @override
   Widget build(BuildContext context) {

@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
 import {onRequest} from "firebase-functions/v2/https";
 import {FieldValue} from "firebase-admin/firestore";
+import { Message } from "firebase-admin/lib/messaging/messaging-api";
 
 admin.initializeApp();
 
@@ -88,7 +89,10 @@ export const triggeredCompletedTaskCleanup = onRequest({cors: false}, async (req
   res.status(200).send("Mission Accomplished!");
 });
 
-export const windspeedCheck = onSchedule("every day 15:00", async () => {
+export const windspeedCheck = onSchedule({
+  schedule: "every day 15:00",
+  retryCount: 5,
+}, async () => {
   try {
     const todosSnap = await admin.firestore().collection("todos").get();
     const notifyPromises: Promise<any>[] = [];
@@ -103,7 +107,8 @@ export const windspeedCheck = onSchedule("every day 15:00", async () => {
 
     await Promise.all(notifyPromises);
   } catch (e) {
-    logger.error(e)
+    logger.error(e);
+    throw e;
   }
 });
 
@@ -283,11 +288,10 @@ async function getWindspeed(userId: string) {
 
     const startTime = highWinds[0].formattedTime;
     const maxWindspeed = Math.max(...highWinds.map((h: any) => h.windspeed));
-    let body = "";
-
     const lastForecastHour = hourlyForecast[hourlyForecast.length - 1];
     lastHighWindHour = highWinds[highWinds.length - 1];
-
+    
+    let body = "Unknown wind notification";
     if (lastHighWindHour.time === lastForecastHour.time) {
       body = `High winds starting at ${startTime} and continuing into tomorrow, with gusts up to ${maxWindspeed} mph.`;
     } else {
@@ -298,6 +302,7 @@ async function getWindspeed(userId: string) {
         body = `High winds expected from ${startTime} to ${endTime}, with gusts up to ${maxWindspeed} mph.`;
       }
     }
+
     const fcmToken = await getUserFcmToken(userId)
 
     const toHourMinute = (t: string) => {
@@ -319,14 +324,7 @@ async function getWindspeed(userId: string) {
       endHour = (parseInt(lastHighWindHour.time) + 100).toString()
     }
 
-    const message = {
-      token: fcmToken,
-      notification: {
-        title: "Batten Down the Decorations!",
-        body: body,
-      },
-      data: {
-        actions: JSON.stringify([
+    const actions = JSON.stringify([
           {
             action: "add-wind-task",
             title: "Yes",
@@ -335,11 +333,21 @@ async function getWindspeed(userId: string) {
             action: "dismiss",
             title: "No",
           },
-        ]),
+        ]);
+    logger.info(actions);
+    logger.info(endHour);
+    const message: Message = {
+      token: fcmToken,
+      notification: {
+        title: "Batten Down the Decorations!",
+        body: body,
+      },
+      data: {
+        actions: actions,
         date: date,
         body: body,
         startHour: startHour,
-        endHour: toHourMinute(endHour),
+        endHour: toHourMinute(endHour) ?? "",
       },
     };
 
@@ -349,7 +357,7 @@ async function getWindspeed(userId: string) {
     return body;
   } catch (e) {
    logger.error(e);
-   return "Something went wrong"
+   throw e;
   }
 }
 

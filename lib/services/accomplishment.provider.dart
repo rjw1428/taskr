@@ -4,16 +4,6 @@ import 'package:taskr/services/models.dart';
 
 class AccomplishmentProvider with ChangeNotifier {
   final AccomplishmentService _accomplishmentService = AccomplishmentService();
-  List<Accomplishment> _accomplishments = [];
-
-  List<Accomplishment> get accomplishments => _accomplishments;
-
-  AccomplishmentProvider() {
-    _accomplishmentService.getAccomplishments().listen((accomplishments) {
-      _accomplishments = accomplishments;
-      notifyListeners();
-    });
-  }
 
   // New method to expose the stream for direct consumption
   Stream<List<Accomplishment>> getAccomplishments() {

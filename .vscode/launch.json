@@ -7,7 +7,8 @@
         {
             "name": "taskr",
             "request": "launch",
-            "type": "dart"
+            "type": "dart",
+            "preLaunchTask": "Pre-Build Script"
         },
         {
             "name": "taskr (profile mode)",
@@ -19,7 +20,8 @@
             "name": "taskr (release mode)",
             "request": "launch",
             "type": "dart",
-            "flutterMode": "release"
+            "flutterMode": "release",
+            "preLaunchTask": "Pre-Build Script"
         }
     ]
 }

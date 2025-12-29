@@ -105,6 +105,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 onSelected: (value) {
                   if (value == 'settings') {
                     Navigator.pushNamed(context, '/settings');
+                  } else if (value == 'about') {
+                    Navigator.pushNamed(context, '/about');
                   } else if (value == 'logout') {
                     AuthService().signOut();
                   }
@@ -113,6 +115,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   const PopupMenuItem<String>(
                     value: 'settings',
                     child: Text('Settings'),
+                  ),
+                  const PopupMenuItem<String>(
+                    value: 'about',
+                    child: Text('About'),
                   ),
                   const PopupMenuItem<String>(
                     value: 'logout',

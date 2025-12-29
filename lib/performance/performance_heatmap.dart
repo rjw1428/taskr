@@ -28,6 +28,7 @@ class _PerformanceHeatmapState extends State<PerformanceHeatmap> {
         if (snapshot.connectionState == ConnectionState.waiting) {
           // return const LoadingScreen();
           debugPrint('Loading performance data...');
+          return Container();
         } else if (snapshot.hasError) {
           debugPrint(snapshot.error.toString());
           return const ErrorMessage();

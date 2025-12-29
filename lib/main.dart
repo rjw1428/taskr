@@ -10,6 +10,7 @@ import 'package:taskr/home/home.dart';
 import 'package:taskr/services/accomplishment.provider.dart';
 import 'package:taskr/services/auth.service.dart';
 import 'package:taskr/services/tag.provider.dart';
+import 'package:taskr/about/about.dart';
 import 'package:taskr/settings/settings.dart';
 import 'package:taskr/theme.dart';
 
@@ -129,6 +130,8 @@ class _MyAppState extends State<MyApp> {
               return MaterialPageRoute(builder: (_) => const HomeScreen());
             case '/settings':
               return MaterialPageRoute(builder: (_) => const SettingsPage());
+            case '/about':
+              return MaterialPageRoute(builder: (_) => const AboutPage());
             default:
               return MaterialPageRoute(builder: (_) => const Text("Unknown main route"));
           }
