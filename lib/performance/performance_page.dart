@@ -228,7 +228,7 @@ List<LineChartBarData> lineChartBarData1(List<Map<String, dynamic>> chartData, b
 }
 
 class _AccomplishmentsSummary extends StatelessWidget {
-  const _AccomplishmentsSummary({Key? key}) : super(key: key);
+  const _AccomplishmentsSummary({super.key});
 
   @override
   Widget build(BuildContext context) {

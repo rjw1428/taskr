@@ -12,12 +12,15 @@ class AccomplishmentService {
       return Stream.value([]);
     }
     var ref = _db.collection('todos').doc(user.uid).collection('accomplishments');
-    return ref.snapshots().map((list) =>
-        list.docs.map((doc) {
-          var data = doc.data();
-          data['id'] = doc.id;
-          return Accomplishment.fromJson(data);
-        }).toList());
+    return ref.snapshots().map((list) {
+      final accomp = list.docs.map((doc) {
+        var data = doc.data();
+        data['id'] = doc.id;
+        return Accomplishment.fromJson(data);
+      }).toList();
+      accomp.sort((a, b) => b.date.compareTo(a.date));
+      return accomp;
+    });
   }
 
   Future<void> addAccomplishment(Accomplishment accomplishment) {

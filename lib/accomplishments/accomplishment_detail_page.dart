@@ -46,6 +46,8 @@ class AccomplishmentDetailPage extends StatelessWidget {
                   label: const Text('Delete'),
                   icon: const Icon(Icons.delete),
                   onPressed: () async {
+                    final navigator = Navigator.of(context);
+                    final accomplishmentProvider = Provider.of<AccomplishmentProvider>(context, listen: false);
                     final confirmed = await showDialog<bool>(
                       context: context,
                       builder: (context) => AlertDialog(
@@ -65,9 +67,8 @@ class AccomplishmentDetailPage extends StatelessWidget {
                     );
 
                     if (confirmed == true && accomplishment.id != null) {
-                      Provider.of<AccomplishmentProvider>(context, listen: false)
-                          .deleteAccomplishment(accomplishment.id!);
-                      Navigator.pop(context); // Pop detail page after deletion
+                      accomplishmentProvider.deleteAccomplishment(accomplishment.id!);
+                      navigator.pop(); // Pop detail page after deletion
                     }
                   },
                 ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:taskr/accomplishments/accomplishment_form.dart';
 import 'package:taskr/login/login.dart';
 import 'package:taskr/routing.dart';
 import 'package:taskr/services/services.dart';
@@ -14,6 +15,69 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  int _selectedIndex = 0;
+
+  void _onItemTapped(int index) {
+    if (index == _selectedIndex) {
+      return;
+    }
+    String route = routeConfig.entries.firstWhere((entry) => entry.value.index == index).key;
+    innerNavigatorKey.currentState?.pushReplacementNamed(route);
+    setState(() {
+      _selectedIndex = index;
+    });
+  }
+
+  Widget? _buildFloatingActionButton() {
+    switch (_selectedIndex) {
+      case 0:
+        return FloatingActionButton(
+          child: const Icon(FontAwesomeIcons.plus, size: 20),
+          onPressed: () => showModalBottomSheet(
+            isScrollControlled: true,
+            useSafeArea: true,
+            context: context,
+            builder: (BuildContext context) => const AddTaskScreen(isBacklog: false),
+          ),
+        );
+      case 1:
+        return FloatingActionButton(
+          backgroundColor: Colors.blue,
+          child: const Icon(FontAwesomeIcons.plus, size: 20),
+          onPressed: () => showModalBottomSheet(
+            isScrollControlled: true,
+            useSafeArea: true,
+            context: context,
+            builder: (BuildContext context) => const AccomplishmentForm(),
+          ),
+        );
+      case 2:
+        return FloatingActionButton(
+          backgroundColor: Colors.orange,
+          child: const Icon(FontAwesomeIcons.plus, size: 20),
+          onPressed: () => showModalBottomSheet(
+            isScrollControlled: true,
+            useSafeArea: true,
+            context: context,
+            builder: (BuildContext context) => const Text("Add a goal"),
+          ),
+        );
+      case 3:
+        return FloatingActionButton(
+          backgroundColor: Colors.red,
+          child: const Icon(FontAwesomeIcons.plus, size: 20),
+          onPressed: () => showModalBottomSheet(
+            isScrollControlled: true,
+            useSafeArea: true,
+            context: context,
+            builder: (BuildContext context) => const AddTaskScreen(isBacklog: true),
+          ),
+        );
+      default:
+        return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder(
@@ -72,16 +136,26 @@ class _HomeScreenState extends State<HomeScreen> {
               return MaterialPageRoute(builder: (_) => page);
             },
           ),
-          bottomNavigationBar: const BottomNavBar(),
-          floatingActionButton: FloatingActionButton(
-            child: const Icon(FontAwesomeIcons.plus, size: 20),
-            onPressed: () => showModalBottomSheet(
-              isScrollControlled: true,
-              useSafeArea: true,
-              context: context,
-              builder: (BuildContext context) => const AddTaskScreen(isBacklog: false),
-            ),
+          bottomNavigationBar: BottomNavigationBar(
+            type: BottomNavigationBarType.fixed,
+            currentIndex: _selectedIndex,
+            selectedItemColor: Colors.white,
+            unselectedItemColor: Colors.grey,
+            showUnselectedLabels: true,
+            selectedLabelStyle: TextStyle(shadows: [
+              Shadow(blurRadius: 4.0, offset: const Offset(3.0, 3.0), color: Colors.grey.withAlpha(128)),
+            ]),
+            items: routeConfig.values.map((route) {
+              return BottomNavigationBarItem(
+                icon: Icon(route.icon, size: 20),
+                label: route.label,
+                tooltip: route.label,
+              );
+            }).toList(),
+            backgroundColor: Colors.black,
+            onTap: _onItemTapped,
           ),
+          floatingActionButton: _buildFloatingActionButton(),
         );
       },
     );
