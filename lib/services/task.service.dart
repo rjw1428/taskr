@@ -263,11 +263,15 @@ class TaskService {
     }
   }
 
-  Future<void> checkTrainStatus() async {
+  Future<void> callRemoteMethod(String name, Map<String, dynamic> payload) async {
     try {
-      final userId = AuthService().user!.uid;
-      final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('trainScheduleTest');
-      final result = await callable.call(["userId", userId]);
+      final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable(name);
+      final data = payload.entries.fold([], (agg, entry) {
+        agg.add(entry.key);
+        agg.add(entry.value);
+        return agg;
+      });
+      final result = await callable.call(data);
       debugPrint('trainScheduleTest result: ${result.data}');
     } on FirebaseFunctionsException catch (e) {
       debugPrint('Firebase Functions Exception: ${e.code} - ${e.message}');
@@ -276,15 +280,28 @@ class TaskService {
     }
   }
 
-  Future<void> addWindTask(Map<String, dynamic> data) async {
-    try {
-      final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('addWindTaskFromNotification');
-      final result = await callable.call(data);
-      debugPrint('addWindTaskFromNotification result: ${result.data}');
-    } on FirebaseFunctionsException catch (e) {
-      debugPrint('Firebase Functions Exception: ${e.code} - ${e.message}');
-    } catch (e) {
-      debugPrint('Generic Exception: $e');
-    }
-  }
+  // Future<void> checkTrainStatus() async {
+  //   try {
+  //     final userId = AuthService().user!.uid;
+  //     final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('trainScheduleTest');
+  //     final result = await callable.call(["userId", userId]);
+  //     debugPrint('trainScheduleTest result: ${result.data}');
+  //   } on FirebaseFunctionsException catch (e) {
+  //     debugPrint('Firebase Functions Exception: ${e.code} - ${e.message}');
+  //   } catch (e) {
+  //     debugPrint('Generic Exception: $e');
+  //   }
+  // }
+
+  // Future<void> addWindTask(Map<String, dynamic> data) async {
+  //   try {
+  //     final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('addWindTaskFromNotification');
+  //     final result = await callable.call(data);
+  //     debugPrint('addWindTaskFromNotification result: ${result.data}');
+  //   } on FirebaseFunctionsException catch (e) {
+  //     debugPrint('Firebase Functions Exception: ${e.code} - ${e.message}');
+  //   } catch (e) {
+  //     debugPrint('Generic Exception: $e');
+  //   }
+  // }
 }

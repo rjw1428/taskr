@@ -15,6 +15,11 @@ class AccomplishmentProvider with ChangeNotifier {
     });
   }
 
+  // New method to expose the stream for direct consumption
+  Stream<List<Accomplishment>> getAccomplishments() {
+    return _accomplishmentService.getAccomplishments();
+  }
+
   Future<void> addAccomplishment(Accomplishment accomplishment) {
     return _accomplishmentService.addAccomplishment(accomplishment);
   }

@@ -7,10 +7,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import 'package:taskr/firebase_options.dart';
-import 'package:taskr/routing.dart';
+import 'package:taskr/home/home.dart';
 import 'package:taskr/services/accomplishment.provider.dart';
 import 'package:taskr/services/auth.service.dart';
 import 'package:taskr/services/tag.provider.dart';
+import 'package:taskr/settings/settings.dart';
 import 'package:taskr/theme.dart';
 
 // Global navigator key
@@ -28,15 +29,15 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  if (bool.parse(dotenv.env['DEV_MODE'] ?? 'true')) {
-    try {
-      debugPrint('Using local setup');
-      FirebaseFirestore.instance.useFirestoreEmulator('localhost', 8080);
-      await FirebaseAuth.instance.useAuthEmulator('localhost', 9099);
-    } catch (e) {
-      debugPrint(e.toString());
-    }
-  }
+  // if (kDebugMode) {
+  //   try {
+  //     debugPrint('Using local setup');
+  //     FirebaseFirestore.instance.useFirestoreEmulator('localhost', 8080);
+  //     await FirebaseAuth.instance.useAuthEmulator('localhost', 9099);
+  //   } catch (e) {
+  //     debugPrint(e.toString());
+  //   }
+  // }
 
   // Handle background messages
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
@@ -55,49 +56,50 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    if (!kIsWeb) {
-      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-        debugPrint('Got a message whilst in the foreground!');
-        debugPrint('Message data: ${message.data}');
-
-                  final notification = message.notification;
-                if (notification != null) {
-                  debugPrint('Message also contained a notification: $notification');
-                  if (!mounted) return;
-                  final context = navigatorKey.currentContext;
-                  if (context != null) {
-                    showDialog(
-                      // ignore: use_build_context_synchronously
-                      context: context,              builder: (BuildContext context) {
-                return AlertDialog(
-                  title: Text(notification.title ?? 'New Message'),
-                  content: SingleChildScrollView(
-                    child: ListBody(
-                      children: <Widget>[
-                        Text(
-                          notification.body ?? '',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ],
-                    ),
-                  ),
-                  actions: <Widget>[
-                    TextButton(
-                      child: const Text('Ok'),
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                      },
-                    ),
-                  ],
-                );
-              },
-            );
-          }
-        }
-      });
-    } else {
+    if (kIsWeb) {
       debugPrint('Skipping cloud messaging for web');
+      return;
     }
+
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      debugPrint('Got a message whilst in the foreground!');
+      debugPrint('Message data: ${message.data}');
+
+      final notification = message.notification;
+      if (notification != null) {
+        debugPrint('Message also contained a notification: $notification');
+        if (!mounted) return;
+        final context = navigatorKey.currentContext;
+        if (context != null) {
+          showDialog(
+            context: context,
+            builder: (BuildContext context) {
+              return AlertDialog(
+                title: Text(notification.title ?? 'New Message'),
+                content: SingleChildScrollView(
+                  child: ListBody(
+                    children: <Widget>[
+                      Text(
+                        notification.body ?? '',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    child: const Text('Ok'),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                  ),
+                ],
+              );
+            },
+          );
+        }
+      }
+    });
   }
 
   @override
@@ -120,7 +122,17 @@ class _MyAppState extends State<MyApp> {
         debugShowCheckedModeBanner: false,
         theme: appTheme,
         title: 'Taskr: To-Do App',
-        routes: appRoutes,
+        initialRoute: '/',
+        onGenerateRoute: (settings) {
+          switch (settings.name) {
+            case '/':
+              return MaterialPageRoute(builder: (_) => const HomeScreen());
+            case '/settings':
+              return MaterialPageRoute(builder: (_) => const SettingsPage());
+            default:
+              return MaterialPageRoute(builder: (_) => const Text("Unknown main route"));
+          }
+        },
       ),
     );
   }

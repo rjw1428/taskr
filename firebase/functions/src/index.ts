@@ -3,15 +3,6 @@ import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
 import {onRequest} from "firebase-functions/v2/https";
 import {FieldValue} from "firebase-admin/firestore";
-import axios from "axios";
-import * as https from 'https';
-
-const httpsAgent = new https.Agent({
-    // Standard secure cipher suites
-    ciphers: 'TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256:HIGH:!aNULL:!MD5',
-    honorCipherOrder: true,
-    minVersion: 'TLSv1.2'
-});
 
 admin.initializeApp();
 
@@ -165,8 +156,8 @@ async function executeTrainNotification(userId: string) {
     const url = `http://www3.septa.org/api/NextToArrive/index.php?req1=${encodeURIComponent(start)}&req2=${encodeURIComponent(end)}&req3=10`;
     logger.info("Fetching SEPTA data");
 
-    const resp = await axios.get(url, { httpsAgent });
-    const trains = resp.data;
+    const resp = await fetch(url);
+    const trains = await resp.json();
     if (!trains || trains.length == 0) {
       logger.info("No trains returned");
       return { error: "No trains returned" };
@@ -252,8 +243,16 @@ async function getWindspeed(userId: string) {
   const threshold = 15; // mph
   let lastHighWindHour
   try {
-    const resp = await axios.get(api, { httpsAgent });
-    const data = resp.data;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 seconds
+    const resp = await fetch(api, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
+      }
+    });
+    clearTimeout(timeoutId);
+    const data = await resp.json();
     
     const formatTime = (timeStr: string) => {
       const time = parseInt(timeStr, 10);
@@ -274,7 +273,7 @@ async function getWindspeed(userId: string) {
       formattedTime: formatTime(h.time),
       windspeed: parseInt(h.windspeedMiles)
     }));
-
+    logger.info(hourlyForecast)
     const highWinds = hourlyForecast.filter((h: any) => h.windspeed >= threshold);
 
     if (highWinds.length == 0) {

@@ -44,7 +44,7 @@ class FirebaseMessageService {
           'startHour': message.data['startHour'],
           'endHour': message.data['endHour'],
         };
-        await TaskService().addWindTask(taskData);
+        await TaskService().callRemoteMethod('addWindTaskFromNotification', taskData);
       }
     }
   }

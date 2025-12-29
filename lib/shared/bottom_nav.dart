@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:taskr/home/home.dart';
+import 'package:taskr/routing.dart';
 
-//TODO: Add NavigationRail for web view
-class BottomNavBar extends StatelessWidget {
-  final int selectedIndex;
-  const BottomNavBar({super.key, required this.selectedIndex});
+class BottomNavBar extends StatefulWidget {
+  const BottomNavBar({super.key});
+
+  @override
+  State<BottomNavBar> createState() => _BottomNavBarState();
+}
+
+class _BottomNavBarState extends State<BottomNavBar> {
+  int selectedIndex = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -18,87 +22,45 @@ class BottomNavBar extends StatelessWidget {
       selectedLabelStyle: TextStyle(shadows: [
         Shadow(blurRadius: 4.0, offset: const Offset(3.0, 3.0), color: Colors.grey.withAlpha(128)),
       ]),
-      items: const [
-        BottomNavigationBarItem(
-            icon: Icon(
-              FontAwesomeIcons.listCheck,
-              size: 20,
-            ),
-            label: 'List',
-            tooltip: 'List'),
-        BottomNavigationBarItem(
-            icon: Icon(
-              FontAwesomeIcons.gaugeHigh,
-              size: 20,
-            ),
-            label: 'Performance',
-            tooltip: 'Performance'),
-        BottomNavigationBarItem(
-            icon: Icon(
-              FontAwesomeIcons.trophy,
-              size: 20,
-            ),
-            label: 'Accomplishments',
-            tooltip: 'Accomplishments'),
-        BottomNavigationBarItem(
-            icon: Icon(
-              FontAwesomeIcons.tableColumns,
-              size: 20,
-            ),
-            label: 'Backlog',
-            tooltip: 'Backlog'),
-      ],
+      items: routeConfig.values.map((route) {
+        return BottomNavigationBarItem(
+          icon: Icon(route.icon, size: 20),
+          label: route.label,
+          tooltip: route.label,
+        );
+      }).toList(),
       backgroundColor: Colors.black,
       onTap: (int idx) {
         if (idx == selectedIndex) {
           return;
         }
-        switch (idx) {
-          case 0:
-            Navigator.pushAndRemoveUntil(
-                context,
-                PageRouteBuilder(
-                  pageBuilder: (context, animation, secondaryAnimation) => const HomeScreen(isBacklog: false),
-                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                    return FadeTransition(
-                        opacity: animation,
-                        child: SlideTransition(
-                          position: Tween<Offset>(
-                            begin: const Offset(-1.0, 0.0),
-                            end: Offset.zero,
-                          ).animate(animation),
-                          child: child,
-                        ));
-                  },
-                ),
-                (route) => false);
-            break;
-          case 1:
-            Navigator.pushNamedAndRemoveUntil(context, '/performance', (route) => false);
-            break;
-          case 2:
-            Navigator.pushNamedAndRemoveUntil(context, '/accomplishments', (route) => false);
-            break;
-          case 3:
-            Navigator.pushAndRemoveUntil(
-                context,
-                PageRouteBuilder(
-                  pageBuilder: (context, animation, secondaryAnimation) => const HomeScreen(isBacklog: true),
-                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                    return FadeTransition(
-                        opacity: animation,
-                        child: SlideTransition(
-                          position: Tween<Offset>(
-                            begin: const Offset(1.0, 0.0),
-                            end: Offset.zero,
-                          ).animate(animation),
-                          child: child,
-                        ));
-                  },
-                ),
-                (route) => false);
-            break;
-        }
+        String route = routeConfig.entries.firstWhere((entry) => entry.value.index == idx).key;
+        innerNavigatorKey.currentState?.pushReplacementNamed(route);
+        setState(() => selectedIndex = idx);
+        // switch (idx) {
+        //   case 0:
+        //     Navigator.pushAndRemoveUntil(
+        //         context,
+        //         PageRouteBuilder(
+        //           pageBuilder: (context, animation, secondaryAnimation) => const HomeScreen(),
+        //           transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        //             return FadeTransition(
+        //                 opacity: animation,
+        //                 child: SlideTransition(
+        //                   position: Tween<Offset>(
+        //                     begin: const Offset(-1.0, 0.0),
+        //                     end: Offset.zero,
+        //                   ).animate(animation),
+        //                   child: child,
+        //                 ));
+        //           },
+        //         ),
+        //         (route) => false);
+        //     break;
+        //   case 1:
+        //     Navigator.pushNamedAndRemoveUntil(context, '/performance', (route) => false);
+        //     break;
+        // }
       },
     );
   }

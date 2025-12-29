@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'package:taskr/login/login.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/tag.provider.dart';
-import 'package:taskr/shared/bottom_nav.dart';
 import 'package:taskr/shared/error.dart';
 import 'package:taskr/shared/loading.dart';
 import 'package:taskr/task_list/add_tag.dart';
@@ -53,9 +52,6 @@ class SettingsPageState extends State<SettingsForm> {
     return Scaffold(
         appBar: AppBar(
           title: const Text('Settings'),
-          actions: [
-            IconButton(onPressed: () => AuthService().signOut(), icon: const Icon(FontAwesomeIcons.userAstronaut))
-          ],
         ),
         body: ListView(
           scrollDirection: Axis.vertical,
@@ -84,9 +80,6 @@ class SettingsPageState extends State<SettingsForm> {
               ),
             )
           ],
-        ),
-        bottomNavigationBar: const BottomNavBar(
-          selectedIndex: 4,
         ),
         floatingActionButton: FloatingActionButton(
             child: const Icon(FontAwesomeIcons.plus, size: 20),

@@ -49,6 +49,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
 
     _formKey.currentState!.save();
     Task newTask = Task(
+        id: widget.task?.id,
         title: _title.value.text,
         description: _description.value.text,
         priority: _priority,
@@ -109,7 +110,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
 
     initialDueDate = _dueDate == null ? DateService().getSelectedDate() : DateService().getDate(widget.task!.dueDate!);
     if (initialDueDate != null) {
-      _dueDate = widget.isBacklog ? null : DateService().getString(initialDueDate!);
+      _dueDate = DateService().getString(initialDueDate!);
     }
   }
 
@@ -122,6 +123,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
       child: Padding(
           padding: EdgeInsets.fromLTRB(16, 16, 16, keyboardSpace + 16),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 title,

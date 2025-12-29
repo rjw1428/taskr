@@ -24,8 +24,7 @@ class Accomplishment {
     this.difficulty = Difficulty.low,
   });
 
-  factory Accomplishment.fromJson(Map<String, dynamic> json) =>
-      _$AccomplishmentFromJson(json);
+  factory Accomplishment.fromJson(Map<String, dynamic> json) => _$AccomplishmentFromJson(json);
   Map<String, dynamic> toJson() => _$AccomplishmentToJson(this);
 }
 
@@ -46,9 +45,10 @@ class Task {
   Effort priority;
   int pushCount;
   Task(
-      {this.added,
+      {this.id,
+      required this.added,
       this.modified = '',
-      this.title = '',
+      required this.title,
       this.description,
       this.completed = false,
       this.tags = const [],
@@ -67,6 +67,39 @@ class Task {
     obj['tags'] = tags.map((tag) => tag.id).toList();
     return (obj);
   }
+
+  Task copyWith({
+    String? id,
+    int? added,
+    String? modified,
+    String? title,
+    String? description,
+    bool? completed,
+    List<Tag>? tags,
+    String? dueDate,
+    String? startTime,
+    String? endTime,
+    String? completedTime,
+    List<String>? subtasks,
+    Effort? priority,
+    int? pushCount,
+  }) {
+    return Task(
+      id: id ?? this.id,
+      added: added ?? this.added,
+      modified: modified ?? this.modified,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      completed: completed ?? this.completed,
+      tags: tags ?? this.tags,
+      dueDate: dueDate ?? this.dueDate,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
+      subtasks: subtasks ?? this.subtasks,
+      priority: priority ?? this.priority,
+      pushCount: pushCount ?? this.pushCount,
+    );
+  }
 }
 
 @JsonSerializable()
@@ -76,11 +109,12 @@ class Tag {
   bool deleted;
   bool archived;
 
-  Tag(
-      {required this.id,
-      required this.label,
-      this.deleted = false,
-      this.archived = false});
+  Tag({
+    required this.id,
+    required this.label,
+    this.deleted = false,
+    this.archived = false,
+  });
 
   factory Tag.fromJson(Map<String, dynamic> json) => _$TagFromJson(json);
   Map<String, dynamic> toJson() => _$TagToJson(this);

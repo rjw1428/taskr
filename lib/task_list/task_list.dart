@@ -7,14 +7,12 @@ import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/services/tag.provider.dart';
 import 'package:taskr/shared/progress_bar.dart';
-import 'package:taskr/task_list/add_task.dart';
 import 'package:taskr/task_list/task_item.dart';
 import '../shared/shared.dart';
 
 class TaskListScreen extends StatefulWidget {
   final bool isBacklog;
-  final String userId;
-  const TaskListScreen({super.key, required this.isBacklog, required this.userId});
+  const TaskListScreen({super.key, this.isBacklog = false});
 
   @override
   TaskListState createState() => TaskListState();
@@ -26,17 +24,19 @@ class TaskListState extends State<TaskListScreen> {
   int _totalCount = 0;
   String today = DateService().getString(DateTime.now());
   String selectedDate = DateService().getString(DateTime.now());
+  late String userId;
   final TaskService _taskService = TaskService();
 
   @override
   void initState() {
     super.initState();
+    userId = AuthService().user!.uid;
     setFcmToken();
   }
 
   setFcmToken() async {
     debugPrint('[Update FCM] checking FCM');
-    final user = await AuthService().getUserProfile(widget.userId);
+    final user = await AuthService().getUserProfile(userId);
     if (user == null) {
       debugPrint('[Update FCM] no profile');
       return;
@@ -48,7 +48,7 @@ class TaskListState extends State<TaskListScreen> {
     final fcmToken = await FirebaseMessaging.instance.getToken();
     if (fcmToken != null && fcmToken != user['fcmToken']) {
       debugPrint('[Update FCM] Updating token');
-      await AuthService().updateFcmToken(widget.userId, fcmToken);
+      await AuthService().updateFcmToken(userId, fcmToken);
     } else {
       debugPrint('[Update FCM] No update required');
     }
@@ -59,7 +59,7 @@ class TaskListState extends State<TaskListScreen> {
     var tagProvider = Provider.of<TagProvider>(context);
     var tags = tagProvider.tags;
     return StreamBuilder<List<Task>>(
-        stream: _taskService.streamTasks(widget.userId, widget.isBacklog ? null : selectedDate, tags),
+        stream: _taskService.streamTasks(userId, widget.isBacklog ? null : selectedDate, tags),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting && _tasks == null) {
             return const LoadingScreen(message: 'Loading Tasks...');
@@ -81,7 +81,7 @@ class TaskListState extends State<TaskListScreen> {
               var list = _tasks!.map((task) => task.id!).toList();
               var taskId = list.removeAt(taskIndex);
               list.add(taskId);
-              _taskService.updateTaskOrder(widget.userId, list, widget.isBacklog ? null : selectedDate);
+              _taskService.updateTaskOrder(userId, list, widget.isBacklog ? null : selectedDate);
             });
           }
 
@@ -103,132 +103,96 @@ class TaskListState extends State<TaskListScreen> {
             ));
           }
           double? dragStart;
-          return Scaffold(
-              appBar: AppBar(
-                title: const Text('Taskr'),
-                actions: [
-                  PopupMenuButton<String>(
-                    onSelected: (value) {
-                      if (value == 'settings') {
-                        Navigator.pushNamedAndRemoveUntil(context, '/settings', (route) => false);
-                      } else if (value == 'logout') {
-                        AuthService().signOut();
+          return GestureDetector(
+              onHorizontalDragStart: (details) => dragStart = details.globalPosition.dx,
+              onHorizontalDragEnd: (details) {
+                final dragEnd = details.globalPosition.dx;
+                final dragDelta = dragEnd - dragStart!;
+                if (dragDelta > 10) {
+                  setState(() {
+                    selectedDate = DateService().decrementDate(DateService().getDate(selectedDate));
+                    DateService().setSelectedDate(DateService().getDate(selectedDate));
+                  });
+                } else if (dragDelta < -10) {
+                  setState(() {
+                    selectedDate = DateService().incrementDate(DateService().getDate(selectedDate));
+                    DateService().setSelectedDate(DateService().getDate(selectedDate));
+                  });
+                }
+              },
+              child: ReorderableListView(
+                  header: Column(children: [
+                    if (!widget.isBacklog) DailyProgress(numerator: _completedCount, denominator: _totalCount),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Expanded(
+                            child: Center(
+                                child: Text(widget.isBacklog
+                                    ? "Backlog"
+                                    : DateService().getDayOfWeek(DateService().getDate(selectedDate))))),
+                        if (!widget.isBacklog)
+                          Row(
+                            children: [
+                              if (DateService().isDateLessThan(today, selectedDate))
+                                IconButton(
+                                    onPressed: () => setState(() {
+                                          debugPrint("BACK TO TODAY");
+                                          selectedDate = today;
+                                          DateService().setSelectedDate(DateService().getDate(selectedDate));
+                                        }),
+                                    icon: const Icon(FontAwesomeIcons.backwardStep)),
+                              IconButton(
+                                  onPressed: () => setState(() {
+                                        debugPrint("LEFT");
+                                        selectedDate = DateService().decrementDate(DateService().getDate(selectedDate));
+                                        DateService().setSelectedDate(DateService().getDate(selectedDate));
+                                      }),
+                                  icon: const Icon(FontAwesomeIcons.caretLeft)),
+                              Text(selectedDate),
+                              IconButton(
+                                  onPressed: () => setState(() {
+                                        debugPrint("RIGHT");
+                                        selectedDate = DateService().incrementDate(DateService().getDate(selectedDate));
+                                        DateService().setSelectedDate(DateService().getDate(selectedDate));
+                                      }),
+                                  icon: const Icon(FontAwesomeIcons.caretRight)),
+                              if (DateService().isDateLessThan(selectedDate, today))
+                                IconButton(
+                                    onPressed: () => setState(() {
+                                          debugPrint("FORWARD TO TODAY");
+                                          selectedDate = today;
+                                          DateService().setSelectedDate(DateService().getDate(selectedDate));
+                                        }),
+                                    icon: const Icon(FontAwesomeIcons.forwardStep)),
+                            ],
+                          )
+                      ],
+                    ),
+                  ]),
+                  buildDefaultDragHandles: false,
+                  onReorder: (int oldIndex, int newIndex) {
+                    setState(() {
+                      final delta = newIndex > oldIndex ? -1 : 0;
+                      var list = _tasks!.map((task) => task.id!).toList();
+                      if (newIndex == list.length) {
+                        var swapId = list.removeAt(oldIndex);
+                        list.add(swapId);
+
+                        var swapItem = _tasks!.removeAt(oldIndex);
+                        _tasks!.add(swapItem);
+                      } else {
+                        var item = list.removeAt(oldIndex);
+                        list.insert(newIndex + delta, item);
+
+                        var swapItem = _tasks!.removeAt(oldIndex);
+                        _tasks!.insert(newIndex + delta, swapItem);
                       }
-                    },
-                    itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                      const PopupMenuItem<String>(
-                        value: 'settings',
-                        child: Text('Settings'),
-                      ),
-                      const PopupMenuItem<String>(
-                        value: 'logout',
-                        child: Text('Logout'),
-                      ),
-                    ],
-                    icon: const Icon(FontAwesomeIcons.bars),
-                  ),
-                ],
-              ),
-              body: GestureDetector(
-                  onHorizontalDragStart: (details) => dragStart = details.globalPosition.dx,
-                  onHorizontalDragEnd: (details) {
-                    final dragEnd = details.globalPosition.dx;
-                    final dragDelta = dragEnd - dragStart!;
-                    if (dragDelta > 10) {
-                      setState(() {
-                        selectedDate = DateService().decrementDate(DateService().getDate(selectedDate));
-                        DateService().setSelectedDate(DateService().getDate(selectedDate));
-                      });
-                    } else if (dragDelta < -10) {
-                      setState(() {
-                        selectedDate = DateService().incrementDate(DateService().getDate(selectedDate));
-                        DateService().setSelectedDate(DateService().getDate(selectedDate));
-                      });
-                    }
+
+                      _taskService.updateTaskOrder(userId, list, widget.isBacklog ? null : selectedDate);
+                    });
                   },
-                  child: ReorderableListView(
-                      header: Column(children: [
-                        if (!widget.isBacklog) DailyProgress(numerator: _completedCount, denominator: _totalCount),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            Expanded(
-                                child: Center(
-                                    child: Text(widget.isBacklog
-                                        ? "Backlog"
-                                        : DateService().getDayOfWeek(DateService().getDate(selectedDate))))),
-                            if (!widget.isBacklog)
-                              Row(
-                                children: [
-                                  if (DateService().isDateLessThan(today, selectedDate))
-                                    IconButton(
-                                        onPressed: () => setState(() {
-                                              debugPrint("BACK TO TODAY");
-                                              selectedDate = today;
-                                              DateService().setSelectedDate(DateService().getDate(selectedDate));
-                                            }),
-                                        icon: const Icon(FontAwesomeIcons.backwardStep)),
-                                  IconButton(
-                                      onPressed: () => setState(() {
-                                            debugPrint("LEFT");
-                                            selectedDate =
-                                                DateService().decrementDate(DateService().getDate(selectedDate));
-                                            DateService().setSelectedDate(DateService().getDate(selectedDate));
-                                          }),
-                                      icon: const Icon(FontAwesomeIcons.caretLeft)),
-                                  Text(selectedDate),
-                                  IconButton(
-                                      onPressed: () => setState(() {
-                                            debugPrint("RIGHT");
-                                            selectedDate =
-                                                DateService().incrementDate(DateService().getDate(selectedDate));
-                                            DateService().setSelectedDate(DateService().getDate(selectedDate));
-                                          }),
-                                      icon: const Icon(FontAwesomeIcons.caretRight)),
-                                  if (DateService().isDateLessThan(selectedDate, today))
-                                    IconButton(
-                                        onPressed: () => setState(() {
-                                              debugPrint("FORWARD TO TODAY");
-                                              selectedDate = today;
-                                              DateService().setSelectedDate(DateService().getDate(selectedDate));
-                                            }),
-                                        icon: const Icon(FontAwesomeIcons.forwardStep)),
-                                ],
-                              )
-                          ],
-                        ),
-                      ]),
-                      buildDefaultDragHandles: false,
-                      onReorder: (int oldIndex, int newIndex) {
-                        setState(() {
-                          final delta = newIndex > oldIndex ? -1 : 0;
-                          var list = _tasks!.map((task) => task.id!).toList();
-                          if (newIndex == list.length) {
-                            var swapId = list.removeAt(oldIndex);
-                            list.add(swapId);
-
-                            var swapItem = _tasks!.removeAt(oldIndex);
-                            _tasks!.add(swapItem);
-                          } else {
-                            var item = list.removeAt(oldIndex);
-                            list.insert(newIndex + delta, item);
-
-                            var swapItem = _tasks!.removeAt(oldIndex);
-                            _tasks!.insert(newIndex + delta, swapItem);
-                          }
-
-                          _taskService.updateTaskOrder(widget.userId, list, widget.isBacklog ? null : selectedDate);
-                        });
-                      },
-                      children: children)),
-              bottomNavigationBar: BottomNavBar(selectedIndex: widget.isBacklog ? 3 : 0),
-              floatingActionButton: FloatingActionButton(
-                  child: const Icon(FontAwesomeIcons.plus, size: 20),
-                  onPressed: () => showModalBottomSheet(
-                      isScrollControlled: true,
-                      useSafeArea: true,
-                      context: context,
-                      builder: (BuildContext context) => AddTaskScreen(isBacklog: widget.isBacklog))));
+                  children: children));
         });
   }
 

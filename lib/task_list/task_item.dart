@@ -172,7 +172,8 @@ class TaskItemState extends State<TaskItem> {
           } else if (value == "COPY") {
             showDialog(context: context, builder: (BuildContext context) => CopyTaskScreen(task: widget.task));
           } else if (value == "CHECK_TIME") {
-            widget.taskService.checkTrainStatus();
+            final Map<String, dynamic> data = {"userId": AuthService().user!.uid};
+            widget.taskService.callRemoteMethod("trainScheduleTest", data);
           }
         },
         itemBuilder: (context) => [
@@ -185,7 +186,6 @@ class TaskItemState extends State<TaskItem> {
                         Padding(padding: EdgeInsets.only(left: 8), child: Text('Push'))
                       ],
                     )),
-
               const PopupMenuItem(
                   value: "EDIT",
                   child: Row(
@@ -211,7 +211,6 @@ class TaskItemState extends State<TaskItem> {
                       Padding(padding: EdgeInsets.only(left: 8), child: Text('Remove'))
                     ],
                   )),
-
               if (widget.task.title.trim() == 'Work Train' &&
                   !widget.task.completed &&
                   !isBacklog &&

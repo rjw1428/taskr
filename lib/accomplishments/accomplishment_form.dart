@@ -3,34 +3,40 @@ import 'package:provider/provider.dart';
 import 'package:taskr/services/accomplishment.provider.dart';
 import 'package:taskr/services/models.dart';
 
-class EditAccomplishmentPage extends StatefulWidget {
-  final Accomplishment accomplishment;
+class AccomplishmentForm extends StatefulWidget {
+  final Accomplishment? accomplishment;
 
-  const EditAccomplishmentPage({super.key, required this.accomplishment});
+  const AccomplishmentForm({super.key, this.accomplishment});
 
   @override
-  State<EditAccomplishmentPage> createState() => _EditAccomplishmentPageState();
+  State<AccomplishmentForm> createState() => _AccomplishmentFormState();
 }
 
-class _EditAccomplishmentPageState extends State<EditAccomplishmentPage> {
+class _AccomplishmentFormState extends State<AccomplishmentForm> {
   final _formKey = GlobalKey<FormState>();
-  late String _title;
-  late String _description;
-  late Difficulty _difficulty;
+  String? _title;
+  String? _description;
+  Difficulty _difficulty = Difficulty.low;
+  String pageHeader = 'Add Accomplishment';
+  String actionButton = 'Add';
 
   @override
   void initState() {
     super.initState();
-    _title = widget.accomplishment.title;
-    _description = widget.accomplishment.description ?? '';
-    _difficulty = widget.accomplishment.difficulty;
+    if (widget.accomplishment != null) {
+      _title = widget.accomplishment!.title;
+      _description = widget.accomplishment!.description ?? '';
+      _difficulty = widget.accomplishment!.difficulty;
+      pageHeader = 'Edit Accomplishment';
+      actionButton = 'Update';
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Edit Accomplishment'),
+        title: Text(pageHeader),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -78,19 +84,38 @@ class _EditAccomplishmentPageState extends State<EditAccomplishmentPage> {
                 onPressed: () {
                   if (_formKey.currentState!.validate()) {
                     _formKey.currentState!.save();
-                    final updatedAccomplishment = Accomplishment(
-                      id: widget.accomplishment.id,
-                      title: _title,
-                      description: _description,
-                      date: widget.accomplishment.date,
-                      difficulty: _difficulty,
-                    );
-                    Provider.of<AccomplishmentProvider>(context, listen: false)
-                        .updateAccomplishment(updatedAccomplishment);
+                    if (_title == null) {
+                      debugPrint('Title Required');
+                      return;
+                    }
+                    if (_description == null) {
+                      debugPrint('Description Required');
+                      return;
+                    }
+                    if (widget.accomplishment != null) {
+                      final updatedAccomplishment = Accomplishment(
+                        id: widget.accomplishment!.id,
+                        title: _title!,
+                        description: _description,
+                        date: widget.accomplishment!.date,
+                        difficulty: _difficulty,
+                      );
+                      Provider.of<AccomplishmentProvider>(context, listen: false)
+                          .updateAccomplishment(updatedAccomplishment);
+                    } else {
+                      final newAccomplishment = Accomplishment(
+                        title: _title!,
+                        description: _description,
+                        date: DateTime.now().toIso8601String(),
+                        difficulty: _difficulty,
+                      );
+                      Provider.of<AccomplishmentProvider>(context, listen: false).addAccomplishment(newAccomplishment);
+                    }
+
                     Navigator.pop(context);
                   }
                 },
-                child: const Text('Save'),
+                child: Text(actionButton),
               ),
             ],
           ),
