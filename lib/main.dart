@@ -1,18 +1,24 @@
+import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import 'package:taskr/firebase_options.dart';
 import 'package:taskr/home/home.dart';
 import 'package:taskr/services/accomplishment.provider.dart';
 import 'package:taskr/services/auth.service.dart';
+import 'package:taskr/services/date.service.dart';
+import 'package:taskr/services/models.dart';
 import 'package:taskr/services/tag.provider.dart';
 import 'package:taskr/about/about.dart';
 import 'package:taskr/settings/settings.dart';
+import 'package:taskr/shared/shared.dart';
 import 'package:taskr/theme.dart';
+import 'package:taskr/services/task.service.dart';
 
 // Global navigator key
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -53,6 +59,113 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
+  // Method to show the wind task dialog
+  void _showWindTaskDialog(RemoteMessage message) {
+    final context = navigatorKey.currentContext;
+    if (context == null) {
+      debugPrint("Cannot show dialog without a context");
+      return;
+    }
+
+    final data = message.data;
+    List<Map<String, dynamic>> actions = [];
+
+    // Try to parse 'actions' as a JSON string first
+    if (data['actions'] is String) {
+      try {
+        final decodedActions = jsonDecode(data['actions'] as String);
+        if (decodedActions is List) {
+          actions = decodedActions.map((e) => e as Map<String, dynamic>).toList();
+        }
+      } catch (e) {
+        debugPrint("Error parsing actions string: $e");
+      }
+    } else if (data['actions'] is List) {
+      // If it's already a List (e.g., from a different source than FCM data messages)
+      actions = (data['actions'] as List).map((e) => e as Map<String, dynamic>).toList();
+    }
+
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: Text(data['title'] ?? 'Wind Alert'),
+          content: SingleChildScrollView(
+            child: ListBody(
+              children: <Widget>[
+                Text(
+                  data['body'] ?? '',
+                  style: Theme.of(dialogContext).textTheme.bodyMedium,
+                ),
+              ],
+            ),
+          ),
+          actions: actions.map((action) {
+            return TextButton(
+              child: Text(action['title'] ?? 'Action'),
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                if (action['action'] == 'add-wind-task') {
+                  final payloadMap = Map<String, dynamic>.from(data);
+                  final task = Task(
+                      title: "Batten Down Christmas Decorations",
+                      description: payloadMap['body'],
+                      startTime: payloadMap['startHour'],
+                      endTime: payloadMap['endHour'],
+                      priority: Effort.low,
+                      completed: false,
+                      dueDate: payloadMap['date'],
+                      pushCount: 0,
+                      added: DateTime.now().millisecondsSinceEpoch,
+                      tags: [],
+                      subtasks: []);
+                  await TaskService().addTask(task);
+                }
+              },
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
+
+  // Method to show a general notification dialog
+  void _showNotificationDialog(RemoteNotification notification) {
+    final context = navigatorKey.currentContext;
+    if (context == null) {
+      debugPrint("Cannot show notification dialog without a context");
+      return;
+    }
+    if (!mounted) return; // Ensure the State is still mounted
+
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: Text(notification.title ?? 'New Message'),
+          content: SingleChildScrollView(
+            child: ListBody(
+              children: <Widget>[
+                Text(
+                  notification.body ?? '',
+                  style: Theme.of(dialogContext).textTheme.bodyMedium,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              child: const Text('Ok'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -65,40 +178,29 @@ class _MyAppState extends State<MyApp> {
       debugPrint('Got a message whilst in the foreground!');
       debugPrint('Message data: ${message.data}');
 
-      final notification = message.notification;
-      if (notification != null) {
-        debugPrint('Message also contained a notification: $notification');
-        if (!mounted) return;
-        final context = navigatorKey.currentContext;
-        if (context != null) {
-          if (!mounted) return;
-          showDialog(
-            context: context,
-            builder: (BuildContext context) {
-              return AlertDialog(
-                title: Text(notification.title ?? 'New Message'),
-                content: SingleChildScrollView(
-                  child: ListBody(
-                    children: <Widget>[
-                      Text(
-                        notification.body ?? '',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    child: const Text('Ok'),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
-                  ),
-                ],
-              );
-            },
-          );
+      if (message.data.containsKey('actions')) {
+        _showWindTaskDialog(message);
+      } else {
+        final notification = message.notification;
+        if (notification != null) {
+          debugPrint('Message also contained a notification: $notification');
+          _showNotificationDialog(notification); // Use the new function
         }
+      }
+    });
+
+    // Handle when the app is opened from a terminated state via a notification
+    FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
+      if (message != null && message.data.containsKey('actions')) {
+        _showWindTaskDialog(message);
+      }
+    });
+
+    // Handle when the app is opened from background by tapping on a notification
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      debugPrint('A new onMessageOpenedApp event was published!');
+      if (message.data.containsKey('actions')) {
+        _showWindTaskDialog(message);
       }
     });
   }

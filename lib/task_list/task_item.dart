@@ -172,7 +172,7 @@ class TaskItemState extends State<TaskItem> {
           } else if (value == "COPY") {
             showDialog(context: context, builder: (BuildContext context) => CopyTaskScreen(task: widget.task));
           } else if (value == "CHECK_TIME") {
-            final Map<String, dynamic> data = {"userId": AuthService().user!.uid};
+            final data = ["userId", AuthService().user!.uid];
             widget.taskService.callRemoteMethod("trainScheduleTest", data);
           }
         },

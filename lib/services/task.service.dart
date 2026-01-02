@@ -263,15 +263,10 @@ class TaskService {
     }
   }
 
-  Future<void> callRemoteMethod(String name, Map<String, dynamic> payload) async {
+  Future<void> callRemoteMethod(String name, dynamic payload) async {
     try {
       final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable(name);
-      final data = payload.entries.fold([], (agg, entry) {
-        agg.add(entry.key);
-        agg.add(entry.value);
-        return agg;
-      });
-      final result = await callable.call(data);
+      final result = await callable.call(payload);
       debugPrint('trainScheduleTest result: ${result.data}');
     } on FirebaseFunctionsException catch (e) {
       debugPrint('Firebase Functions Exception: ${e.code} - ${e.message}');
