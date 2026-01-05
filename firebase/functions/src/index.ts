@@ -2,47 +2,9 @@ import {onSchedule} from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
 import {onRequest} from "firebase-functions/v2/https";
-import {FieldValue} from "firebase-admin/firestore";
 import { Message } from "firebase-admin/lib/messaging/messaging-api";
 
 admin.initializeApp();
-
-async function completedTaskCleanup() {
-  try {
-    const todoRef = await admin.firestore().collection("todos").get();
-    todoRef.docs.forEach(async (doc: any) => {
-      const deleteIds: string[] = [];
-      const deletes: Promise<admin.firestore.WriteResult>[] = [];
-
-      const userId = doc.id;
-      const completedDocs = await admin.firestore()
-        .collection("todos")
-        .doc(userId)
-        .collection("tasks")
-        .where("completed", "==", true)
-        .get();
-
-      // For each documnet
-      completedDocs.forEach((doc: any) => {
-        // Add doc id to user's array
-        deleteIds.push(doc.id);
-
-        // Add delete task to promise queue
-        deletes.push(doc.ref.delete());
-      });
-
-      // add the delete task for the "taskOrder"
-      deletes.push(admin.firestore().collection("todos").doc(userId).update({
-        taskOrder: FieldValue.arrayRemove(deleteIds),
-      }));
-
-      // execute promie queue for single user
-      await Promise.all(deletes);
-    });
-  } catch (err) {
-    logger.log(err);
-  }
-}
 
 export const trainSchedule = onSchedule("every day 12:00", async () => {
   try {
@@ -84,53 +46,6 @@ export const trainScheduleTest = onRequest({cors: false}, async (req, res) => {
   }
 });
 
-export const triggeredCompletedTaskCleanup = onRequest({cors: false}, async (req, res) => {
-  await completedTaskCleanup();
-  res.status(200).send("Mission Accomplished!");
-});
-
-export const windspeedCheck = onSchedule({
-  schedule: "every day 15:00",
-  retryCount: 5,
-}, async () => {
-  try {
-    const todosSnap = await admin.firestore().collection("todos").get();
-    const notifyPromises: Promise<any>[] = [];
-
-    todosSnap.forEach((doc) => {
-      const data = doc.data() as any;
-      if (data && data.weatherAlert === true) {
-        logger.info(`Checking windspeed for user ${doc.id}`);
-        notifyPromises.push(getWindspeed(doc.id));
-      }
-    });
-
-    await Promise.all(notifyPromises);
-  } catch (e) {
-    logger.error(e);
-    throw e;
-  }
-});
-
-export const windspeedCheckTest = onRequest({cors: false}, async (req, res) => {
-  try {
-    const todosSnap = await admin.firestore().collection("todos").get();
-    const notifyPromises: Promise<any>[] = [];
-
-    todosSnap.forEach((doc) => {
-      const data = doc.data() as any;
-      if (data && data.weatherAlert === true) {
-        logger.info(`Checking windspeed for user ${doc.id}`);
-        notifyPromises.push(getWindspeed(doc.id));
-      }
-    });
-
-    const result = await Promise.all(notifyPromises);
-    res.status(200).send(result);
-  } catch (e) {
-    res.status(500).send(e)
-  }
-});
 
 async function executeTrainNotification(userId: string) {
   const date = new Date().toISOString().split("T")[0];
@@ -241,170 +156,46 @@ async function executeTrainNotification(userId: string) {
   }
 }
 
+export const sendMessage = onRequest(async (request, response) => {
+  const userId = request.body.userId;
+  const payload = request.body.payload;
 
-async function getWindspeed(userId: string) {
-  const zip = "18966";
-  const api = `https://wttr.in/${zip}?format=j1`;
-  const threshold = 15; // mph
-  let lastHighWindHour
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 seconds
-    const resp = await fetch(api, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
-      }
-    });
-    clearTimeout(timeoutId);
-    const data = await resp.json();
-    
-    const formatTime = (timeStr: string) => {
-      const time = parseInt(timeStr, 10);
-      const hours = Math.floor(time / 100);
-      const ampm = hours >= 12 ? 'pm' : 'am';
-      const displayHours = hours % 12 || 12;
-      return `${displayHours}${ampm}`;
-    };
-
-    const todayHourly = data.weather[0].hourly
-      .filter((h: any) => parseInt(h.time) >= 900);
-
-    const tomorrowHourly = data.weather[1].hourly
-      .filter((h: any) => parseInt(h.time) < 900);
-
-    const hourlyForecast = [...todayHourly, ...tomorrowHourly].map((h: any) => ({
-      time: h.time,
-      formattedTime: formatTime(h.time),
-      windspeed: parseInt(h.windspeedMiles)
-    }));
-    logger.info(hourlyForecast)
-    const highWinds = hourlyForecast.filter((h: any) => h.windspeed >= threshold);
-
-    if (highWinds.length == 0) {
-      logger.info("No high winds today");
-      return "No high winds today";
-    }
-
-    const startTime = highWinds[0].formattedTime;
-    const maxWindspeed = Math.max(...highWinds.map((h: any) => h.windspeed));
-    const lastForecastHour = hourlyForecast[hourlyForecast.length - 1];
-    lastHighWindHour = highWinds[highWinds.length - 1];
-    
-    let body = "Unknown wind notification";
-    if (lastHighWindHour.time === lastForecastHour.time) {
-      body = `High winds starting at ${startTime} and continuing into tomorrow, with gusts up to ${maxWindspeed} mph.`;
-    } else {
-      const endTime = lastHighWindHour.formattedTime;
-      if (startTime === endTime) {
-        body = `High winds of ${maxWindspeed} mph expected around ${startTime}.`;
-      } else {
-        body = `High winds expected from ${startTime} to ${endTime}, with gusts up to ${maxWindspeed} mph.`;
-      }
-    }
-
-    const fcmToken = await getUserFcmToken(userId)
-
-    const toHourMinute = (t: string) => {
-      const n = parseInt(t, 10);
-      if (Number.isNaN(n)) return t;
-      const hh = Math.floor(n / 100);
-      const mm = n % 100;
-      return `${hh}:${mm.toString().padStart(2, "0")}`;
-    };
-
-    const startHour = toHourMinute(highWinds[0].time);
-    const date = new Date().toISOString().split("T")[0];
-    let endHour = null;
-    if (lastHighWindHour.time !== lastForecastHour.time) {
-      endHour = lastHighWindHour.time;
-    }
-    
-    if (highWinds.length === 1) {
-      endHour = (parseInt(lastHighWindHour.time) + 100).toString()
-    }
-
-    const actions = JSON.stringify([
-          {
-            action: "add-wind-task",
-            title: "Yes",
-          },
-          {
-            action: "dismiss",
-            title: "No",
-          },
-        ]);
-    logger.info(actions);
-    logger.info(endHour);
-    const message: Message = {
-      token: fcmToken,
-      notification: {
-        title: "Batten Down the Decorations!",
-        body: body,
-      },
-      data: {
-        actions: actions,
-        date: date,
-        body: body,
-        startHour: startHour,
-        endHour: toHourMinute(endHour) ?? "",
-      },
-    };
-
-    await admin.messaging().send(message);
-    logger.info(`Notification sent regarding high winds`);
-
-    return body;
-  } catch (e) {
-   logger.error(e);
-   throw e;
-  }
-}
-
-export const addWindTaskFromNotification = onRequest({cors: false}, async (req, res) => {
-  const {uid, date, body, startHour, endHour} = req.query;
-
-  if (!uid || !date || !body) {
-    res.status(400).send("Missing required parameters");
+  if (!userId || !payload) {
+    response.status(400).send("Missing userId or payload");
     return;
   }
 
-  await addWindTask(uid as string, date as string, body as string, startHour as string | undefined, endHour as string | undefined);
-  res.status(200).send("Task added");
-});
+  try {
+    const userDoc = await admin.firestore().collection("todos").doc(userId).get();
+    const fcmToken = userDoc.data()?.fcmToken;
 
-async function addWindTask(uid: string, date: string, body: string, startHour?: string, endHour?: string) {
-    const task = {
-      title: "Batten Down Christmas Decorations",
-      description: body,
-      startTime: startHour,
-      endTime: endHour,
-      priority: "low",
-      completed: false,
-      dueDate: date,
-      pushCount: 0,
-      added: Date.now(),
-      tags: [],
-      subtasks: []
+    if (!fcmToken) {
+      response.status(404).send("FCM token not found for user");
+      return;
+    }
+
+    if (payload.body == null || payload.title == null) { 
+      response.status(400).send("Missing body or title in payload");
+      return; 
+    }
+    const message: Message = {
+      token: fcmToken,
+      notification: {
+        title: payload.title,
+        body: payload.body,
+      },
+      data: {
+        ...payload.data,
+      }
     };
-    
-    logger.info(`Adding task to ${date}`)
-    const docRef = await admin.firestore()
-      .collection("todos")
-      .doc(uid)
-      .collection("tasks")
-      .doc(date)
-      .collection("items")
-      .add(task);
 
-    logger.info(`Adding ${docRef.id} to task order`)
-    await admin.firestore()
-      .collection("todos")
-      .doc(uid)
-      .collection("tasks")
-      .doc(date)
-      .update({taskOrder: FieldValue.arrayUnion(docRef.id)});
-}
+    await admin.messaging().send(message);
+    response.status(200).send("Message sent successfully");
+  } catch (error) {
+    console.error("Error sending message:", error);
+    response.status(500).send("Error sending message");
+  }
+});
 
 async function getUserFcmToken(userId: string): Promise<string> {
   const userDoc = await admin.firestore().collection('todos').doc(userId).get()
@@ -414,3 +205,27 @@ async function getUserFcmToken(userId: string): Promise<string> {
   }
   return data.fcmToken;
 }
+
+// TODO: Should be a general cloud function to create a new task.
+
+// export const addWindTaskFromNotification = onRequest({cors: false}, async (req, res) => {
+//   const endHour = req.body.endHour;
+//   const startHour = req.body.startHour;
+//   const body = req.body.body;
+//   const date = req.body.date;
+//   const uid = req.body.uid;
+
+//   if (!uid || !date || !body) {
+//     res.status(400).send("Missing required parameters");
+//     return;
+//   }
+
+//   try {
+//     // await addWindTask(uid as string, date as string, body as string, startHour as string | undefined, endHour as string | undefined);
+//     res.status(200).send("Task added");
+//   } catch (error) {
+//     logger.error("Error adding wind task:", error);
+//     res.status(500).send("Error adding wind task");
+//   }
+// });
+

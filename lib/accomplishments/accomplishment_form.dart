@@ -60,6 +60,9 @@ class _AccomplishmentFormState extends State<AccomplishmentForm> {
               TextFormField(
                 initialValue: _description,
                 decoration: const InputDecoration(labelText: 'Description'),
+                maxLines: null,
+                minLines: 3,
+                keyboardType: TextInputType.multiline,
                 onSaved: (value) {
                   _description = value!;
                 },

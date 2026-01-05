@@ -274,29 +274,4 @@ class TaskService {
       debugPrint('Generic Exception: $e');
     }
   }
-
-  // Future<void> checkTrainStatus() async {
-  //   try {
-  //     final userId = AuthService().user!.uid;
-  //     final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('trainScheduleTest');
-  //     final result = await callable.call(["userId", userId]);
-  //     debugPrint('trainScheduleTest result: ${result.data}');
-  //   } on FirebaseFunctionsException catch (e) {
-  //     debugPrint('Firebase Functions Exception: ${e.code} - ${e.message}');
-  //   } catch (e) {
-  //     debugPrint('Generic Exception: $e');
-  //   }
-  // }
-
-  // Future<void> addWindTask(Map<String, dynamic> data) async {
-  //   try {
-  //     final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('addWindTaskFromNotification');
-  //     final result = await callable.call(data);
-  //     debugPrint('addWindTaskFromNotification result: ${result.data}');
-  //   } on FirebaseFunctionsException catch (e) {
-  //     debugPrint('Firebase Functions Exception: ${e.code} - ${e.message}');
-  //   } catch (e) {
-  //     debugPrint('Generic Exception: $e');
-  //   }
-  // }
 }
