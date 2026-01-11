@@ -41,6 +41,7 @@ class Task {
   String? startTime;
   String? endTime;
   String? completedTime;
+  String? recurringTemplateId;
   List<String> subtasks;
   Effort priority;
   int pushCount;
@@ -56,6 +57,7 @@ class Task {
       this.dueDate,
       this.startTime,
       this.endTime,
+      this.recurringTemplateId,
       this.pushCount = 0,
       this.subtasks = const []});
 
@@ -118,4 +120,25 @@ class Tag {
 
   factory Tag.fromJson(Map<String, dynamic> json) => _$TagFromJson(json);
   Map<String, dynamic> toJson() => _$TagToJson(this);
+}
+
+@JsonSerializable()
+class RecurringTask {
+  String recurrenceType;
+  int? frequency;
+  Map<String, bool>? daysOfWeek;
+  DateTime? startDate;
+  DateTime? endDate;
+  int? dayOfMonth;
+
+  RecurringTask({
+    required this.recurrenceType,
+    this.frequency = 1,
+    this.daysOfWeek,
+    this.endDate,
+    this.dayOfMonth = 1,
+  });
+
+  factory RecurringTask.fromJson(Map<String, dynamic> json) => _$RecurringTaskFromJson(json);
+  Map<String, dynamic> toJson() => _$RecurringTaskToJson(this);
 }

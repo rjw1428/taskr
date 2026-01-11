@@ -21,6 +21,10 @@ class TaskService {
         .collection("items");
   }
 
+  CollectionReference<Map<String, dynamic>> recurringTempateCollection(String userId) {
+    return _db.collection('todos').doc(userId).collection('recurring');
+  }
+
   Stream<List<String>> taskOrderStream(String userId, String? date) {
     return _db
         .collection('todos')
@@ -272,6 +276,31 @@ class TaskService {
       debugPrint('Firebase Functions Exception: ${e.code} - ${e.message}');
     } catch (e) {
       debugPrint('Generic Exception: $e');
+    }
+  }
+
+  Future<String?> saveRecurringTask(RecurringTask template) async {
+    print(template.toJson());
+    final user = AuthService().user!;
+    try {
+      final resp = await recurringTempateCollection(user.uid).add(template.toJson());
+      return resp.id;
+    } catch (e) {
+      debugPrint('$e');
+      return null;
+    }
+  }
+
+  Future<void> removeRecurring(Task task) async {
+    final user = AuthService().user!;
+    try {
+      await recurringTempateCollection(user.uid).doc(task.recurringTemplateId).delete();
+
+      // SELECT ALL TASKS WITH THE GIVEN recurringTemplateId and delete them
+      // _db.collection('todos').doc('user').
+    } catch (e) {
+      debugPrint('$e');
+      return null;
     }
   }
 }

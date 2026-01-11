@@ -82,8 +82,9 @@ class TaskItemState extends State<TaskItem> {
                                     "completedTime": DateFormat(completeTimeFormat).format(DateTime.now())
                                   }, widget.task);
                                 }),
-				  if (widget.task.pushCount > 0)
-      				    Text('(${widget.task.pushCount}) ', style: const TextStyle(fontSize: 18, color: Colors.white)),
+                            if (widget.task.pushCount > 0)
+                              Text('(${widget.task.pushCount}) ',
+                                  style: const TextStyle(fontSize: 18, color: Colors.white)),
                             SizedBox(
                               width: MediaQuery.of(context).size.width * .6 - (widget.task.pushCount > 0 ? 20 : 0),
                               child: Column(
@@ -176,6 +177,9 @@ class TaskItemState extends State<TaskItem> {
           } else if (value == "CHECK_TIME") {
             final data = ["userId", AuthService().user!.uid];
             widget.taskService.callRemoteMethod("trainScheduleTest", data);
+          } else if (value == "REMOVE_ALL") {
+            widget.onDelete(widget.task);
+            widget.taskService.removeRecurring(widget.task);
           }
         },
         itemBuilder: (context) => [
@@ -213,6 +217,16 @@ class TaskItemState extends State<TaskItem> {
                       Padding(padding: EdgeInsets.only(left: 8), child: Text('Remove'))
                     ],
                   )),
+              if (widget.task.recurringTemplateId != null)
+                const PopupMenuItem(
+                    value: "REMOVE_ALL",
+                    child: Row(
+                      children: [
+                        Icon(FontAwesomeIcons.skullCrossbones),
+                        // Icon(FontAwesomeIcons.triangleExclamation),
+                        Padding(padding: EdgeInsets.only(left: 8), child: Text('Remove All'))
+                      ],
+                    )),
               if (widget.task.title.trim() == 'Work Train' &&
                   !widget.task.completed &&
                   !isBacklog &&

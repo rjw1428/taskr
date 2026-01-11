@@ -19,6 +19,7 @@ class AddTaskScreen extends StatefulWidget {
 
 class _AddTaskScreenState extends State<AddTaskScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _recurringTaskFormKey = GlobalKey<RecurringTaskFormState>();
   // String _modified = '';
   final TextEditingController _title = TextEditingController();
   final TextEditingController _description = TextEditingController();
@@ -29,6 +30,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   Effort initialPriority = Effort.low;
   bool _completed = false;
   bool _isRecurring = false;
+  RecurringTask? _recurringTaskTemplate;
   // List<String> _subTasks = const [];
   DateTime? initialDueDate;
   bool apiPending = false;
@@ -45,9 +47,40 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
+
+    if (_isRecurring) {
+      final recurringValidationError = _recurringTaskFormKey.currentState?.validate();
+      if (recurringValidationError != null) {
+        return;
+      }
+    }
+
     setState(() {
       apiPending = true;
     });
+
+    String? recurringTaskTemplateId;
+    // Save Recurring Task
+    if (_isRecurring && _dueDate != null && _recurringTaskTemplate != null) {
+      _recurringTaskTemplate!.startDate = DateService().getDate(_dueDate!);
+
+      // HANDLE UPDATE OF RECURRING TEMPLATE INSTEAD OF SAVE
+
+      // if not weekly, remove daysOfWeek
+      if (_recurringTaskTemplate!.recurrenceType != "Weekly") {
+        _recurringTaskTemplate!.daysOfWeek = null;
+      }
+
+      if (_recurringTaskTemplate!.recurrenceType == 'Yearly' || _recurringTaskTemplate!.recurrenceType == 'Daily') {
+        _recurringTaskTemplate!.frequency = null;
+      }
+
+      if (_recurringTaskTemplate!.recurrenceType != 'Yearly') {
+        _recurringTaskTemplate!.dayOfMonth = null;
+      }
+
+      recurringTaskTemplateId = await TaskService().saveRecurringTask(_recurringTaskTemplate!);
+    }
 
     _formKey.currentState!.save();
     Task newTask = Task(
@@ -59,6 +92,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
         dueDate: _dueDate,
         startTime: _startTime,
         endTime: _endTime,
+        recurringTemplateId: recurringTaskTemplateId,
         added: DateTime.now().millisecondsSinceEpoch,
         tags: _selectedTags,
         pushCount: widget.task?.pushCount ?? 0,
@@ -154,9 +188,9 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                         TextFormField(
                           decoration: const InputDecoration(labelText: 'Description'),
                           controller: _description,
-                maxLines: null,
-                minLines: 3,
-                keyboardType: TextInputType.multiline,
+                          maxLines: null,
+                          minLines: 3,
+                          keyboardType: TextInputType.multiline,
                           style: Theme.of(context).textTheme.titleSmall,
                         ),
                         Column(
@@ -276,21 +310,31 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                           const Text('Item will be added to the backlog without a due date'),
                         if (_dueDate != null && widget.isBacklog)
                           const Text('Item will be scheduled on the selected date'),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Checkbox(
-                              value: _isRecurring,
-                              onChanged: (bool? value) {
-                                setState(() {
-                                  _isRecurring = value ?? false;
-                                });
-                              },
-                            ),
-                            const Text('Recurring'),
-                          ],
-                        ),
-                        if (_isRecurring) const RecurringTaskForm(),
+                        if (_dueDate != null)
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Checkbox(
+                                value: _isRecurring,
+                                onChanged: (bool? value) {
+                                  setState(() {
+                                    _isRecurring = value ?? false;
+                                  });
+                                },
+                              ),
+                              const Text('Recurring'),
+                            ],
+                          ),
+                        if (_isRecurring && _dueDate != null)
+                          RecurringTaskForm(
+                            key: _recurringTaskFormKey,
+                            startDate: _dueDate,
+                            onRecurringTaskChanged: (recurringTask) {
+                              setState(() {
+                                _recurringTaskTemplate = recurringTask;
+                              });
+                            },
+                          ),
                         if (_allTags.isNotEmpty)
                           MultiSelectDialogField(
                             isDismissible: true,
