@@ -82,8 +82,10 @@ class TaskItemState extends State<TaskItem> {
                                     "completedTime": DateFormat(completeTimeFormat).format(DateTime.now())
                                   }, widget.task);
                                 }),
+				  if (widget.task.pushCount > 0)
+      				    Text('(${widget.task.pushCount}) ', style: const TextStyle(fontSize: 18, color: Colors.white)),
                             SizedBox(
-                              width: MediaQuery.of(context).size.width * .6,
+                              width: MediaQuery.of(context).size.width * .6 - (widget.task.pushCount > 0 ? 20 : 0),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisSize: MainAxisSize.max,
@@ -126,7 +128,7 @@ class TaskItemState extends State<TaskItem> {
                                             .toList()),
                                 ],
                               ),
-                            )
+                            ),
                           ],
                         ),
                         Row(crossAxisAlignment: CrossAxisAlignment.end, children: [

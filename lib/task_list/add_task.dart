@@ -6,6 +6,7 @@ import 'package:taskr/services/services.dart';
 import 'package:taskr/services/tag.provider.dart';
 import 'package:taskr/shared/constants.dart';
 import 'package:multi_select_flutter/multi_select_flutter.dart';
+import 'package:taskr/task_list/recurring_task_form.dart';
 
 class AddTaskScreen extends StatefulWidget {
   final Task? task;
@@ -27,6 +28,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   Effort _priority = Effort.low;
   Effort initialPriority = Effort.low;
   bool _completed = false;
+  bool _isRecurring = false;
   // List<String> _subTasks = const [];
   DateTime? initialDueDate;
   bool apiPending = false;
@@ -50,8 +52,8 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
     _formKey.currentState!.save();
     Task newTask = Task(
         id: widget.task?.id,
-        title: _title.value.text,
-        description: _description.value.text,
+        title: _title.value.text.trim(),
+        description: _description.value.text.trim(),
         priority: _priority,
         completed: _completed,
         dueDate: _dueDate,
@@ -59,6 +61,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
         endTime: _endTime,
         added: DateTime.now().millisecondsSinceEpoch,
         tags: _selectedTags,
+        pushCount: widget.task?.pushCount ?? 0,
         subtasks: []);
 
     if (widget.task == null) {
@@ -151,6 +154,9 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                         TextFormField(
                           decoration: const InputDecoration(labelText: 'Description'),
                           controller: _description,
+                maxLines: null,
+                minLines: 3,
+                keyboardType: TextInputType.multiline,
                           style: Theme.of(context).textTheme.titleSmall,
                         ),
                         Column(
@@ -270,6 +276,21 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                           const Text('Item will be added to the backlog without a due date'),
                         if (_dueDate != null && widget.isBacklog)
                           const Text('Item will be scheduled on the selected date'),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Checkbox(
+                              value: _isRecurring,
+                              onChanged: (bool? value) {
+                                setState(() {
+                                  _isRecurring = value ?? false;
+                                });
+                              },
+                            ),
+                            const Text('Recurring'),
+                          ],
+                        ),
+                        if (_isRecurring) const RecurringTaskForm(),
                         if (_allTags.isNotEmpty)
                           MultiSelectDialogField(
                             isDismissible: true,
