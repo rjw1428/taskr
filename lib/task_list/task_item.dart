@@ -215,14 +215,15 @@ class TaskItemState extends State<TaskItem> {
                       ],
                     )),
               ],
-              const PopupMenuItem(
-                  value: "COPY",
-                  child: Row(
-                    children: [
-                      Icon(FontAwesomeIcons.copy),
-                      Padding(padding: EdgeInsets.only(left: 8), child: Text('Copy'))
-                    ],
-                  )),
+              if (!isBacklog)
+                const PopupMenuItem(
+                    value: "COPY",
+                    child: Row(
+                      children: [
+                        Icon(FontAwesomeIcons.copy),
+                        Padding(padding: EdgeInsets.only(left: 8), child: Text('Copy'))
+                      ],
+                    )),
               const PopupMenuItem(
                   value: "REMOVE",
                   child: Row(
