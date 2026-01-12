@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:rrule/rrule.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/services/tag.provider.dart';
@@ -43,6 +44,28 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   late List<Tag> _selectedTags = [];
   final TaskService _taskService = TaskService();
 
+  getRecurrenceFrequency(String templateRecurrance) {
+    if (templateRecurrance == 'Daily') return Frequency.daily;
+    if (templateRecurrance == 'Weekly') return Frequency.weekly;
+    if (templateRecurrance == 'Monthly') return Frequency.monthly;
+    if (templateRecurrance == 'Yearly') return Frequency.yearly;
+  }
+
+  List<ByWeekDayEntry> getWeeklyRecurrenceList(Map<String, bool> daysOfWeek) {
+    return daysOfWeek.entries.fold([], (acc, entry) {
+      if (!entry.value) return acc;
+
+      if (entry.key == 'Su') acc.add(ByWeekDayEntry(DateTime.sunday));
+      if (entry.key == 'Mo') acc.add(ByWeekDayEntry(DateTime.monday));
+      if (entry.key == 'Tu') acc.add(ByWeekDayEntry(DateTime.tuesday));
+      if (entry.key == 'We') acc.add(ByWeekDayEntry(DateTime.wednesday));
+      if (entry.key == 'Th') acc.add(ByWeekDayEntry(DateTime.thursday));
+      if (entry.key == 'Fr') acc.add(ByWeekDayEntry(DateTime.friday));
+      if (entry.key == 'Sa') acc.add(ByWeekDayEntry(DateTime.saturday));
+      return acc;
+    });
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -75,40 +98,87 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
         _recurringTaskTemplate!.frequency = null;
       }
 
-      if (_recurringTaskTemplate!.recurrenceType != 'Yearly') {
+      if (_recurringTaskTemplate!.recurrenceType != 'Monthly') {
         _recurringTaskTemplate!.dayOfMonth = null;
       }
 
       recurringTaskTemplateId = await TaskService().saveRecurringTask(_recurringTaskTemplate!);
-    }
 
-    _formKey.currentState!.save();
-    Task newTask = Task(
-        id: widget.task?.id,
-        title: _title.value.text.trim(),
-        description: _description.value.text.trim(),
-        priority: _priority,
-        completed: _completed,
-        dueDate: _dueDate,
-        startTime: _startTime,
-        endTime: _endTime,
-        recurringTemplateId: recurringTaskTemplateId,
-        added: DateTime.now().millisecondsSinceEpoch,
-        tags: _selectedTags,
-        pushCount: widget.task?.pushCount ?? 0,
-        subtasks: []);
+      final type = getRecurrenceFrequency(_recurringTaskTemplate!.recurrenceType);
+      final untilDate = _recurringTaskTemplate!.endDate?.toUtc();
+      RecurrenceRule rule;
+      switch (_recurringTaskTemplate!.recurrenceType) {
+        case 'Weekly':
+          rule = RecurrenceRule(
+            frequency: type,
+            interval: _recurringTaskTemplate!.frequency ?? 1,
+            until: untilDate,
+            byWeekDays: getWeeklyRecurrenceList(_recurringTaskTemplate!.daysOfWeek!),
+          );
+          break;
+        case 'Monthly':
+          rule = RecurrenceRule(
+            frequency: type,
+            interval: _recurringTaskTemplate!.frequency ?? 1,
+            until: untilDate,
+            byMonthDays: [_recurringTaskTemplate!.dayOfMonth!],
+          );
+          break;
+        default:
+          rule = RecurrenceRule(
+            frequency: type,
+            interval: _recurringTaskTemplate!.frequency ?? 1,
+            until: untilDate,
+          );
+      }
 
-    if (widget.task == null) {
-      // ADD NEW TASK
-      await _taskService.addTask(newTask);
+      final instancesStart = _recurringTaskTemplate!.startDate?.toUtc() ?? DateTime.now().toUtc();
+      final instances = rule.getInstances(start: instancesStart).take(30);
+
+      for (var instance in instances) {
+        final task = Task(
+            title: _title.value.text.trim(),
+            description: _description.value.text.trim(),
+            priority: _priority,
+            completed: false,
+            dueDate: DateService().getString(instance),
+            startTime: _startTime,
+            endTime: _endTime,
+            recurringTemplateId: recurringTaskTemplateId,
+            added: DateTime.now().millisecondsSinceEpoch,
+            tags: _selectedTags,
+            pushCount: 0,
+            subtasks: []);
+        await _taskService.addTask(task);
+      }
     } else {
-      if (widget.task!.dueDate != newTask.dueDate) {
-        // MOVE TO NEW DAY
-        await _taskService.deleteTask(widget.task!);
+      Task newTask = Task(
+          id: widget.task?.id,
+          title: _title.value.text.trim(),
+          description: _description.value.text.trim(),
+          priority: _priority,
+          completed: _completed,
+          dueDate: _dueDate,
+          startTime: _startTime,
+          endTime: _endTime,
+          recurringTemplateId: recurringTaskTemplateId,
+          added: DateTime.now().millisecondsSinceEpoch,
+          tags: _selectedTags,
+          pushCount: widget.task?.pushCount ?? 0,
+          subtasks: []);
+
+      if (widget.task == null) {
+        // ADD NEW TASK
         await _taskService.addTask(newTask);
       } else {
-        // UPDATE WITHIN THE SAME DAY
-        await _taskService.updateTask(widget.task!.id!, newTask, widget.task!);
+        if (widget.task!.dueDate != newTask.dueDate) {
+          // MOVE TO NEW DAY
+          await _taskService.deleteTask(widget.task!);
+          await _taskService.addTask(newTask);
+        } else {
+          // UPDATE WITHIN THE SAME DAY
+          await _taskService.updateTask(widget.task!.id!, newTask, widget.task!);
+        }
       }
     }
 
@@ -149,6 +219,26 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
     if (initialDueDate != null) {
       _dueDate = DateService().getString(initialDueDate!);
     }
+  }
+
+  Future<DateTime?> _selectDate(BuildContext context, DateTime initial) async {
+    final now = DateTime.now();
+    final DateTime? selectedDate = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      initialDatePickerMode: DatePickerMode.day,
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    return selectedDate;
+  }
+
+  Future<TimeOfDay?> _selectTime(BuildContext context, TimeOfDay initial) async {
+    final TimeOfDay? selectedTime = await showTimePicker(
+      context: context,
+      initialTime: initial,
+    );
+    return selectedTime;
   }
 
   @override
@@ -310,7 +400,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                           const Text('Item will be added to the backlog without a due date'),
                         if (_dueDate != null && widget.isBacklog)
                           const Text('Item will be scheduled on the selected date'),
-                        if (_dueDate != null)
+                        if (_dueDate != null && widget.task?.recurringTemplateId == null ?? true)
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
@@ -374,25 +464,5 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
             ],
           )),
     );
-  }
-
-  Future<DateTime?> _selectDate(BuildContext context, DateTime initial) async {
-    final now = DateTime.now();
-    final DateTime? selectedDate = await showDatePicker(
-      context: context,
-      initialDate: initial,
-      initialDatePickerMode: DatePickerMode.day,
-      firstDate: DateTime(now.year - 1),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-    return selectedDate;
-  }
-
-  Future<TimeOfDay?> _selectTime(BuildContext context, TimeOfDay initial) async {
-    final TimeOfDay? selectedTime = await showTimePicker(
-      context: context,
-      initialTime: initial,
-    );
-    return selectedTime;
   }
 }

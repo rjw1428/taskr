@@ -100,27 +100,20 @@ RecurringTask _$RecurringTaskFromJson(Map<String, dynamic> json) =>
       recurrenceType: json['recurrenceType'] as String,
       frequency: (json['frequency'] as num?)?.toInt() ?? 1,
       daysOfWeek: (json['daysOfWeek'] as Map<String, dynamic>?)?.map(
-            (k, e) => MapEntry(k, e as bool),
-          ) ??
-          const {
-            'Su': false,
-            'Mo': false,
-            'Tu': false,
-            'We': false,
-            'Th': false,
-            'Fr': false,
-            'Sa': false
-          },
+        (k, e) => MapEntry(k, e as bool),
+      ),
+      startDate: json['startDate'] == null
+          ? null
+          : DateTime.parse(json['startDate'] as String),
       endDate: json['endDate'] == null
           ? null
           : DateTime.parse(json['endDate'] as String),
       dayOfMonth: (json['dayOfMonth'] as num?)?.toInt() ?? 1,
-    )..startDate = json['startDate'] == null
-        ? null
-        : DateTime.parse(json['startDate'] as String);
+    )..id = json['id'] as String?;
 
 Map<String, dynamic> _$RecurringTaskToJson(RecurringTask instance) =>
     <String, dynamic>{
+      'id': instance.id,
       'recurrenceType': instance.recurrenceType,
       'frequency': instance.frequency,
       'daysOfWeek': instance.daysOfWeek,

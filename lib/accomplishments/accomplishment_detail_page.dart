@@ -19,12 +19,10 @@ class AccomplishmentDetailPage extends StatelessWidget {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const LoadingScreen();
         } else if (snapshot.hasError) {
-          return Center(
-              child: ErrorMessage(message: snapshot.error.toString()));
+          return Center(child: ErrorMessage(message: snapshot.error.toString()));
         } else if (snapshot.hasData) {
           final accomplishments = snapshot.data!;
-          final accomplishmentIndex =
-              accomplishments.indexWhere((acc) => acc.id == accomplishment.id);
+          final accomplishmentIndex = accomplishments.indexWhere((acc) => acc.id == accomplishment.id);
 
           if (accomplishmentIndex == -1) {
             // Accomplishment was deleted, pop the page.
@@ -34,15 +32,12 @@ class AccomplishmentDetailPage extends StatelessWidget {
                 Navigator.pop(context);
               }
             });
-            return const Scaffold(
-                body: SizedBox
-                    .shrink()); // Return an empty scaffold while popping
+            return const Scaffold(body: SizedBox.shrink()); // Return an empty scaffold while popping
           }
 
           final updatedAccomplishment = accomplishments[accomplishmentIndex];
 
-          return _AccomplishmentDetailView(
-              accomplishment: updatedAccomplishment);
+          return _AccomplishmentDetailView(accomplishment: updatedAccomplishment);
         } else {
           return const Center(child: Text('Accomplishment not found.'));
         }
@@ -97,8 +92,7 @@ class _AccomplishmentDetailView extends StatelessWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) =>
-                            AccomplishmentForm(accomplishment: accomplishment),
+                        builder: (context) => AccomplishmentForm(accomplishment: accomplishment),
                       ),
                     );
                   },
@@ -109,15 +103,12 @@ class _AccomplishmentDetailView extends StatelessWidget {
                   icon: const Icon(Icons.delete),
                   onPressed: () async {
                     final navigator = Navigator.of(context);
-                    final accomplishmentProvider =
-                        Provider.of<AccomplishmentProvider>(context,
-                            listen: false);
+                    final accomplishmentProvider = Provider.of<AccomplishmentProvider>(context, listen: false);
                     final confirmed = await showDialog<bool>(
                       context: context,
                       builder: (context) => AlertDialog(
                         title: const Text('Delete Accomplishment'),
-                        content: const Text(
-                            'Are you sure you want to delete this accomplishment?'),
+                        content: const Text('Are you sure you want to delete this accomplishment?'),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.pop(context, false),
@@ -132,8 +123,7 @@ class _AccomplishmentDetailView extends StatelessWidget {
                     );
 
                     if (confirmed == true && accomplishment.id != null) {
-                      accomplishmentProvider
-                          .deleteAccomplishment(accomplishment.id!);
+                      accomplishmentProvider.deleteAccomplishment(accomplishment.id!);
                       if (navigator.canPop()) {
                         navigator.pop(); // Pop detail page after deletion
                       }

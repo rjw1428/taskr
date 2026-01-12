@@ -4,10 +4,12 @@ import 'package:taskr/services/date.service.dart';
 import 'package:taskr/services/models.dart';
 
 class RecurringTaskForm extends StatefulWidget {
-  const RecurringTaskForm({super.key, required this.startDate, required this.onRecurringTaskChanged});
+  const RecurringTaskForm(
+      {super.key, required this.startDate, required this.onRecurringTaskChanged, this.recurringTask});
 
   final String? startDate;
   final void Function(RecurringTask) onRecurringTaskChanged;
+  final RecurringTask? recurringTask;
 
   @override
   State<RecurringTaskForm> createState() => RecurringTaskFormState();
@@ -28,6 +30,8 @@ class RecurringTaskFormState extends State<RecurringTaskForm> {
   };
   DateTime? _endDate;
   final TextEditingController _endDateController = TextEditingController();
+  final TextEditingController _frequencyController = TextEditingController();
+  final TextEditingController _dayOfMonthController = TextEditingController();
   int _dayOfMonth = 1;
   String? _startDate;
 
@@ -35,6 +39,22 @@ class RecurringTaskFormState extends State<RecurringTaskForm> {
   void initState() {
     super.initState();
     _startDate = widget.startDate;
+
+    if (widget.recurringTask != null) {
+      _recurrenceType = widget.recurringTask!.recurrenceType;
+      _frequency = widget.recurringTask!.frequency ?? 1;
+      if (widget.recurringTask!.daysOfWeek != null) {
+        _daysOfWeek.forEach((key, value) {
+          _daysOfWeek[key] = widget.recurringTask!.daysOfWeek![key] ?? false;
+        });
+      }
+      _endDate = widget.recurringTask!.endDate;
+      _dayOfMonth = widget.recurringTask!.dayOfMonth ?? 1;
+    }
+
+    _frequencyController.text = _frequency.toString();
+    _dayOfMonthController.text = _dayOfMonth.toString();
+
     if (_endDate != null) {
       _endDateController.text = DateService().getString(_endDate!);
     }
@@ -43,6 +63,8 @@ class RecurringTaskFormState extends State<RecurringTaskForm> {
   @override
   void dispose() {
     _endDateController.dispose();
+    _frequencyController.dispose();
+    _dayOfMonthController.dispose();
     super.dispose();
   }
 
@@ -51,6 +73,7 @@ class RecurringTaskFormState extends State<RecurringTaskForm> {
       recurrenceType: _recurrenceType,
       frequency: _frequency,
       daysOfWeek: _daysOfWeek,
+      startDate: _startDate != null ? DateService().getDate(_startDate!) : null,
       endDate: _endDate,
       dayOfMonth: _dayOfMonth,
     );
@@ -102,9 +125,9 @@ class RecurringTaskFormState extends State<RecurringTaskForm> {
               SizedBox(
                 width: 50.0,
                 child: TextFormField(
+                  controller: _frequencyController,
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.titleSmall,
-                  initialValue: _frequency.toString(),
                   keyboardType: TextInputType.number,
                   validator: (value) {
                     if (value == null || int.tryParse(value) == null || int.parse(value) < 1) {
@@ -149,7 +172,7 @@ class RecurringTaskFormState extends State<RecurringTaskForm> {
             SizedBox(
               width: 80,
               child: TextFormField(
-                initialValue: _dayOfMonth.toString(),
+                controller: _dayOfMonthController,
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.titleSmall,
                 decoration: const InputDecoration(

@@ -7,6 +7,7 @@ import 'package:taskr/services/services.dart';
 import 'package:taskr/shared/constants.dart';
 import 'package:taskr/task_list/add_task.dart';
 import 'package:taskr/task_list/copy_task.dart';
+import 'package:taskr/task_list/view_series.dart';
 
 class TaskItem extends StatefulWidget {
   final Task task;
@@ -177,9 +178,13 @@ class TaskItemState extends State<TaskItem> {
           } else if (value == "CHECK_TIME") {
             final data = ["userId", AuthService().user!.uid];
             widget.taskService.callRemoteMethod("trainScheduleTest", data);
-          } else if (value == "REMOVE_ALL") {
-            widget.onDelete(widget.task);
-            widget.taskService.removeRecurring(widget.task);
+          } else if (value == "VIEW_SERIES") {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ViewSeries(task: widget.task),
+              ),
+            );
           }
         },
         itemBuilder: (context) => [
@@ -200,6 +205,16 @@ class TaskItemState extends State<TaskItem> {
                       Padding(padding: EdgeInsets.only(left: 8), child: Text('Edit'))
                     ],
                   )),
+              if (widget.task.recurringTemplateId != null) ...[
+                const PopupMenuItem(
+                    value: "VIEW_SERIES",
+                    child: Row(
+                      children: [
+                        Icon(FontAwesomeIcons.eye),
+                        Padding(padding: EdgeInsets.only(left: 8), child: Text('View Series'))
+                      ],
+                    )),
+              ],
               const PopupMenuItem(
                   value: "COPY",
                   child: Row(
@@ -208,7 +223,6 @@ class TaskItemState extends State<TaskItem> {
                       Padding(padding: EdgeInsets.only(left: 8), child: Text('Copy'))
                     ],
                   )),
-              // // ON PUSH TASK
               const PopupMenuItem(
                   value: "REMOVE",
                   child: Row(
@@ -217,17 +231,8 @@ class TaskItemState extends State<TaskItem> {
                       Padding(padding: EdgeInsets.only(left: 8), child: Text('Remove'))
                     ],
                   )),
-              if (widget.task.recurringTemplateId != null)
-                const PopupMenuItem(
-                    value: "REMOVE_ALL",
-                    child: Row(
-                      children: [
-                        Icon(FontAwesomeIcons.skullCrossbones),
-                        // Icon(FontAwesomeIcons.triangleExclamation),
-                        Padding(padding: EdgeInsets.only(left: 8), child: Text('Remove All'))
-                      ],
-                    )),
-              if (widget.task.title.trim() == 'Work Train' &&
+              if ((widget.task.title.trim().toLowerCase() == 'work train' ||
+                      widget.task.title.trim().toLowerCase() == 'train home') &&
                   !widget.task.completed &&
                   !isBacklog &&
                   widget.task.startTime != null &&

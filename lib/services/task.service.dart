@@ -7,6 +7,7 @@ import 'package:taskr/services/models.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:taskr/shared/shared.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:rrule/rrule.dart';
 
 class TaskService {
   final _db = FirebaseFirestore.instance;
@@ -280,27 +281,165 @@ class TaskService {
   }
 
   Future<String?> saveRecurringTask(RecurringTask template) async {
-    print(template.toJson());
     final user = AuthService().user!;
     try {
       final resp = await recurringTempateCollection(user.uid).add(template.toJson());
-      return resp.id;
+      final templateId = resp.id;
+      return templateId;
     } catch (e) {
       debugPrint('$e');
       return null;
     }
   }
 
-  Future<void> removeRecurring(Task task) async {
+  Future _addRecurringTask(Task task, List<DateTime> instances, String templateId) async {
+    for (final dueDate in instances) {
+      await addTask(
+        task.copyWith(
+          dueDate: DateService().getString(dueDate),
+          recurringTemplateId: templateId,
+        ),
+      );
+    }
+  }
+
+  Future<RecurringTask> getRecurringTemplate(String templateId) async {
+    final user = AuthService().user!;
+    final snap = await recurringTempateCollection(user.uid).doc(templateId).get();
+    final data = snap.data();
+    if (data == null) {
+      throw Exception('Recurring template not found');
+    }
+    return RecurringTask.fromJson(data);
+  }
+
+  Future<void> updateRecurringTemplate(Task task, RecurringTask updatedTemplate) async {
     final user = AuthService().user!;
     try {
-      await recurringTempateCollection(user.uid).doc(task.recurringTemplateId).delete();
+      final existingTemplate = await getRecurringTemplate(task.recurringTemplateId!);
 
-      // SELECT ALL TASKS WITH THE GIVEN recurringTemplateId and delete them
-      // _db.collection('todos').doc('user').
+      // Remove & Create new template
+      await deleteRecurringTemplate(task, existingTemplate);
+      final newTemplate = await recurringTempateCollection(user.uid).add(updatedTemplate.toJson());
+
+      // Generate and add new task instances based on the updated template
+      final instances = _generateRecurringTaskInstances(updatedTemplate);
+      await _addRecurringTask(task, instances, newTemplate.id);
     } catch (e) {
-      debugPrint('$e');
-      return null;
+      debugPrint('Error updating recurring template: $e');
+      rethrow;
     }
   }
+
+  Future<void> _deleteRecurringInstances(String templateId, RecurringTask template) async {
+    final user = AuthService().user!;
+
+    final instances = _generateRecurringTaskInstances(template);
+    for (var instance in instances) {
+      final dateStr = DateService().getString(instance);
+      final tasksSnapshot =
+          await taskCollection(user.uid, dateStr).where('recurringTemplateId', isEqualTo: templateId).get();
+
+      for (final doc in tasksSnapshot.docs) {
+        var data = doc.data();
+        data['id'] = doc.id;
+        final task = Task.fromJson(data);
+        if (!task.completed) {
+          final taskId = doc.id;
+          await _db.collection('todos').doc(user.uid).collection("tasks").doc(dateStr).update({
+            "taskOrder": FieldValue.arrayRemove([taskId])
+          });
+          await doc.reference.delete();
+        }
+      }
+    }
+  }
+
+  List<DateTime> _generateRecurringTaskInstances(RecurringTask template) {
+    final user = AuthService().user!;
+    final type = getRecurrenceFrequency(template.recurrenceType);
+    final untilDate = template.endDate?.toUtc();
+    RecurrenceRule rule;
+
+    // Determine the start date for recurrence generation
+    // If the template has a startDate, use it. Otherwise, use now.
+    final DateTime generationStartDate =
+        template.startDate != null ? template.startDate!.toUtc() : DateTime.now().toUtc();
+    debugPrint('generationStartDate: $generationStartDate');
+
+    // Calculate one month from the generation start date
+    final DateTime untilDateForGeneration = DateTime.utc(
+      generationStartDate.year,
+      generationStartDate.month + 1,
+      generationStartDate.day,
+      generationStartDate.hour,
+      generationStartDate.minute,
+      generationStartDate.second,
+    );
+
+    switch (template.recurrenceType) {
+      case 'Weekly':
+        rule = RecurrenceRule(
+          frequency: type,
+          interval: template.frequency ?? 1,
+          until: untilDate,
+          byWeekDays: getWeeklyRecurrenceList(template.daysOfWeek!),
+        );
+        break;
+      case 'Monthly':
+        rule = RecurrenceRule(
+          frequency: type,
+          interval: template.frequency ?? 1,
+          until: untilDate,
+          byMonthDays: [template.dayOfMonth!],
+        );
+        break;
+      default:
+        rule = RecurrenceRule(
+          frequency: type,
+          interval: template.frequency ?? 1,
+          until: untilDate,
+        );
+    }
+
+    final instances = rule
+        .getInstances(start: generationStartDate)
+        .where((instance) => instance.isBefore(untilDateForGeneration)) // Filter instances within the next month
+        .toList();
+    debugPrint('Generated ${instances.length} instances for the next month.');
+    return instances;
+  }
+
+  Future<void> deleteRecurringTemplate(Task task, RecurringTask template) async {
+    final user = AuthService().user!;
+    try {
+      await _deleteRecurringInstances(task.recurringTemplateId!, template);
+      await recurringTempateCollection(user.uid).doc(task.recurringTemplateId).delete();
+    } catch (e) {
+      debugPrint('$e');
+    }
+  }
+}
+
+Frequency getRecurrenceFrequency(String templateRecurrance) {
+  if (templateRecurrance == 'Daily') return Frequency.daily;
+  if (templateRecurrance == 'Weekly') return Frequency.weekly;
+  if (templateRecurrance == 'Monthly') return Frequency.monthly;
+  if (templateRecurrance == 'Yearly') return Frequency.yearly;
+  throw Exception('Invalid recurrence type');
+}
+
+List<ByWeekDayEntry> getWeeklyRecurrenceList(Map<String, bool> daysOfWeek) {
+  return daysOfWeek.entries.fold<List<ByWeekDayEntry>>([], (acc, entry) {
+    if (!entry.value) return acc;
+
+    if (entry.key == 'Su') acc.add(ByWeekDayEntry(DateTime.sunday));
+    if (entry.key == 'Mo') acc.add(ByWeekDayEntry(DateTime.monday));
+    if (entry.key == 'Tu') acc.add(ByWeekDayEntry(DateTime.tuesday));
+    if (entry.key == 'We') acc.add(ByWeekDayEntry(DateTime.wednesday));
+    if (entry.key == 'Th') acc.add(ByWeekDayEntry(DateTime.thursday));
+    if (entry.key == 'Fr') acc.add(ByWeekDayEntry(DateTime.friday));
+    if (entry.key == 'Sa') acc.add(ByWeekDayEntry(DateTime.saturday));
+    return acc;
+  });
 }

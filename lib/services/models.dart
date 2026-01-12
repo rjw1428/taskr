@@ -85,22 +85,23 @@ class Task {
     List<String>? subtasks,
     Effort? priority,
     int? pushCount,
+    String? recurringTemplateId,
   }) {
     return Task(
-      id: id ?? this.id,
-      added: added ?? this.added,
-      modified: modified ?? this.modified,
-      title: title ?? this.title,
-      description: description ?? this.description,
-      completed: completed ?? this.completed,
-      tags: tags ?? this.tags,
-      dueDate: dueDate ?? this.dueDate,
-      startTime: startTime ?? this.startTime,
-      endTime: endTime ?? this.endTime,
-      subtasks: subtasks ?? this.subtasks,
-      priority: priority ?? this.priority,
-      pushCount: pushCount ?? this.pushCount,
-    );
+        id: id ?? this.id,
+        added: added ?? this.added,
+        modified: modified ?? this.modified,
+        title: title ?? this.title,
+        description: description ?? this.description,
+        completed: completed ?? this.completed,
+        tags: tags ?? this.tags,
+        dueDate: dueDate ?? this.dueDate,
+        startTime: startTime ?? this.startTime,
+        endTime: endTime ?? this.endTime,
+        subtasks: subtasks ?? this.subtasks,
+        priority: priority ?? this.priority,
+        pushCount: pushCount ?? this.pushCount,
+        recurringTemplateId: recurringTemplateId ?? this.recurringTemplateId);
   }
 }
 
@@ -124,6 +125,7 @@ class Tag {
 
 @JsonSerializable()
 class RecurringTask {
+  String? id;
   String recurrenceType;
   int? frequency;
   Map<String, bool>? daysOfWeek;
@@ -135,10 +137,32 @@ class RecurringTask {
     required this.recurrenceType,
     this.frequency = 1,
     this.daysOfWeek,
+    this.startDate,
     this.endDate,
     this.dayOfMonth = 1,
   });
 
   factory RecurringTask.fromJson(Map<String, dynamic> json) => _$RecurringTaskFromJson(json);
   Map<String, dynamic> toJson() => _$RecurringTaskToJson(this);
+
+  RecurringTask copyWith({
+    String? id,
+    String? recurrenceType,
+    int? frequency,
+    Map<String, bool>? daysOfWeek,
+    DateTime? startDate,
+    DateTime? endDate,
+    int? dayOfMonth,
+  }) {
+    final copy = RecurringTask(
+      recurrenceType: recurrenceType ?? this.recurrenceType,
+      frequency: frequency ?? this.frequency,
+      daysOfWeek: daysOfWeek ?? this.daysOfWeek,
+      startDate: startDate ?? this.startDate,
+      endDate: endDate ?? this.endDate,
+      dayOfMonth: dayOfMonth ?? this.dayOfMonth,
+    );
+    copy.id = id ?? this.id;
+    return copy;
+  }
 }
