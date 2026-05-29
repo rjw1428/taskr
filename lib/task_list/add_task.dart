@@ -33,6 +33,8 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   bool _isRecurring = false;
   bool _isMultiDay = false;
   String? _multiDayEndDate;
+  String? _multiDayStartDate;
+  String? _reminderTime;
   RecurringTask? _recurringTaskTemplate;
   // List<String> _subTasks = const [];
   DateTime? initialDueDate;
@@ -66,6 +68,29 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
       if (entry.key == 'Sa') acc.add(ByWeekDayEntry(DateTime.saturday));
       return acc;
     });
+  }
+
+  String _formatReminder(String isoString) {
+    final dt = DateTime.parse(isoString);
+    final month = dt.month.toString().padLeft(2, '0');
+    final day = dt.day.toString().padLeft(2, '0');
+    final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final period = dt.hour >= 12 ? 'PM' : 'AM';
+    return '$month/$day ${hour}:$minute $period';
+  }
+
+  Future<void> _loadMultiDayEndDate() async {
+    final group = await _taskService.getMultiDayGroup(
+      widget.task!.multiDayGroupId!,
+      knownDate: widget.task!.dueDate!,
+    );
+    if (group.isNotEmpty && mounted) {
+      setState(() {
+        _multiDayStartDate = group.first.dueDate;
+        _multiDayEndDate = group.last.dueDate;
+      });
+    }
   }
 
   void _submit() async {
@@ -214,6 +239,34 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
         );
         Navigator.of(context).pop();
       }
+    } else if (widget.task != null && widget.task!.isMultiDay && _multiDayEndDate != null) {
+      final groupId = widget.task!.multiDayGroupId!;
+      await _taskService.updateMultiDayEndDate(groupId, _multiDayEndDate!, widget.task!.copyWith(
+        title: _title.value.text.trim(),
+        description: _description.value.text.trim(),
+        priority: _priority,
+        tags: _selectedTags,
+      ));
+
+      // Also update all existing days with the edited title/description/priority/tags
+      final group = await _taskService.getMultiDayGroup(groupId, knownDate: widget.task!.dueDate!);
+      for (final task in group) {
+        await _taskService.updateTaskByKey({
+          'title': _title.value.text.trim(),
+          'description': _description.value.text.trim(),
+          'priority': _priority.name,
+          'tags': _selectedTags.map((t) => t.id).toList(),
+        }, task);
+      }
+
+      setState(() => apiPending = false);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Multi-day task updated')),
+        );
+        Navigator.of(context).pop();
+      }
     } else {
       Task newTask = Task(
           id: widget.task?.id,
@@ -232,16 +285,38 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
           goalId: widget.task?.goalId,
           feedback: widget.task?.feedback,
           multiDayGroupId: widget.task?.multiDayGroupId,
-          multiDayPosition: widget.task?.multiDayPosition);
+          multiDayPosition: widget.task?.multiDayPosition,
+          reminderTime: _reminderTime,
+          reminderTaskName: widget.task?.reminderTaskName);
 
       if (widget.task == null) {
-        await _taskService.addTask(newTask);
+        final taskId = await _taskService.addTask(newTask);
+        if (_reminderTime != null) {
+          newTask = newTask.copyWith(id: taskId);
+          await ReminderService().scheduleReminder(newTask);
+        }
       } else {
         if (widget.task!.dueDate != newTask.dueDate) {
+          if (widget.task!.reminderTaskName != null) {
+            await ReminderService().cancelReminder(widget.task!);
+          }
           await _taskService.deleteTask(widget.task!);
           await _taskService.addTask(newTask);
+          if (_reminderTime != null) {
+            await ReminderService().scheduleReminder(newTask);
+          }
         } else {
           await _taskService.updateTask(widget.task!.id!, newTask, widget.task!);
+          final oldReminder = widget.task!.reminderTime;
+          if (oldReminder != _reminderTime) {
+            if (_reminderTime == null) {
+              await ReminderService().cancelReminder(widget.task!);
+            } else if (oldReminder == null) {
+              await ReminderService().scheduleReminder(newTask);
+            } else {
+              await ReminderService().updateReminder(widget.task!, _reminderTime!);
+            }
+          }
         }
       }
       setState(() {
@@ -303,6 +378,11 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
       _completed = widget.task!.completed;
       initialPriority = widget.task!.priority;
       _selectedTags = widget.task!.tags;
+      _reminderTime = widget.task!.reminderTime;
+      if (widget.task!.isMultiDay) {
+        _isMultiDay = true;
+        _loadMultiDayEndDate();
+      }
     }
 
     initialDueDate = _dueDate == null ? DateService().getSelectedDate() : DateService().getDate(widget.task!.dueDate!);
@@ -490,69 +570,116 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                           const Text('Item will be added to the backlog without a due date'),
                         if (_dueDate != null && widget.isBacklog)
                           const Text('Item will be scheduled on the selected date'),
-                        if (_dueDate != null && (widget.task?.recurringTemplateId == null ?? true) && !_isMultiDay)
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                        if (_dueDate != null)
+                          ExpansionTile(
+                            title: const Text('Advanced'),
+                            initiallyExpanded: _isRecurring || _isMultiDay || _reminderTime != null,
                             children: [
-                              Checkbox(
-                                value: _isRecurring,
-                                onChanged: (bool? value) {
-                                  setState(() {
-                                    _isRecurring = value ?? false;
-                                  });
-                                },
-                              ),
-                              const Text('Recurring'),
-                            ],
-                          ),
-                        if (_dueDate != null && widget.task == null && !_isRecurring)
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Checkbox(
-                                value: _isMultiDay,
-                                onChanged: (bool? value) {
-                                  setState(() {
-                                    _isMultiDay = value ?? false;
-                                    if (!_isMultiDay) _multiDayEndDate = null;
-                                  });
-                                },
-                              ),
-                              const Text('Multi-day'),
-                            ],
-                          ),
-                        if (_isMultiDay && _dueDate != null)
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              ElevatedButton(
-                                onPressed: () async {
-                                  final startDate = DateService().getDate(_dueDate!);
-                                  final date = await _selectDate(context, startDate.add(const Duration(days: 1)));
-                                  if (date == null || !date.isAfter(startDate)) return;
-                                  setState(() => _multiDayEndDate = DateService().getString(date));
-                                },
-                                child: Text(
-                                  _multiDayEndDate ?? 'Set end date',
-                                  style: Theme.of(context).textTheme.titleSmall,
+                              if (widget.task?.recurringTemplateId == null && !_isMultiDay)
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Checkbox(
+                                      value: _isRecurring,
+                                      onChanged: (bool? value) {
+                                        setState(() {
+                                          _isRecurring = value ?? false;
+                                        });
+                                      },
+                                    ),
+                                    const Text('Recurring'),
+                                  ],
                                 ),
+                              if ((widget.task == null || widget.task!.isMultiDay) && !_isRecurring)
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Checkbox(
+                                      value: _isMultiDay,
+                                      onChanged: widget.task?.isMultiDay == true
+                                          ? null
+                                          : (bool? value) {
+                                              setState(() {
+                                                _isMultiDay = value ?? false;
+                                                if (!_isMultiDay) _multiDayEndDate = null;
+                                              });
+                                            },
+                                    ),
+                                    const Text('Multi-day'),
+                                  ],
+                                ),
+                              if (_isMultiDay)
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    ElevatedButton(
+                                      onPressed: () async {
+                                        final startStr = _multiDayStartDate ?? _dueDate!;
+                                        final startDate = DateService().getDate(startStr);
+                                        final initial = _multiDayEndDate != null
+                                            ? DateService().getDate(_multiDayEndDate!)
+                                            : startDate.add(const Duration(days: 1));
+                                        final date = await _selectDate(context, initial);
+                                        if (date == null || !date.isAfter(startDate)) return;
+                                        setState(() => _multiDayEndDate = DateService().getString(date));
+                                      },
+                                      child: Text(
+                                        _multiDayEndDate ?? 'Set end date',
+                                        style: Theme.of(context).textTheme.titleSmall,
+                                      ),
+                                    ),
+                                    if (_multiDayEndDate != null && widget.task?.isMultiDay != true)
+                                      IconButton(
+                                        onPressed: () => setState(() => _multiDayEndDate = null),
+                                        icon: const Icon(FontAwesomeIcons.xmark),
+                                      ),
+                                  ],
+                                ),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  ElevatedButton(
+                                    onPressed: () async {
+                                      final defaultDate = DateService().getDate(_dueDate!);
+                                      final date = await _selectDate(context, _reminderTime != null
+                                          ? DateTime.parse(_reminderTime!)
+                                          : defaultDate);
+                                      if (date == null) return;
+                                      final time = await _selectTime(
+                                        context,
+                                        _reminderTime != null
+                                            ? TimeOfDay.fromDateTime(DateTime.parse(_reminderTime!))
+                                            : DateService().getRoundedTime(TimeOfDay.now()),
+                                      );
+                                      if (time == null) return;
+                                      final dt = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+                                      setState(() => _reminderTime = dt.toIso8601String());
+                                    },
+                                    child: Text(
+                                      _reminderTime != null
+                                          ? _formatReminder(_reminderTime!)
+                                          : 'Set reminder',
+                                      style: Theme.of(context).textTheme.titleSmall,
+                                    ),
+                                  ),
+                                  if (_reminderTime != null)
+                                    IconButton(
+                                      onPressed: () => setState(() => _reminderTime = null),
+                                      icon: const Icon(FontAwesomeIcons.xmark),
+                                    ),
+                                ],
                               ),
-                              if (_multiDayEndDate != null)
-                                IconButton(
-                                  onPressed: () => setState(() => _multiDayEndDate = null),
-                                  icon: const Icon(FontAwesomeIcons.xmark),
+                              if (_isRecurring)
+                                RecurringTaskForm(
+                                  key: _recurringTaskFormKey,
+                                  startDate: _dueDate,
+                                  onRecurringTaskChanged: (recurringTask) {
+                                    setState(() {
+                                      _recurringTaskTemplate = recurringTask;
+                                    });
+                                  },
                                 ),
                             ],
-                          ),
-                        if (_isRecurring && _dueDate != null)
-                          RecurringTaskForm(
-                            key: _recurringTaskFormKey,
-                            startDate: _dueDate,
-                            onRecurringTaskChanged: (recurringTask) {
-                              setState(() {
-                                _recurringTaskTemplate = recurringTask;
-                              });
-                            },
                           ),
                         if (_allTags.isNotEmpty)
                           MultiSelectDialogField(

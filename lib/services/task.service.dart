@@ -255,6 +255,9 @@ class TaskService {
     if (user == null) {
       throw "No user logged in when deleting task";
     } else {
+      if (task.reminderTaskName != null) {
+        await ReminderService().cancelReminder(task);
+      }
       await _db.collection('todos').doc(user.uid).collection("tasks").doc(date).set({
         "taskOrder": FieldValue.arrayRemove([taskId])
       }, SetOptions(merge: true));
@@ -297,6 +300,86 @@ class TaskService {
     await addTask(task);
     if (decrementScore) {
       await PerformanceService().decrementScore(user.uid, 1);
+    }
+  }
+
+  Future<List<Task>> getMultiDayGroup(String groupId, {required String knownDate}) async {
+    final user = AuthService().user;
+    if (user == null) throw 'No user logged in';
+    final anchor = DateService().getDate(knownDate);
+    final results = <Task>[];
+
+    Future<Task?> checkDate(DateTime date) async {
+      final dateStr = DateService().getString(date);
+      final snap = await taskCollection(user.uid, dateStr)
+          .where('multiDayGroupId', isEqualTo: groupId)
+          .limit(1)
+          .get();
+      if (snap.docs.isEmpty) return null;
+      final data = snap.docs.first.data();
+      data['id'] = snap.docs.first.id;
+      return Task.fromJson(data);
+    }
+
+    // Search backward from anchor to find the start
+    for (int i = 0; i <= 30; i++) {
+      final task = await checkDate(anchor.subtract(Duration(days: i)));
+      if (task == null) break;
+      results.insert(0, task);
+    }
+    // Search forward from anchor+1 to find the end
+    for (int i = 1; i <= 30; i++) {
+      final task = await checkDate(anchor.add(Duration(days: i)));
+      if (task == null) break;
+      results.add(task);
+    }
+
+    return results;
+  }
+
+  Future<void> updateMultiDayEndDate(String groupId, String newEndDate, Task template) async {
+    final group = await getMultiDayGroup(groupId, knownDate: template.dueDate!);
+    if (group.isEmpty) return;
+
+    final startDate = DateService().getDate(group.first.dueDate!);
+    final endDate = DateService().getDate(newEndDate);
+    if (!endDate.isAfter(startDate)) return;
+
+    final newDayCount = endDate.difference(startDate).inDays + 1;
+    final existingDates = {for (final t in group) t.dueDate!: t};
+
+    for (int i = 0; i < newDayCount; i++) {
+      final date = startDate.add(Duration(days: i));
+      final dateStr = DateService().getString(date);
+      final position = i == 0 ? 'start' : (i == newDayCount - 1 ? 'end' : 'middle');
+
+      if (existingDates.containsKey(dateStr)) {
+        final existing = existingDates[dateStr]!;
+        if (existing.multiDayPosition != position) {
+          await updateTaskByKey({'multiDayPosition': position}, existing);
+        }
+        existingDates.remove(dateStr);
+      } else {
+        final task = Task(
+          title: template.title,
+          description: template.description,
+          priority: template.priority,
+          completed: false,
+          dueDate: dateStr,
+          added: DateTime.now().millisecondsSinceEpoch,
+          tags: template.tags,
+          pushCount: 0,
+          subtasks: [],
+          multiDayGroupId: groupId,
+          multiDayPosition: position,
+        );
+        await addTask(task);
+      }
+    }
+
+    // Delete days that are now beyond the new end date
+    for (final leftover in existingDates.values) {
+      await deleteTask(leftover);
     }
   }
 

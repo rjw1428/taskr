@@ -233,6 +233,8 @@ class Task {
   String? feedback;
   String? multiDayGroupId;
   String? multiDayPosition;
+  String? reminderTime;
+  String? reminderTaskName;
   List<String> subtasks;
   Effort priority;
   int pushCount;
@@ -262,6 +264,8 @@ class Task {
       this.feedback,
       this.multiDayGroupId,
       this.multiDayPosition,
+      this.reminderTime,
+      this.reminderTaskName,
       this.pushCount = 0,
       this.subtasks = const []});
 
@@ -296,6 +300,8 @@ class Task {
     String? feedback,
     String? multiDayGroupId,
     String? multiDayPosition,
+    String? reminderTime,
+    String? reminderTaskName,
   }) {
     return Task(
         id: id ?? this.id,
@@ -317,7 +323,9 @@ class Task {
         calendarEventId: calendarEventId ?? this.calendarEventId,
         feedback: feedback ?? this.feedback,
         multiDayGroupId: multiDayGroupId ?? this.multiDayGroupId,
-        multiDayPosition: multiDayPosition ?? this.multiDayPosition);
+        multiDayPosition: multiDayPosition ?? this.multiDayPosition,
+        reminderTime: reminderTime ?? this.reminderTime,
+        reminderTaskName: reminderTaskName ?? this.reminderTaskName);
   }
 }
 

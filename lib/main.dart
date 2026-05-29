@@ -160,6 +160,28 @@ class _MyAppState extends State<MyApp> {
     );
   }
 
+  void _showReminderDialog(RemoteMessage message) {
+    final context = navigatorKey.currentContext;
+    if (context == null || !mounted) return;
+
+    final data = message.data;
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Reminder'),
+          content: Text(data['title'] ?? 'You have a task reminder'),
+          actions: [
+            TextButton(
+              child: const Text('Dismiss'),
+              onPressed: () => Navigator.of(dialogContext).pop(),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _showSystemNotification(RemoteNotification notification) {
     flutterLocalNotificationsPlugin.show(
       notification.hashCode,
@@ -227,7 +249,9 @@ class _MyAppState extends State<MyApp> {
       debugPrint('Got a message whilst in the foreground!');
       debugPrint('Message data: ${message.data}');
 
-      if (message.data.containsKey('actions')) {
+      if (message.data['type'] == 'task_reminder') {
+        _showReminderDialog(message);
+      } else if (message.data.containsKey('actions')) {
         _showWindTaskDialog(message);
       } else {
         final notification = message.notification;

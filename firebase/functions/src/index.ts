@@ -5,6 +5,7 @@ import {onRequest, onCall, HttpsError} from "firebase-functions/v2/https";
 import { Message } from "firebase-admin/lib/messaging/messaging-api";
 import {defineSecret} from "firebase-functions/params";
 import {google} from "googleapis";
+import {CloudTasksClient} from "@google-cloud/tasks";
 
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 const oauthClientSecret = defineSecret("GOOGLE_OAUTH_CLIENT_SECRET");
@@ -943,4 +944,129 @@ export const importCalendarEventsTest = onRequest(
     }
   }
 );
+
+// --- Task Reminder Functions ---
+
+const CLOUD_TASKS_QUEUE = "task-reminders";
+const CLOUD_TASKS_LOCATION = "us-central1";
+const CLOUD_TASKS_PROJECT = "taskr-1428";
+
+const tasksClient = new CloudTasksClient();
+
+export const scheduleReminder = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Must be logged in");
+
+  const {taskId, taskDate, reminderTime, title} = request.data;
+  if (!taskId || !taskDate || !reminderTime || !title) {
+    throw new HttpsError("invalid-argument", "Missing required fields");
+  }
+
+  const scheduledDate = new Date(reminderTime);
+  if (isNaN(scheduledDate.getTime())) {
+    throw new HttpsError("invalid-argument", "Invalid reminderTime");
+  }
+
+  const queuePath = tasksClient.queuePath(
+    CLOUD_TASKS_PROJECT,
+    CLOUD_TASKS_LOCATION,
+    CLOUD_TASKS_QUEUE
+  );
+
+  const deliverUrl = `https://${CLOUD_TASKS_LOCATION}-${CLOUD_TASKS_PROJECT}.cloudfunctions.net/deliverReminder`;
+
+  const payload = JSON.stringify({uid, taskId, taskDate, title});
+  const scheduleTimestamp = Math.floor(scheduledDate.getTime() / 1000);
+
+  const [task] = await tasksClient.createTask({
+    parent: queuePath,
+    task: {
+      httpRequest: {
+        httpMethod: "POST",
+        url: deliverUrl,
+        headers: {"Content-Type": "application/json"},
+        body: Buffer.from(payload).toString("base64"),
+      },
+      scheduleTime: {seconds: scheduleTimestamp},
+    },
+  });
+
+  const taskName = task.name!;
+  logger.info(`Scheduled reminder for task ${taskId} at ${reminderTime}: ${taskName}`);
+
+  return {reminderTaskName: taskName};
+});
+
+export const cancelReminder = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Must be logged in");
+
+  const {reminderTaskName} = request.data;
+  if (!reminderTaskName) {
+    throw new HttpsError("invalid-argument", "Missing reminderTaskName");
+  }
+
+  try {
+    await tasksClient.deleteTask({name: reminderTaskName});
+    logger.info(`Cancelled reminder: ${reminderTaskName}`);
+  } catch (e: any) {
+    if (e.code === 5) {
+      logger.info(`Reminder already executed or not found: ${reminderTaskName}`);
+    } else {
+      throw e;
+    }
+  }
+
+  return {success: true};
+});
+
+export const deliverReminder = onRequest(async (req, res) => {
+  try {
+    const {uid, taskId, taskDate, title} = req.body;
+    if (!uid || !taskId || !taskDate || !title) {
+      res.status(400).send("Missing required fields");
+      return;
+    }
+
+    const taskDoc = await admin.firestore()
+      .collection("todos").doc(uid)
+      .collection("tasks").doc(taskDate)
+      .collection("items").doc(taskId)
+      .get();
+
+    if (!taskDoc.exists) {
+      logger.info(`Task ${taskId} no longer exists; skipping reminder`);
+      res.status(200).send("Task deleted; skipped");
+      return;
+    }
+
+    const fcmToken = await getUserFcmToken(uid);
+    if (!fcmToken) {
+      logger.warn(`No FCM token for user ${uid}`);
+      res.status(200).send("No FCM token");
+      return;
+    }
+
+    const message: Message = {
+      token: fcmToken,
+      notification: {
+        title: "Reminder",
+        body: title,
+      },
+      data: {
+        type: "task_reminder",
+        taskId,
+        taskDate,
+        title,
+      },
+    };
+
+    await admin.messaging().send(message);
+    logger.info(`Reminder delivered for task ${taskId} to user ${uid}`);
+    res.status(200).send("Reminder sent");
+  } catch (e) {
+    logger.error("Error delivering reminder:", e);
+    res.status(500).send("Error delivering reminder");
+  }
+});
 

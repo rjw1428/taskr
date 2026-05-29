@@ -160,6 +160,8 @@ Task _$TaskFromJson(Map<String, dynamic> json) => Task(
       feedback: json['feedback'] as String?,
       multiDayGroupId: json['multiDayGroupId'] as String?,
       multiDayPosition: json['multiDayPosition'] as String?,
+      reminderTime: json['reminderTime'] as String?,
+      reminderTaskName: json['reminderTaskName'] as String?,
       pushCount: (json['pushCount'] as num?)?.toInt() ?? 0,
       subtasks: (json['subtasks'] as List<dynamic>?)
               ?.map((e) => e as String)
@@ -186,6 +188,8 @@ Map<String, dynamic> _$TaskToJson(Task instance) => <String, dynamic>{
       'feedback': instance.feedback,
       'multiDayGroupId': instance.multiDayGroupId,
       'multiDayPosition': instance.multiDayPosition,
+      'reminderTime': instance.reminderTime,
+      'reminderTaskName': instance.reminderTaskName,
       'subtasks': instance.subtasks,
       'priority': _$EffortEnumMap[instance.priority]!,
       'pushCount': instance.pushCount,
