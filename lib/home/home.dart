@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:taskr/accomplishments/accomplishment_form.dart';
+import 'package:taskr/goals/goal_form.dart';
 import 'package:taskr/login/login.dart';
 import 'package:taskr/routing.dart';
 import 'package:taskr/services/services.dart';
@@ -17,6 +19,37 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
 
+  void _showDividerDialog(bool isBacklog) async {
+    HapticFeedback.mediumImpact();
+    final controller = TextEditingController();
+    final label = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add Divider'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: 'Label (optional)'),
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          onSubmitted: (_) => Navigator.of(context).pop(controller.text),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+    if (label == null) return;
+    final date = isBacklog ? null : DateService().getString(DateService().getSelectedDate());
+    await TaskService().addDivider(label, date);
+  }
+
   void _onItemTapped(int index) {
     if (index == _selectedIndex) {
       return;
@@ -31,13 +64,16 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget? _buildFloatingActionButton() {
     switch (_selectedIndex) {
       case 0:
-        return FloatingActionButton(
-          child: const Icon(FontAwesomeIcons.plus, size: 20),
-          onPressed: () => showModalBottomSheet(
-            isScrollControlled: true,
-            useSafeArea: true,
-            context: context,
-            builder: (BuildContext context) => const AddTaskScreen(isBacklog: false),
+        return GestureDetector(
+          onLongPress: () => _showDividerDialog(false),
+          child: FloatingActionButton(
+            child: const Icon(FontAwesomeIcons.plus, size: 20),
+            onPressed: () => showModalBottomSheet(
+              isScrollControlled: true,
+              useSafeArea: true,
+              context: context,
+              builder: (BuildContext context) => const AddTaskScreen(isBacklog: false),
+            ),
           ),
         );
       case 1:
@@ -59,18 +95,21 @@ class _HomeScreenState extends State<HomeScreen> {
             isScrollControlled: true,
             useSafeArea: true,
             context: context,
-            builder: (BuildContext context) => const Text("Add a goal"),
+            builder: (BuildContext context) => const GoalForm(),
           ),
         );
       case 3:
-        return FloatingActionButton(
-          backgroundColor: Colors.red,
-          child: const Icon(FontAwesomeIcons.plus, size: 20),
-          onPressed: () => showModalBottomSheet(
-            isScrollControlled: true,
-            useSafeArea: true,
-            context: context,
-            builder: (BuildContext context) => const AddTaskScreen(isBacklog: true),
+        return GestureDetector(
+          onLongPress: () => _showDividerDialog(true),
+          child: FloatingActionButton(
+            backgroundColor: Colors.red,
+            child: const Icon(FontAwesomeIcons.plus, size: 20),
+            onPressed: () => showModalBottomSheet(
+              isScrollControlled: true,
+              useSafeArea: true,
+              context: context,
+              builder: (BuildContext context) => const AddTaskScreen(isBacklog: true),
+            ),
           ),
         );
       default:

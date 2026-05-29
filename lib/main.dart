@@ -6,12 +6,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart'
+    as local_notifications;
 import 'package:provider/provider.dart';
 import 'package:taskr/firebase_options.dart';
 import 'package:taskr/home/home.dart';
 import 'package:taskr/services/accomplishment.provider.dart';
 import 'package:taskr/services/auth.service.dart';
-import 'package:taskr/services/date.service.dart';
+import 'package:taskr/services/goal.service.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/tag.provider.dart';
 import 'package:taskr/about/about.dart';
@@ -23,6 +25,18 @@ import 'package:taskr/services/task.service.dart';
 // Global navigator key
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+final local_notifications.FlutterLocalNotificationsPlugin
+    flutterLocalNotificationsPlugin =
+    local_notifications.FlutterLocalNotificationsPlugin();
+
+const local_notifications.AndroidNotificationChannel _fcmChannel =
+    local_notifications.AndroidNotificationChannel(
+  'fcm_default_channel',
+  'Taskr Notifications',
+  description: 'Notifications from Taskr',
+  importance: local_notifications.Importance.high,
+);
+
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   debugPrint('Handling a background message: ${message.data}');
@@ -31,9 +45,13 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    debugPrint('Firebase already initialized: $e');
+  }
 
   // if (kDebugMode) {
   //   try {
@@ -47,6 +65,19 @@ void main() async {
 
   // Handle background messages
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+  // Initialize local notifications for foreground display
+  if (!kIsWeb) {
+    const androidSettings =
+        local_notifications.AndroidInitializationSettings('@mipmap/ic_launcher');
+    await flutterLocalNotificationsPlugin.initialize(
+      const local_notifications.InitializationSettings(android: androidSettings),
+    );
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            local_notifications.AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(_fcmChannel);
+  }
 
   runApp(const MyApp());
 }
@@ -129,6 +160,24 @@ class _MyAppState extends State<MyApp> {
     );
   }
 
+  void _showSystemNotification(RemoteNotification notification) {
+    flutterLocalNotificationsPlugin.show(
+      notification.hashCode,
+      notification.title,
+      notification.body,
+      local_notifications.NotificationDetails(
+        android: local_notifications.AndroidNotificationDetails(
+          _fcmChannel.id,
+          _fcmChannel.name,
+          channelDescription: _fcmChannel.description,
+          importance: local_notifications.Importance.high,
+          priority: local_notifications.Priority.high,
+          icon: '@mipmap/ic_launcher',
+        ),
+      ),
+    );
+  }
+
   // Method to show a general notification dialog
   void _showNotificationDialog(RemoteNotification notification) {
     final context = navigatorKey.currentContext;
@@ -184,7 +233,7 @@ class _MyAppState extends State<MyApp> {
         final notification = message.notification;
         if (notification != null) {
           debugPrint('Message also contained a notification: $notification');
-          _showNotificationDialog(notification); // Use the new function
+          _showSystemNotification(notification);
         }
       }
     });
@@ -218,6 +267,9 @@ class _MyAppState extends State<MyApp> {
         ),
         ChangeNotifierProvider<AccomplishmentProvider>(
           create: (_) => AccomplishmentProvider(),
+        ),
+        ChangeNotifierProvider<GoalService>(
+          create: (_) => GoalService(),
         ),
       ],
       child: MaterialApp(

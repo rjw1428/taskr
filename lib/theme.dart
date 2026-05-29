@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 var appTheme = ThemeData(
   fontFamily: GoogleFonts.roboto().fontFamily,
-  bottomAppBarTheme: const BottomAppBarTheme(
+  bottomAppBarTheme: const BottomAppBarThemeData(
     color: Colors.black87,
   ),
   brightness: Brightness.dark,

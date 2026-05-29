@@ -5,3 +5,6 @@ export 'tag.service.dart';
 export 'date.service.dart';
 export 'ai.service.dart';
 export 'messaging.dart';
+export 'goal.service.dart';
+export 'calendar.service.dart';
+export 'journal.service.dart';

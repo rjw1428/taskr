@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:taskr/goals/goal_list.dart';
 import 'package:taskr/performance/performance_page.dart';
 import 'package:taskr/task_list/task_list.dart';
 
@@ -27,7 +28,7 @@ final Map<String, RouteOption> routeConfig = {
   '/goals': const RouteOption(
     index: 2,
     label: 'Goals',
-    page: Text('Goals Page'),
+    page: GoalListPage(),
     icon: FontAwesomeIcons.medal,
   ),
   '/backlog': const RouteOption(

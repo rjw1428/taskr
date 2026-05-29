@@ -1,12 +1,18 @@
 import {onSchedule} from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
-import {onRequest} from "firebase-functions/v2/https";
+import {onRequest, onCall, HttpsError} from "firebase-functions/v2/https";
 import { Message } from "firebase-admin/lib/messaging/messaging-api";
+import {defineSecret} from "firebase-functions/params";
+import {google} from "googleapis";
+
+const geminiApiKey = defineSecret("GEMINI_API_KEY");
+const oauthClientSecret = defineSecret("GOOGLE_OAUTH_CLIENT_SECRET");
+const oauthWebClientId = defineSecret("GOOGLE_OAUTH_WEB_CLIENT_ID");
 
 admin.initializeApp();
 
-export const trainSchedule = onSchedule("every day 12:00", async () => {
+export const trainSchedule = onSchedule("every day 11:00", async () => {
   try {
     const todosSnap = await admin.firestore().collection("todos").get();
     const notifyPromises: Promise<any>[] = [];
@@ -206,26 +212,735 @@ async function getUserFcmToken(userId: string): Promise<string> {
   return data.fcmToken;
 }
 
-// TODO: Should be a general cloud function to create a new task.
+// --- Goal Reminder Functions ---
 
-// export const addWindTaskFromNotification = onRequest({cors: false}, async (req, res) => {
-//   const endHour = req.body.endHour;
-//   const startHour = req.body.startHour;
-//   const body = req.body.body;
-//   const date = req.body.date;
-//   const uid = req.body.uid;
+async function getIncompleteGoalTasksForToday(userId: string): Promise<{taskCount: number; goalNames: string[]}> {
+  const date = new Date().toISOString().split("T")[0];
+  const tasksSnap = await admin.firestore()
+    .collection("todos").doc(userId)
+    .collection("tasks").doc(date)
+    .collection("items")
+    .where("goalId", "!=", null)
+    .where("completed", "==", false)
+    .get();
 
-//   if (!uid || !date || !body) {
-//     res.status(400).send("Missing required parameters");
-//     return;
-//   }
+  if (tasksSnap.empty) return {taskCount: 0, goalNames: []};
 
-//   try {
-//     // await addWindTask(uid as string, date as string, body as string, startHour as string | undefined, endHour as string | undefined);
-//     res.status(200).send("Task added");
-//   } catch (error) {
-//     logger.error("Error adding wind task:", error);
-//     res.status(500).send("Error adding wind task");
-//   }
-// });
+  const goalIds = new Set<string>();
+  tasksSnap.forEach((doc) => {
+    const data = doc.data();
+    if (data.goalId) goalIds.add(data.goalId);
+  });
+
+  const goalNames: string[] = [];
+  for (const goalId of goalIds) {
+    const goalDoc = await admin.firestore()
+      .collection("todos").doc(userId)
+      .collection("goals").doc(goalId)
+      .get();
+    const goalData = goalDoc.data();
+    if (goalData && goalData.status === "active") {
+      goalNames.push(goalData.title);
+    }
+  }
+
+  if (goalNames.length === 0) return {taskCount: 0, goalNames: []};
+
+  return {taskCount: tasksSnap.size, goalNames};
+}
+
+async function sendGoalReminder(userId: string, messagePrefix: string): Promise<void> {
+  try {
+    const {taskCount, goalNames} = await getIncompleteGoalTasksForToday(userId);
+    if (taskCount === 0) return;
+
+    const fcmToken = await getUserFcmToken(userId);
+    if (!fcmToken) return;
+
+    const goalText = goalNames.length === 1 ? goalNames[0] : `${goalNames.length} goals`;
+    const message: Message = {
+      token: fcmToken,
+      notification: {
+        title: `${messagePrefix}`,
+        body: `You have ${taskCount} goal task${taskCount > 1 ? "s" : ""} remaining today for ${goalText}`,
+      },
+      data: {
+        type: "goal_reminder",
+      },
+    };
+
+    await admin.messaging().send(message);
+    logger.info(`Goal reminder sent to user ${userId}: ${taskCount} tasks`);
+  } catch (e) {
+    logger.error(`Error sending goal reminder to ${userId}:`, e);
+  }
+}
+
+export const goalReminder5pm = onSchedule("every day 17:00", async () => {
+  try {
+    const todosSnap = await admin.firestore().collection("todos").get();
+    const promises: Promise<void>[] = [];
+
+    todosSnap.forEach((doc) => {
+      const data = doc.data();
+      if (data && data.fcmToken) {
+        promises.push(sendGoalReminder(doc.id, "Goal Reminder"));
+      }
+    });
+
+    await Promise.all(promises);
+  } catch (e) {
+    logger.error("Error in goalReminder5pm:", e);
+  }
+});
+
+export const goalReminder9pm = onSchedule("every day 21:00", async () => {
+  try {
+    const todosSnap = await admin.firestore().collection("todos").get();
+    const promises: Promise<void>[] = [];
+
+    todosSnap.forEach((doc) => {
+      const data = doc.data();
+      if (data && data.fcmToken) {
+        promises.push(sendGoalReminder(doc.id, "Don't forget"));
+      }
+    });
+
+    await Promise.all(promises);
+  } catch (e) {
+    logger.error("Error in goalReminder9pm:", e);
+  }
+});
+
+// --- Weekly Goal Task Generation ---
+// Note: Task generation uses VertexAI which runs client-side on initial creation.
+// This function handles the weekly server-side regeneration.
+
+export const generateGoalTasks = onSchedule({schedule: "every sunday 20:00", secrets: [geminiApiKey]}, async () => {
+  try {
+    const todosSnap = await admin.firestore().collection("todos").get();
+    const promises: Promise<void>[] = [];
+
+    for (const userDoc of todosSnap.docs) {
+      const goalsSnap = await admin.firestore()
+        .collection("todos").doc(userDoc.id)
+        .collection("goals")
+        .where("status", "==", "active")
+        .get();
+
+      if (!goalsSnap.empty) {
+        for (const goalDoc of goalsSnap.docs) {
+          const goalData = goalDoc.data();
+          const endDate = new Date(goalData.endDate);
+          if (endDate > new Date()) {
+            promises.push(generateWeeklyTasksForGoal(userDoc.id, goalDoc.id, goalData));
+          }
+        }
+      }
+    }
+
+    await Promise.all(promises);
+    logger.info(`Weekly goal task generation complete. Processed ${promises.length} goals.`);
+  } catch (e) {
+    logger.error("Error in generateGoalTasks:", e);
+  }
+});
+
+export const generateGoalTasksTest = onRequest({cors: false, secrets: [geminiApiKey]}, async (req, res) => {
+  try {
+    const todosSnap = await admin.firestore().collection("todos").get();
+    let processed = 0;
+
+    for (const userDoc of todosSnap.docs) {
+      const goalsSnap = await admin.firestore()
+        .collection("todos").doc(userDoc.id)
+        .collection("goals")
+        .where("status", "==", "active")
+        .get();
+
+      for (const goalDoc of goalsSnap.docs) {
+        const goalData = goalDoc.data();
+        const endDate = new Date(goalData.endDate);
+        if (endDate > new Date()) {
+          await generateWeeklyTasksForGoal(userDoc.id, goalDoc.id, goalData);
+          processed++;
+        }
+      }
+    }
+
+    res.status(200).send({processed});
+  } catch (e) {
+    logger.error("Error in generateGoalTasksTest:", e);
+    res.status(500).send({error: String(e)});
+  }
+});
+
+async function generateWeeklyTasksForGoal(
+  userId: string,
+  goalId: string,
+  goalData: admin.firestore.DocumentData
+): Promise<void> {
+  try {
+    const generationsSnap = await admin.firestore()
+      .collection("todos").doc(userId)
+      .collection("goals").doc(goalId)
+      .collection("generations")
+      .orderBy("generatedAt", "desc")
+      .limit(3)
+      .get();
+
+    const history = generationsSnap.docs.map((doc) => doc.data());
+    const weekNumber = generationsSnap.size + 1;
+
+    let prompt = `Goal: ${goalData.title}\n`;
+    if (goalData.description) prompt += `Description: ${goalData.description}\n`;
+    prompt += `Timeframe: ${goalData.timeframe}\n`;
+    prompt += `Frequency: ${goalData.frequency}`;
+    if (goalData.frequency === "n_times_week" && goalData.frequencyCount) {
+      prompt += ` (${goalData.frequencyCount}x)`;
+    }
+    prompt += `\nThis is week ${weekNumber}.\n`;
+
+    if (history.length > 0) {
+      prompt += "\nPrevious weeks:\n";
+      for (const gen of history) {
+        prompt += `  ${gen.weekStart} to ${gen.weekEnd}:\n`;
+        prompt += `    Tasks generated: ${gen.taskIds?.length || 0}\n`;
+        prompt += `    Completed: ${gen.completedTaskIds?.length || 0}\n`;
+
+        if (gen.response) {
+          try {
+            const genTasks = JSON.parse(gen.response) as any[];
+            const completedTitles: string[] = [];
+            const skippedTitles: string[] = [];
+            for (let i = 0; i < genTasks.length; i++) {
+              const title = genTasks[i].title || "";
+              const taskId = gen.taskIds?.[i];
+              if (taskId && gen.completedTaskIds?.includes(taskId)) {
+                completedTitles.push(title);
+              } else {
+                skippedTitles.push(title);
+              }
+            }
+            if (completedTitles.length > 0) {
+              prompt += `    Completed tasks: ${completedTitles.join(", ")}\n`;
+            }
+            if (skippedTitles.length > 0) {
+              prompt += `    Skipped tasks: ${skippedTitles.join(", ")}\n`;
+            }
+          } catch {}
+        }
+
+        const taskFeedback = gen.taskFeedback as Record<string, string> | undefined;
+        if (taskFeedback && Object.keys(taskFeedback).length > 0) {
+          prompt += "    User feedback:\n";
+          try {
+            const genTasks = JSON.parse(gen.response) as any[];
+            for (const [taskId, feedback] of Object.entries(taskFeedback)) {
+              const taskIndex = gen.taskIds?.indexOf(taskId) ?? -1;
+              const title = taskIndex >= 0 && taskIndex < genTasks.length
+                ? genTasks[taskIndex].title
+                : "Task";
+              prompt += `      "${title}": ${feedback}\n`;
+            }
+          } catch {
+            for (const [, feedback] of Object.entries(taskFeedback)) {
+              prompt += `      ${feedback}\n`;
+            }
+          }
+        }
+      }
+    }
+
+    if (goalData.frequency === "daily") {
+      prompt += "\nGenerate 7 tasks, one per day (dayOffset 0=Mon to 6=Sun).\n";
+    } else if (goalData.frequency === "n_times_week" && goalData.frequencyCount) {
+      prompt += `\nGenerate ${goalData.frequencyCount} tasks spread across the week.\n`;
+    } else {
+      prompt += "\nDecide the best number and distribution of tasks.\n";
+    }
+    prompt += "Build on prior progress. Do not repeat completed tasks. Adapt if tasks were skipped.\n";
+    prompt += "Incorporate user feedback when provided — adjust difficulty, relevance, and task types accordingly.\n";
+    prompt += "Return ONLY a JSON array of {title, description, dayOffset, effort}.";
+
+    const apiKey = geminiApiKey.value();
+    if (!apiKey) {
+      logger.error("GEMINI_API_KEY secret not set");
+      return;
+    }
+
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+    const geminiResponse = await fetch(geminiUrl, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        system_instruction: {
+          parts: [{
+            text: "You are a personal development coach. Generate concrete, actionable tasks. Take into account user feedback from previous weeks to improve task quality. Return ONLY a JSON array of objects with: title (string), description (string), dayOffset (int 0-6), effort (low/medium/high).",
+          }],
+        },
+        contents: [{role: "user", parts: [{text: prompt}]}],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                title: {type: "STRING"},
+                description: {type: "STRING"},
+                dayOffset: {type: "INTEGER"},
+                effort: {type: "STRING", enum: ["low", "medium", "high"]},
+              },
+              required: ["title", "description", "dayOffset", "effort"],
+            },
+          },
+        },
+      }),
+    });
+
+    if (!geminiResponse.ok) {
+      const errText = await geminiResponse.text();
+      logger.error(`Gemini API error ${geminiResponse.status} for goal ${goalId}: ${errText}`);
+      return;
+    }
+
+    const geminiData = await geminiResponse.json() as any;
+    let tasksText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    tasksText = tasksText.trim();
+
+    let tasks: any[] | null = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const parsed = JSON.parse(tasksText);
+        if (Array.isArray(parsed)) {
+          tasks = parsed;
+          break;
+        }
+        logger.warn(`LLM response is not an array for goal ${goalId} (attempt ${attempt + 1})`);
+      } catch {
+        logger.warn(`Failed to parse LLM response for goal ${goalId} (attempt ${attempt + 1}): ${tasksText.substring(0, 200)}`);
+      }
+
+      if (attempt === 0) {
+        logger.info(`Retrying Gemini request for goal ${goalId}`);
+        const retryResponse = await fetch(geminiUrl, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            system_instruction: {
+              parts: [{
+                text: "You are a personal development coach. Generate concrete, actionable tasks. Take into account user feedback from previous weeks to improve task quality. Return ONLY a JSON array of objects with: title (string), description (string), dayOffset (int 0-6), effort (low/medium/high).",
+              }],
+            },
+            contents: [{role: "user", parts: [{text: prompt}]}],
+            generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                title: {type: "STRING"},
+                description: {type: "STRING"},
+                dayOffset: {type: "INTEGER"},
+                effort: {type: "STRING", enum: ["low", "medium", "high"]},
+              },
+              required: ["title", "description", "dayOffset", "effort"],
+            },
+          },
+        },
+          }),
+        });
+        if (!retryResponse.ok) {
+          logger.error(`Gemini retry failed for goal ${goalId}: ${retryResponse.status}`);
+          return;
+        }
+        const retryData = await retryResponse.json() as any;
+        tasksText = (retryData?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
+      }
+    }
+
+    if (!tasks) {
+      logger.error(`Failed to get valid LLM response for goal ${goalId} after retries`);
+      return;
+    }
+
+    const now = new Date();
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - now.getDay() + 1 + 7);
+    const weekStart = monday.toISOString().split("T")[0];
+    const weekEndDate = new Date(monday);
+    weekEndDate.setDate(monday.getDate() + 6);
+    const weekEnd = weekEndDate.toISOString().split("T")[0];
+
+    const taskIds: string[] = [];
+    for (const task of tasks) {
+      const dayOffset = Math.min(Math.max(task.dayOffset || 0, 0), 6);
+      const taskDate = new Date(monday);
+      taskDate.setDate(monday.getDate() + dayOffset);
+      const dateStr = taskDate.toISOString().split("T")[0];
+
+      const taskData = {
+        title: task.title || "Goal task",
+        description: task.description || "",
+        priority: task.effort || "low",
+        completed: false,
+        dueDate: dateStr,
+        goalId: goalId,
+        added: Date.now(),
+        modified: "",
+        tags: [],
+        subtasks: [],
+        pushCount: 0,
+      };
+
+      const taskRef = await admin.firestore()
+        .collection("todos").doc(userId)
+        .collection("tasks").doc(dateStr)
+        .collection("items")
+        .add(taskData);
+
+      await admin.firestore()
+        .collection("todos").doc(userId)
+        .collection("tasks").doc(dateStr)
+        .set({taskOrder: admin.firestore.FieldValue.arrayUnion(taskRef.id)}, {merge: true});
+
+      taskIds.push(taskRef.id);
+    }
+
+    await admin.firestore()
+      .collection("todos").doc(userId)
+      .collection("goals").doc(goalId)
+      .collection("generations")
+      .add({
+        generatedAt: Date.now(),
+        weekStart,
+        weekEnd,
+        taskIds,
+        prompt,
+        response: JSON.stringify(tasks),
+        completedTaskIds: [],
+        skippedTaskIds: [],
+      });
+
+    logger.info(`Generated ${taskIds.length} tasks for goal ${goalId} (user ${userId})`);
+
+    try {
+      const fcmToken = await getUserFcmToken(userId);
+      if (fcmToken) {
+        await admin.messaging().send({
+          token: fcmToken,
+          notification: {
+            title: "New Goal Tasks Created",
+            body: `${taskIds.length} new task${taskIds.length > 1 ? "s" : ""} for "${goalData.title}" have been added for the week of ${weekStart}`,
+          },
+          data: {type: "goal_tasks_generated"},
+        });
+      }
+    } catch (notifyErr) {
+      logger.warn(`Failed to send goal task notification for ${goalId} (user ${userId}):`, notifyErr);
+    }
+  } catch (e) {
+    logger.error(`Error generating tasks for goal ${goalId} (user ${userId}):`, e);
+  }
+}
+
+// ---------- Google Calendar integration ----------
+
+function buildOAuthClient(clientId: string, clientSecret: string) {
+  return new google.auth.OAuth2(clientId, clientSecret, "");
+}
+
+export const exchangeCalendarAuthCode = onCall(
+  {secrets: [oauthClientSecret, oauthWebClientId]},
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Sign in required");
+    }
+    const uid = request.auth.uid;
+    const code = request.data?.code as string | undefined;
+    if (!code) {
+      throw new HttpsError("invalid-argument", "Missing auth code");
+    }
+
+    const clientId = oauthWebClientId.value();
+    const clientSecret = oauthClientSecret.value();
+    const oauth = buildOAuthClient(clientId, clientSecret);
+
+    let refreshToken: string | undefined;
+    try {
+      const {tokens} = await oauth.getToken(code);
+      refreshToken = tokens.refresh_token ?? undefined;
+    } catch (e: any) {
+      logger.error(`Token exchange failed for ${uid}:`, e?.response?.data || e);
+      throw new HttpsError("internal", `Token exchange failed: ${e?.message || e}`);
+    }
+
+    if (!refreshToken) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Google did not return a refresh token. Disconnect from Google account permissions and try again."
+      );
+    }
+
+    await admin.firestore().collection("secrets").doc(uid).set({
+      calendarRefreshToken: refreshToken,
+    }, {merge: true});
+
+    await admin.firestore().collection("todos").doc(uid).set({
+      calendarConnectedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, {merge: true});
+
+    return {ok: true};
+  }
+);
+
+export const disconnectCalendar = onCall(
+  {secrets: [oauthClientSecret, oauthWebClientId]},
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Sign in required");
+    }
+    const uid = request.auth.uid;
+
+    const secretRef = admin.firestore().collection("secrets").doc(uid);
+    const secretSnap = await secretRef.get();
+    const refreshToken = secretSnap.data()?.calendarRefreshToken as string | undefined;
+
+    if (refreshToken) {
+      try {
+        const oauth = buildOAuthClient(oauthWebClientId.value(), oauthClientSecret.value());
+        await oauth.revokeToken(refreshToken);
+      } catch (e: any) {
+        logger.warn(`Revoke failed for ${uid} (continuing):`, e?.message || e);
+      }
+    }
+
+    await secretRef.set({calendarRefreshToken: admin.firestore.FieldValue.delete()}, {merge: true});
+    await admin.firestore().collection("todos").doc(uid).set({
+      calendarConnectedAt: admin.firestore.FieldValue.delete(),
+      calendarSyncToken: admin.firestore.FieldValue.delete(),
+    }, {merge: true});
+
+    return {ok: true};
+  }
+);
+
+function eventStartDate(event: any): string | null {
+  if (event.start?.date) return event.start.date;
+  if (event.start?.dateTime) {
+    const d = new Date(event.start.dateTime);
+    if (isNaN(d.getTime())) return null;
+    const y = d.getFullYear();
+    const m = (d.getMonth() + 1).toString().padStart(2, "0");
+    const day = d.getDate().toString().padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+  return null;
+}
+
+async function findTaskByEventId(uid: string, eventId: string) {
+  const today = new Date();
+  const ranges: string[] = [];
+  for (let i = -60; i <= 60; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() + i);
+    const y = d.getFullYear();
+    const m = (d.getMonth() + 1).toString().padStart(2, "0");
+    const day = d.getDate().toString().padStart(2, "0");
+    ranges.push(`${y}-${m}-${day}`);
+  }
+
+  for (const date of ranges) {
+    const q = await admin.firestore()
+      .collection("todos").doc(uid)
+      .collection("tasks").doc(date)
+      .collection("items")
+      .where("calendarEventId", "==", eventId)
+      .limit(1)
+      .get();
+    if (!q.empty) {
+      return q.docs[0].ref;
+    }
+  }
+  return null;
+}
+
+async function processCalendarForUser(uid: string, clientId: string, clientSecret: string) {
+  const secretSnap = await admin.firestore().collection("secrets").doc(uid).get();
+  const refreshToken = secretSnap.data()?.calendarRefreshToken as string | undefined;
+  if (!refreshToken) {
+    logger.info(`User ${uid} has no refresh token; skipping`);
+    return;
+  }
+
+  const userRef = admin.firestore().collection("todos").doc(uid);
+  const userSnap = await userRef.get();
+  const userData = userSnap.data() || {};
+  const syncToken = userData.calendarSyncToken as string | undefined;
+
+  const oauth = buildOAuthClient(clientId, clientSecret);
+  oauth.setCredentials({refresh_token: refreshToken});
+  const calendar = google.calendar({version: "v3", auth: oauth});
+
+  let pageToken: string | undefined;
+  let nextSyncToken: string | undefined;
+  let imported = 0;
+  let updated = 0;
+  let cancelled = 0;
+
+  try {
+    do {
+      const listParams: any = {
+        calendarId: "primary",
+        singleEvents: true,
+        pageToken,
+      };
+      if (syncToken && !pageToken) {
+        listParams.syncToken = syncToken;
+      } else if (!pageToken) {
+        const now = new Date();
+        const end = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+        listParams.timeMin = now.toISOString();
+        listParams.timeMax = end.toISOString();
+      }
+
+      const res = await calendar.events.list(listParams);
+      const events = res.data.items || [];
+
+      for (const event of events) {
+        const eventId = event.id;
+        if (!eventId) continue;
+
+        if (event.status === "cancelled") {
+          const ref = await findTaskByEventId(uid, eventId);
+          if (ref) {
+            const parentDate = ref.parent.parent;
+            await ref.delete();
+            if (parentDate) {
+              await parentDate.set({
+                taskOrder: admin.firestore.FieldValue.arrayRemove(ref.id),
+              }, {merge: true});
+            }
+            cancelled++;
+            logger.info(`[calendar-import] CANCELLED "${event.summary ?? "(no title)"}" eventId=${eventId} taskId=${ref.id}`);
+          }
+          continue;
+        }
+
+        const taskrId = event.extendedProperties?.private?.taskrId;
+        if (taskrId) {
+          logger.info(`[calendar-import] SKIPPED (taskr-owned) "${event.summary ?? "(no title)"}" eventId=${eventId} taskrId=${taskrId}`);
+          continue;
+        }
+
+        const date = eventStartDate(event);
+        if (!date) continue;
+
+        const existing = await findTaskByEventId(uid, eventId);
+        const taskFields: any = {
+          title: event.summary || "Untitled",
+          description: event.description || null,
+          dueDate: date,
+          priority: "info",
+          completed: false,
+          type: "task",
+          calendarEventId: eventId,
+          tags: [],
+          modified: new Date().toISOString(),
+        };
+
+        if (existing) {
+          await existing.update(taskFields);
+          updated++;
+          logger.info(`[calendar-import] UPDATED "${event.summary ?? "(no title)"}" date=${date} eventId=${eventId} taskId=${existing.id}`);
+        } else {
+          taskFields.added = Date.now();
+          taskFields.subtasks = [];
+          taskFields.pushCount = 0;
+          const dateRef = admin.firestore()
+            .collection("todos").doc(uid)
+            .collection("tasks").doc(date);
+          const newRef = await dateRef.collection("items").add(taskFields);
+          await dateRef.set({
+            taskOrder: admin.firestore.FieldValue.arrayUnion(newRef.id),
+          }, {merge: true});
+          imported++;
+          logger.info(`[calendar-import] IMPORTED "${event.summary ?? "(no title)"}" date=${date} eventId=${eventId} taskId=${newRef.id}`);
+        }
+      }
+
+      pageToken = res.data.nextPageToken || undefined;
+      if (!pageToken && res.data.nextSyncToken) {
+        nextSyncToken = res.data.nextSyncToken;
+      }
+    } while (pageToken);
+
+    if (nextSyncToken) {
+      await userRef.set({calendarSyncToken: nextSyncToken}, {merge: true});
+    }
+
+    logger.info(`Calendar sync for ${uid}: imported=${imported} updated=${updated} cancelled=${cancelled}`);
+  } catch (e: any) {
+    const code = e?.code;
+    const message = e?.message || String(e);
+
+    if (code === 410) {
+      logger.warn(`Sync token expired for ${uid}; clearing and reseeding next run`);
+      await userRef.set({calendarSyncToken: admin.firestore.FieldValue.delete()}, {merge: true});
+      return;
+    }
+    if (message.includes("invalid_grant")) {
+      logger.warn(`invalid_grant for ${uid}; clearing connection state`);
+      await admin.firestore().collection("secrets").doc(uid).set({
+        calendarRefreshToken: admin.firestore.FieldValue.delete(),
+      }, {merge: true});
+      await userRef.set({
+        calendarConnectedAt: admin.firestore.FieldValue.delete(),
+        calendarSyncToken: admin.firestore.FieldValue.delete(),
+      }, {merge: true});
+      return;
+    }
+    logger.error(`Calendar sync failed for ${uid}:`, e);
+  }
+}
+
+export const importCalendarEvents = onSchedule(
+  {schedule: "every 1 hours from 08:00 to 23:00", secrets: [oauthClientSecret, oauthWebClientId]},
+  async () => {
+    const clientId = oauthWebClientId.value();
+    const clientSecret = oauthClientSecret.value();
+    const todos = await admin.firestore().collection("todos").get();
+    const candidates = todos.docs.filter((d) => d.data()?.calendarConnectedAt);
+    logger.info(`importCalendarEvents: processing ${candidates.length} users`);
+
+    for (const doc of candidates) {
+      try {
+        await processCalendarForUser(doc.id, clientId, clientSecret);
+      } catch (e) {
+        logger.error(`Unexpected error for ${doc.id}:`, e);
+      }
+    }
+  }
+);
+
+export const importCalendarEventsTest = onRequest(
+  {secrets: [oauthClientSecret, oauthWebClientId]},
+  async (_req, res) => {
+    try {
+      const clientId = oauthWebClientId.value();
+      const clientSecret = oauthClientSecret.value();
+      const todos = await admin.firestore().collection("todos").get();
+      const candidates = todos.docs.filter((d) => d.data()?.calendarConnectedAt);
+      for (const doc of candidates) {
+        await processCalendarForUser(doc.id, clientId, clientSecret);
+      }
+      res.status(200).send({processed: candidates.length});
+    } catch (e: any) {
+      res.status(500).send({error: e?.message || String(e)});
+    }
+  }
+);
 

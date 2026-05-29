@@ -56,6 +56,9 @@ class SettingsPageState extends State<SettingsForm> {
         body: ListView(
           scrollDirection: Axis.vertical,
           children: [
+            const Text("Google Calendar", style: TextStyle(fontSize: 32)),
+            _GoogleCalendarRow(userId: widget.userId),
+            const SizedBox(height: 16),
             const Text("Tags", style: TextStyle(fontSize: 32)),
             Container(
               padding: const EdgeInsets.only(left: 16),
@@ -84,5 +87,99 @@ class SettingsPageState extends State<SettingsForm> {
         floatingActionButton: FloatingActionButton(
             child: const Icon(FontAwesomeIcons.plus, size: 20),
             onPressed: () => showDialog(context: context, builder: (BuildContext context) => const AddTagScreen())));
+  }
+}
+
+class _GoogleCalendarRow extends StatefulWidget {
+  final String userId;
+  const _GoogleCalendarRow({required this.userId});
+
+  @override
+  State<_GoogleCalendarRow> createState() => _GoogleCalendarRowState();
+}
+
+class _GoogleCalendarRowState extends State<_GoogleCalendarRow> {
+  bool _busy = false;
+
+  Future<void> _connect() async {
+    setState(() => _busy = true);
+    try {
+      await CalendarService().connect();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Google Calendar connected')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not connect: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _disconnect() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Disconnect Google Calendar?'),
+        content: const Text('Sync will stop. Tasks already on your calendar will remain there.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Disconnect')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _busy = true);
+    try {
+      await CalendarService().disconnect();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Google Calendar disconnected')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not disconnect: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<bool>(
+      stream: CalendarService().watchConnected(widget.userId),
+      builder: (context, snapshot) {
+        final connected = snapshot.data ?? false;
+        return Padding(
+          padding: const EdgeInsets.only(left: 16, top: 8, right: 16, bottom: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  connected ? 'Connected' : 'Not connected',
+                  style: const TextStyle(fontSize: 16),
+                ),
+              ),
+              if (_busy)
+                const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              else if (connected)
+                TextButton(onPressed: _disconnect, child: const Text('Disconnect'))
+              else
+                ElevatedButton(onPressed: _connect, child: const Text('Connect')),
+            ],
+          ),
+        );
+      },
+    );
   }
 }

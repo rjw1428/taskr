@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -6,7 +8,10 @@ import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/shared/constants.dart';
 import 'package:taskr/task_list/add_task.dart';
+import 'package:taskr/goals/goal_detail_page.dart';
+import 'package:taskr/services/goal.service.dart';
 import 'package:taskr/task_list/copy_task.dart';
+import 'package:taskr/task_list/task_feedback_dialog.dart';
 import 'package:taskr/task_list/view_series.dart';
 
 class TaskItem extends StatefulWidget {
@@ -32,7 +37,49 @@ class TaskItem extends StatefulWidget {
 class TaskItemState extends State<TaskItem> {
   bool expanded = false;
   bool isExpandable = false;
+  bool _calendarConnected = false;
+  bool _sendingToCalendar = false;
+  StreamSubscription<bool>? _calendarSub;
+
   TaskItemState();
+
+  @override
+  void initState() {
+    super.initState();
+    final user = AuthService().user;
+    if (user != null) {
+      _calendarSub = CalendarService().watchConnected(user.uid).listen((connected) {
+        if (mounted) setState(() => _calendarConnected = connected);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _calendarSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _sendToCalendar() async {
+    if (_sendingToCalendar) return;
+    setState(() => _sendingToCalendar = true);
+    try {
+      await CalendarService().sendTaskToCalendar(widget.task);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Sent to Google Calendar')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not send: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sendingToCalendar = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,13 +87,31 @@ class TaskItemState extends State<TaskItem> {
     final timeFrame = DateService().timeFrameBuilder(widget.task);
 
     isExpandable = widget.task.description != null || widget.task.tags.isNotEmpty;
+
+    const double r = 10;
+    BorderRadius borderRadius;
+    if (widget.task.isMultiDayStart) {
+      borderRadius = const BorderRadius.only(
+        topLeft: Radius.circular(r),
+        bottomLeft: Radius.circular(r),
+      );
+    } else if (widget.task.isMultiDayEnd) {
+      borderRadius = const BorderRadius.only(
+        topRight: Radius.circular(r),
+        bottomRight: Radius.circular(r),
+      );
+    } else if (widget.task.isMultiDayMiddle) {
+      borderRadius = BorderRadius.zero;
+    } else {
+      borderRadius = BorderRadius.circular(r);
+    }
+
     return Stack(children: [
       Container(
-          // width: MediaQuery.of(context).size.width * .7,
           decoration: BoxDecoration(
             color: priorityColors[widget.task.priority]!.withAlpha(widget.task.completed ? 128 : 255),
             border: Border.all(color: Colors.black45),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: borderRadius,
             boxShadow: const [BoxShadow(color: Colors.black45, offset: Offset(2.0, 4.0), blurRadius: 5.0)],
           ),
           margin: const EdgeInsets.all(4),
@@ -82,6 +147,9 @@ class TaskItemState extends State<TaskItem> {
                                     "completed": value,
                                     "completedTime": DateFormat(completeTimeFormat).format(DateTime.now())
                                   }, widget.task);
+                                  if (value && widget.task.goalId != null && widget.task.id != null) {
+                                    _backfillGoalGeneration(widget.task);
+                                  }
                                 }),
                             if (widget.task.pushCount > 0)
                               Text('(${widget.task.pushCount}) ',
@@ -92,6 +160,17 @@ class TaskItemState extends State<TaskItem> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisSize: MainAxisSize.max,
                                 children: [
+                                  if (widget.task.goalId != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 2),
+                                      child: Row(
+                                        children: [
+                                          const Icon(FontAwesomeIcons.bullseye, size: 10, color: Colors.orange),
+                                          const SizedBox(width: 4),
+                                          Text('Goal', style: TextStyle(fontSize: 10, color: Colors.orange.shade300)),
+                                        ],
+                                      ),
+                                    ),
                                   if (timeFrame != '')
                                     Text(timeFrame, style: const TextStyle(fontSize: 14, color: Colors.white)),
                                   Row(children: [
@@ -160,9 +239,24 @@ class TaskItemState extends State<TaskItem> {
     ]);
   }
 
+  Future<void> _backfillGoalGeneration(Task task) async {
+    try {
+      final goalService = GoalService();
+      final generations = await goalService.getGenerations(task.goalId!);
+      for (final gen in generations) {
+        if (gen.taskIds.contains(task.id)) {
+          await goalService.updateGenerationCompletedTask(task.goalId!, gen.id!, task.id!);
+          break;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error backfilling goal generation: $e');
+    }
+  }
+
   Widget actionButtons(BuildContext context, bool isBacklog) {
     return PopupMenuButton(
-        onSelected: (value) {
+        onSelected: (value) async {
           if (value == "PUSH") {
             widget.taskService.pushTask(widget.task);
           } else if (value == "EDIT") {
@@ -185,6 +279,28 @@ class TaskItemState extends State<TaskItem> {
                 builder: (context) => ViewSeries(task: widget.task),
               ),
             );
+          } else if (value == "VIEW_GOAL") {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => GoalDetailPage(goalId: widget.task.goalId!),
+              ),
+            );
+          } else if (value == "FEEDBACK") {
+            final result = await showDialog<String>(
+              context: context,
+              builder: (ctx) => TaskFeedbackDialog(existingFeedback: widget.task.feedback),
+            );
+            if (result != null && result.isNotEmpty && context.mounted) {
+              await GoalService().submitTaskFeedback(widget.task, result);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Feedback saved')),
+                );
+              }
+            }
+          } else if (value == "SEND_TO_CALENDAR") {
+            _sendToCalendar();
           }
         },
         itemBuilder: (context) => [
@@ -215,6 +331,37 @@ class TaskItemState extends State<TaskItem> {
                       ],
                     )),
               ],
+              if (widget.task.goalId != null) ...[
+                const PopupMenuItem(
+                    value: "VIEW_GOAL",
+                    child: Row(
+                      children: [
+                        Icon(FontAwesomeIcons.bullseye, color: Colors.orange),
+                        Padding(padding: EdgeInsets.only(left: 8), child: Text('View Goal'))
+                      ],
+                    )),
+                PopupMenuItem(
+                    value: "FEEDBACK",
+                    child: Row(
+                      children: [
+                        Icon(FontAwesomeIcons.comment, color: widget.task.feedback != null ? Colors.orange : null),
+                        Padding(padding: const EdgeInsets.only(left: 8), child: Text(widget.task.feedback != null ? 'Update Feedback' : 'Feedback'))
+                      ],
+                    )),
+              ],
+              if (_calendarConnected && widget.task.dueDate != null)
+                PopupMenuItem(
+                    value: "SEND_TO_CALENDAR",
+                    child: Row(
+                      children: [
+                        const Icon(FontAwesomeIcons.calendarPlus),
+                        Padding(
+                            padding: const EdgeInsets.only(left: 8),
+                            child: Text(widget.task.calendarEventId != null
+                                ? 'Update on Calendar'
+                                : 'Send to Calendar')),
+                      ],
+                    )),
               if (!isBacklog)
                 const PopupMenuItem(
                     value: "COPY",

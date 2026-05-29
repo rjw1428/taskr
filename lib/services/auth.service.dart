@@ -1,18 +1,32 @@
-// import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:rxdart/rxdart.dart';
 
 // ignore: non_constant_identifier_names
 final WEB_CLIENT_ID = dotenv.env['WEB_CLIENT_ID'];
+// ignore: non_constant_identifier_names
+final CALENDAR_WEB_CLIENT_ID = dotenv.env['CALENDAR_WEB_CLIENT_ID'];
+
+const _calendarScope = 'https://www.googleapis.com/auth/calendar';
 
 class AuthService {
   AuthService._internal();
   static final _instance = AuthService._internal();
   final userStream = FirebaseAuth.instance.authStateChanges().shareReplay(maxSize: 1);
   User? user = FirebaseAuth.instance.currentUser;
+
+  GoogleSignIn? _calendarSignIn;
+  GoogleSignIn _getCalendarSignIn() {
+    return _calendarSignIn ??= GoogleSignIn(
+      serverClientId: CALENDAR_WEB_CLIENT_ID,
+      scopes: [_calendarScope],
+    );
+  }
+
   factory AuthService() {
     return _instance;
   }
@@ -44,27 +58,25 @@ class AuthService {
   }
 
   Future<void> googleLogin() async {
-    if (bool.parse(dotenv.env['DEV_MODE'] ?? 'true')) {
-      try {
+    try {
+      if (kIsWeb) {
         final googleProvider = GoogleAuthProvider();
         googleProvider.addScope('https://www.googleapis.com/auth/contacts.readonly');
         googleProvider.setCustomParameters({'login_hint': 'user@example.com'});
         await FirebaseAuth.instance.signInWithPopup(googleProvider);
-        user = FirebaseAuth.instance.currentUser;
-      } on FirebaseAuthException catch (e) {
-        debugPrint('Unknown exception: $e');
+      } else {
+        final googleUser = await GoogleSignIn(serverClientId: WEB_CLIENT_ID).signIn();
+        if (googleUser == null) return;
+        final googleAuth = await googleUser.authentication;
+        final credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        );
+        await FirebaseAuth.instance.signInWithCredential(credential);
       }
-    } else {
-      try {
-        await FirebaseAuth.instance.signInWithEmailAndPassword(email: "rjw1428@gmail.com", password: "123456");
-        user = await userStream.first;
-      } on FirebaseAuthException catch (e) {
-        if (e.code == 'user-not-found') {
-          debugPrint('No user found for that email.');
-        } else if (e.code == 'wrong-password') {
-          debugPrint('Wrong password provided for that user.');
-        }
-      }
+      user = FirebaseAuth.instance.currentUser;
+    } catch (e) {
+      debugPrint('Google sign-in error: $e');
     }
   }
 
@@ -83,4 +95,56 @@ class AuthService {
   Future<void> signOut() async {
     await FirebaseAuth.instance.signOut();
   }
+
+  Future<CalendarConsent?> requestCalendarConsent() async {
+    if (kIsWeb) {
+      throw UnsupportedError('Calendar connection is not supported on web yet');
+    }
+    final signIn = _getCalendarSignIn();
+    final account = await signIn.signIn();
+    if (account == null) return null;
+    final auth = await account.authentication;
+    final serverAuthCode = account.serverAuthCode;
+    if (serverAuthCode == null || auth.accessToken == null) {
+      throw Exception('Google did not return a server auth code; check OAuth client configuration');
+    }
+    return CalendarConsent(
+      accessToken: auth.accessToken!,
+      serverAuthCode: serverAuthCode,
+      email: account.email,
+    );
+  }
+
+  Future<String?> getCalendarAccessToken({bool silent = true}) async {
+    if (kIsWeb) return null;
+    final signIn = _getCalendarSignIn();
+    GoogleSignInAccount? account = silent ? await signIn.signInSilently() : await signIn.signIn();
+    if (account == null) return null;
+    final auth = await account.authentication;
+    return auth.accessToken;
+  }
+
+  Future<void> revokeCalendarConsent() async {
+    if (kIsWeb) return;
+    final signIn = _getCalendarSignIn();
+    try {
+      await signIn.disconnect();
+    } catch (_) {
+      try {
+        await signIn.signOut();
+      } catch (_) {}
+    }
+  }
+}
+
+class CalendarConsent {
+  final String accessToken;
+  final String serverAuthCode;
+  final String email;
+
+  CalendarConsent({
+    required this.accessToken,
+    required this.serverAuthCode,
+    required this.email,
+  });
 }

@@ -2,7 +2,7 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /todos/{userId}/{category}/{document} {
+    match /todos/{userId}/{document=**} {
       allow read, write: if request.auth.uid == userId;
     }
     match /todos/{userId} {
@@ -10,6 +10,12 @@ service cloud.firestore {
     }
     match /users/{userId}/{document=**} {
       allow read, write: if request.auth.uid == userId;
+    }
+    match /secrets/{userId} {
+      allow read, write: if false;
+    }
+    match /secrets/{userId}/{document=**} {
+      allow read, write: if false;
     }
     // match /{document=**} {
     //   allow read, write: if request.auth != null;

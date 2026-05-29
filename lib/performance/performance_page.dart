@@ -3,6 +3,7 @@ import 'package:taskr/services/services.dart';
 import '../shared/shared.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:taskr/performance/performance_heatmap.dart';
+import 'package:taskr/performance/performance_average_header.dart';
 import 'package:provider/provider.dart';
 import 'package:taskr/services/accomplishment.provider.dart';
 import 'package:taskr/services/models.dart';
@@ -67,6 +68,8 @@ class CurrentScoreState extends State<CurrentScore> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          PerformanceAverageHeader(userId: widget.userId),
+          const SizedBox(height: 16),
           PerformanceHeatmap(userId: widget.userId),
           const SizedBox(height: 16),
           const Text(
@@ -85,7 +88,7 @@ class CurrentScoreState extends State<CurrentScore> {
               Center(
                   child: SizedBox(
                       width: MediaQuery.of(context).size.width * 0.8,
-                      height: 300,
+                      height: 180,
                       child: LineChart(
                         LineChartData(
                           lineTouchData: LineTouchData(

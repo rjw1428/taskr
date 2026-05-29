@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:algoliasearch/algoliasearch_lite.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/services/models.dart';
 import 'package:rxdart/rxdart.dart';
@@ -70,22 +72,25 @@ class TaskService {
             .map((snapshot) => snapshot.docs.map((doc) => {...doc.data(), 'id': doc.id}).toList())
             .handleError((error) => debugPrint("TASK LIST: $error")),
         taskOrderStream(userId, date ?? defaultUnassignedDate),
-        (tasks, order) => order.map((id) => tasks.firstWhere((task) => task['id'] == id)).map((task) {
-              final tagList = (task['tags'] as List).map((tag) {
-                if (tag is String) {
-                  return tagMap[tag];
-                } else {
-                  return tagMap[tag["id"]];
-                }
-              }).toList();
+        (tasks, order) {
+          final taskMap = {for (var t in tasks) t['id'] as String: t};
+          return order
+              .where((id) => taskMap.containsKey(id))
+              .map((id) {
+            final task = taskMap[id]!;
+            final tagList = (task['tags'] as List).map((tag) {
+              if (tag is String) {
+                return tagMap[tag];
+              } else {
+                return tagMap[tag["id"]];
+              }
+            }).toList();
 
-              task['tags'] = tagList
-                  .where((t) => t != null)
-                  // .map((t) => )
-                  .toList();
+            task['tags'] = tagList.where((t) => t != null).toList();
 
-              return Task.fromJson(task);
-            }).toList()).handleError((error) => debugPrint("SHIT: $error"));
+            return Task.fromJson(task);
+          }).toList();
+        }).handleError((error) => debugPrint("SHIT: $error"));
   }
 
   Future<List<Map<String, dynamic>>> getTasks(String userId, String? date) async {
@@ -102,6 +107,33 @@ class TaskService {
     final order = await getTaskOrder(userId, date ?? defaultUnassignedDate);
     final tasks = await getTasks(userId, date ?? defaultUnassignedDate);
     return order.map((id) => tasks.firstWhere((t) => t['id'] == id)).toList();
+  }
+
+  Future<String> addDivider(String label, String? date) async {
+    var user = AuthService().user;
+    if (user == null) {
+      throw "No user logged in when adding divider";
+    }
+    final dateKey = date ?? defaultUnassignedDate;
+    final data = {
+      'title': label,
+      'type': 'divider',
+      'completed': false,
+      'added': DateTime.now().millisecondsSinceEpoch,
+      'modified': '',
+      'dueDate': dateKey,
+      'tags': <String>[],
+      'priority': 'low',
+      'pushCount': 0,
+      'subtasks': <String>[],
+    };
+    final id = await taskCollection(user.uid, dateKey).add(data).then((ref) => ref.id);
+    final currentOrder = await getTaskOrder(user.uid, dateKey);
+    currentOrder.insert(0, id);
+    await _db.collection('todos').doc(user.uid).collection("tasks").doc(dateKey).set({
+      "taskOrder": currentOrder
+    }, SetOptions(merge: true));
+    return id;
   }
 
   Future<String> addTask(Task task) async {
@@ -226,7 +258,7 @@ class TaskService {
       await _db.collection('todos').doc(user.uid).collection("tasks").doc(date).set({
         "taskOrder": FieldValue.arrayRemove([taskId])
       }, SetOptions(merge: true));
-      if (task.completed) {
+      if (task.completed && !task.isDivider) {
         await PerformanceService().updatePerfomanceStats(user.uid, task, false);
       }
       return await taskCollection(user.uid, date).doc(taskId).delete();
@@ -249,7 +281,7 @@ class TaskService {
     }, SetOptions(merge: true));
 
     // Restore performance stats if the task was completed
-    if (task.completed) {
+    if (task.completed && !task.isDivider) {
       await PerformanceService().updatePerfomanceStats(user.uid, task, true);
     }
   }
@@ -417,6 +449,71 @@ class TaskService {
       await recurringTempateCollection(user.uid).doc(task.recurringTemplateId).delete();
     } catch (e) {
       debugPrint('$e');
+    }
+  }
+
+  Future<List<Task>> searchTasks(String query) async {
+    final appId = dotenv.env['ALGOLIA_APP_ID'] ?? '';
+    final apiKey = dotenv.env['ALGOLIA_SEARCH_KEY'] ?? '';
+    if (appId.isEmpty || apiKey.isEmpty) {
+      debugPrint('Algolia credentials not configured');
+      return [];
+    }
+
+    final userId = AuthService().user!.uid;
+    final client = SearchClient(appId: appId, apiKey: apiKey);
+
+    try {
+      final response = await client.searchIndex(
+        request: SearchForHits(
+          indexName: 'taskr',
+          query: query,
+          hitsPerPage: 50,
+        ),
+      );
+
+      debugPrint('Algolia returned ${response.hits.length} hits');
+      if (response.hits.isNotEmpty) {
+        debugPrint('Sample hit keys: ${response.hits.first.keys.toList()}');
+      }
+
+      return response.hits.where((hit) {
+        final path = hit['path'] as String? ?? '';
+        final type = hit['type'] as String? ?? '';
+        return path.contains(userId) && type != 'divider';
+      }).map((hit) {
+        final path = hit['path'] as String? ?? '';
+        final pathSegments = path.split('/');
+        final dueDate = pathSegments.length > 3 ? pathSegments[3] : hit['dueDate'] as String?;
+
+        return Task(
+          id: hit.objectID,
+          title: hit['title'] as String? ?? '',
+          description: hit['description'] as String?,
+          dueDate: dueDate,
+          completed: hit['completed'] as bool? ?? false,
+          priority: _parseEffort(hit['priority'] as String?),
+          added: 0,
+          tags: [],
+          subtasks: [],
+        );
+      }).toList();
+    } catch (e) {
+      debugPrint('Algolia search error: $e');
+      return [];
+    }
+  }
+
+  static Effort _parseEffort(String? effort) {
+    switch (effort?.toLowerCase()) {
+      case 'high':
+        return Effort.high;
+      case 'medium':
+        return Effort.medium;
+      case 'info':
+        return Effort.info;
+      default:
+        return Effort.low;
     }
   }
 }

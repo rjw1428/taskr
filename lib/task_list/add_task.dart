@@ -31,6 +31,8 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   Effort initialPriority = Effort.low;
   bool _completed = false;
   bool _isRecurring = false;
+  bool _isMultiDay = false;
+  String? _multiDayEndDate;
   RecurringTask? _recurringTaskTemplate;
   // List<String> _subTasks = const [];
   DateTime? initialDueDate;
@@ -66,7 +68,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
     });
   }
 
-  Future<void> _submit() async {
+  void _submit() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -82,12 +84,9 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
       apiPending = true;
     });
 
-    String? recurringTaskTemplateId;
     // Save Recurring Task
     if (_isRecurring && _dueDate != null && _recurringTaskTemplate != null) {
       _recurringTaskTemplate!.startDate = DateService().getDate(_dueDate!);
-
-      // HANDLE UPDATE OF RECURRING TEMPLATE INSTEAD OF SAVE
 
       // if not weekly, remove daysOfWeek
       if (_recurringTaskTemplate!.recurrenceType != "Weekly") {
@@ -102,7 +101,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
         _recurringTaskTemplate!.dayOfMonth = null;
       }
 
-      recurringTaskTemplateId = await TaskService().saveRecurringTask(_recurringTaskTemplate!);
+      final recurringTaskTemplateId = await TaskService().saveRecurringTask(_recurringTaskTemplate!);
 
       final type = getRecurrenceFrequency(_recurringTaskTemplate!.recurrenceType);
       final untilDate = _recurringTaskTemplate!.endDate?.toUtc();
@@ -135,21 +134,85 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
       final instancesStart = _recurringTaskTemplate!.startDate?.toUtc() ?? DateTime.now().toUtc();
       final instances = rule.getInstances(start: instancesStart).take(30);
 
-      for (var instance in instances) {
+      final firstInstance = instances.first;
+
+      final firstTask = Task(
+        title: _title.value.text.trim(),
+        description: _description.value.text.trim(),
+        priority: _priority,
+        completed: false,
+        dueDate: DateService().getString(firstInstance),
+        startTime: _startTime,
+        endTime: _endTime,
+        recurringTemplateId: recurringTaskTemplateId,
+        added: DateTime.now().millisecondsSinceEpoch,
+        tags: _selectedTags,
+        pushCount: 0,
+        subtasks: [],
+      );
+      await _taskService.addTask(firstTask);
+
+      setState(() {
+        apiPending = false;
+      });
+
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('First task in series added. The rest are being added in the background.'),
+          ),
+        );
+      }
+
+      // Add remaining tasks in the background
+      _addRemainingTasks(instances.skip(1), recurringTaskTemplateId);
+    } else if (_isMultiDay && _dueDate != null && _multiDayEndDate != null && widget.task == null) {
+      final startDate = DateService().getDate(_dueDate!);
+      final endDate = DateService().getDate(_multiDayEndDate!);
+      final dayCount = endDate.difference(startDate).inDays + 1;
+
+      if (dayCount < 2) {
+        setState(() => apiPending = false);
+        return;
+      }
+
+      final groupId = DateTime.now().millisecondsSinceEpoch.toString();
+
+      for (int i = 0; i < dayCount; i++) {
+        final date = startDate.add(Duration(days: i));
+        String position;
+        if (i == 0) {
+          position = 'start';
+        } else if (i == dayCount - 1) {
+          position = 'end';
+        } else {
+          position = 'middle';
+        }
+
         final task = Task(
-            title: _title.value.text.trim(),
-            description: _description.value.text.trim(),
-            priority: _priority,
-            completed: false,
-            dueDate: DateService().getString(instance),
-            startTime: _startTime,
-            endTime: _endTime,
-            recurringTemplateId: recurringTaskTemplateId,
-            added: DateTime.now().millisecondsSinceEpoch,
-            tags: _selectedTags,
-            pushCount: 0,
-            subtasks: []);
+          title: _title.value.text.trim(),
+          description: _description.value.text.trim(),
+          priority: _priority,
+          completed: false,
+          dueDate: DateService().getString(date),
+          added: DateTime.now().millisecondsSinceEpoch,
+          tags: _selectedTags,
+          pushCount: 0,
+          subtasks: [],
+          multiDayGroupId: groupId,
+          multiDayPosition: position,
+        );
         await _taskService.addTask(task);
+      }
+
+      setState(() => apiPending = false);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Multi-day task added ($dayCount days)')),
+        );
+        Navigator.of(context).pop();
       }
     } else {
       Task newTask = Task(
@@ -161,39 +224,66 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
           dueDate: _dueDate,
           startTime: _startTime,
           endTime: _endTime,
-          recurringTemplateId: recurringTaskTemplateId,
+          recurringTemplateId: null,
           added: DateTime.now().millisecondsSinceEpoch,
           tags: _selectedTags,
           pushCount: widget.task?.pushCount ?? 0,
-          subtasks: []);
+          subtasks: [],
+          goalId: widget.task?.goalId,
+          feedback: widget.task?.feedback,
+          multiDayGroupId: widget.task?.multiDayGroupId,
+          multiDayPosition: widget.task?.multiDayPosition);
 
       if (widget.task == null) {
-        // ADD NEW TASK
         await _taskService.addTask(newTask);
       } else {
         if (widget.task!.dueDate != newTask.dueDate) {
-          // MOVE TO NEW DAY
           await _taskService.deleteTask(widget.task!);
           await _taskService.addTask(newTask);
         } else {
-          // UPDATE WITHIN THE SAME DAY
           await _taskService.updateTask(widget.task!.id!, newTask, widget.task!);
         }
       }
+      setState(() {
+        apiPending = false;
+      });
+
+      if (mounted) {
+        final message = widget.task == null ? 'Task added' : 'Task updated';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+          ),
+        );
+        Navigator.of(context).pop();
+      }
     }
+  }
 
-    setState(() {
-      apiPending = false;
-    });
-
+  Future<void> _addRemainingTasks(Iterable<DateTime> instances, String? recurringTaskTemplateId) async {
+    for (var instance in instances) {
+      final task = Task(
+        title: _title.value.text.trim(),
+        description: _description.value.text.trim(),
+        priority: _priority,
+        completed: false,
+        dueDate: DateService().getString(instance),
+        startTime: _startTime,
+        endTime: _endTime,
+        recurringTemplateId: recurringTaskTemplateId,
+        added: DateTime.now().millisecondsSinceEpoch,
+        tags: _selectedTags,
+        pushCount: 0,
+        subtasks: [],
+      );
+      await _taskService.addTask(task);
+    }
     if (mounted) {
-      final message = widget.task == null ? 'Task added' : 'Task updated';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
+        const SnackBar(
+          content: Text('Recurring task series fully added.'),
         ),
       );
-      Navigator.of(context).pop();
     }
   }
 
@@ -400,7 +490,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                           const Text('Item will be added to the backlog without a due date'),
                         if (_dueDate != null && widget.isBacklog)
                           const Text('Item will be scheduled on the selected date'),
-                        if (_dueDate != null && widget.task?.recurringTemplateId == null ?? true)
+                        if (_dueDate != null && (widget.task?.recurringTemplateId == null ?? true) && !_isMultiDay)
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
@@ -413,6 +503,45 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                                 },
                               ),
                               const Text('Recurring'),
+                            ],
+                          ),
+                        if (_dueDate != null && widget.task == null && !_isRecurring)
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Checkbox(
+                                value: _isMultiDay,
+                                onChanged: (bool? value) {
+                                  setState(() {
+                                    _isMultiDay = value ?? false;
+                                    if (!_isMultiDay) _multiDayEndDate = null;
+                                  });
+                                },
+                              ),
+                              const Text('Multi-day'),
+                            ],
+                          ),
+                        if (_isMultiDay && _dueDate != null)
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              ElevatedButton(
+                                onPressed: () async {
+                                  final startDate = DateService().getDate(_dueDate!);
+                                  final date = await _selectDate(context, startDate.add(const Duration(days: 1)));
+                                  if (date == null || !date.isAfter(startDate)) return;
+                                  setState(() => _multiDayEndDate = DateService().getString(date));
+                                },
+                                child: Text(
+                                  _multiDayEndDate ?? 'Set end date',
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                              ),
+                              if (_multiDayEndDate != null)
+                                IconButton(
+                                  onPressed: () => setState(() => _multiDayEndDate = null),
+                                  icon: const Icon(FontAwesomeIcons.xmark),
+                                ),
                             ],
                           ),
                         if (_isRecurring && _dueDate != null)

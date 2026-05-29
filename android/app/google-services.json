@@ -2,17 +2,41 @@
   "project_info": {
     "project_number": "1070956843093",
     "project_id": "taskr-1428",
-    "storage_bucket": "taskr-1428.appspot.com"
+    "storage_bucket": "taskr-1428.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1070956843093:android:8be9d4f73f5570296604dc",
+        "mobilesdk_app_id": "1:1070956843093:android:9e1d88b3b5b954ab6604dc",
         "android_client_info": {
-          "package_name": "com.rwss.taskr"
+          "package_name": "com.rwss.expense_tracker"
         }
       },
       "oauth_client": [
+        {
+          "client_id": "1070956843093-c4m50jjppdpr7km7f5huaqs1peimn10b.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.rwss.expense_tracker",
+            "certificate_hash": "f5e0eaa3d16a52407b7739be70fbe92c985e9081"
+          }
+        },
+        {
+          "client_id": "1070956843093-f62737mlr4ff9mi9598tht3vo1h04js1.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.rwss.expense_tracker",
+            "certificate_hash": "a689f1ed46526b87e9b526003a598f1d01874b8c"
+          }
+        },
+        {
+          "client_id": "1070956843093-qsijqjlqefr72ed5s09f8tjfp884m692.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.rwss.expense_tracker",
+            "certificate_hash": "e945f0b3aa727fc40e939f310cbef25561766225"
+          }
+        },
         {
           "client_id": "1070956843093-jonb5tbrjl2nee7pesb3m63nu8l72gdf.apps.googleusercontent.com",
           "client_type": 3
@@ -27,14 +51,58 @@
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "1070956843093-jonb5tbrjl2nee7pesb3m63nu8l72gdf.apps.googleusercontent.com",
+              "client_id": "1070956843093-cgrrhj01n2sifo16js00u5aj7cufprfg.apps.googleusercontent.com",
               "client_type": 3
             },
             {
-              "client_id": "1070956843093-u6h2tj4743foiehvl913phq24td8d170.apps.googleusercontent.com",
+              "client_id": "1070956843093-24sai4jufmb0tg875l8mf74f5vhh9iu7.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.example.taskr"
+                "bundle_id": "com.example.expenseTracker"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1070956843093:android:8be9d4f73f5570296604dc",
+        "android_client_info": {
+          "package_name": "com.rwss.taskr"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1070956843093-ct9a3ssj2hu6sukoq8qmb5lbrrgoujm4.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.rwss.taskr",
+            "certificate_hash": "f5e0eaa3d16a52407b7739be70fbe92c985e9081"
+          }
+        },
+        {
+          "client_id": "1070956843093-jonb5tbrjl2nee7pesb3m63nu8l72gdf.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAp3fTO2bR6qpwAKXG6itbssRhWzT7x7l8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1070956843093-cgrrhj01n2sifo16js00u5aj7cufprfg.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1070956843093-24sai4jufmb0tg875l8mf74f5vhh9iu7.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.expenseTracker"
               }
             }
           ]

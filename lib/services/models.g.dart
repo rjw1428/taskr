@@ -6,6 +6,111 @@ part of 'models.dart';
 // JsonSerializableGenerator
 // **************************************************************************
 
+JournalEntry _$JournalEntryFromJson(Map<String, dynamic> json) => JournalEntry(
+      id: json['id'] as String?,
+      date: json['date'] as String,
+      thinking: json['thinking'] as String?,
+      feeling: json['feeling'] as String?,
+      gratitude: json['gratitude'] as String?,
+    );
+
+Map<String, dynamic> _$JournalEntryToJson(JournalEntry instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'date': instance.date,
+      'thinking': instance.thinking,
+      'feeling': instance.feeling,
+      'gratitude': instance.gratitude,
+    };
+
+Goal _$GoalFromJson(Map<String, dynamic> json) => Goal(
+      id: json['id'] as String?,
+      title: json['title'] as String,
+      description: json['description'] as String?,
+      timeframe: $enumDecode(_$GoalTimeframeEnumMap, json['timeframe']),
+      frequency: $enumDecode(_$GoalFrequencyEnumMap, json['frequency']),
+      frequencyCount: (json['frequencyCount'] as num?)?.toInt(),
+      startDate: json['startDate'] as String,
+      endDate: json['endDate'] as String,
+      status: $enumDecodeNullable(_$GoalStatusEnumMap, json['status']) ??
+          GoalStatus.active,
+      createdAt: (json['createdAt'] as num).toInt(),
+      modifiedAt: (json['modifiedAt'] as num).toInt(),
+    );
+
+Map<String, dynamic> _$GoalToJson(Goal instance) => <String, dynamic>{
+      'id': instance.id,
+      'title': instance.title,
+      'description': instance.description,
+      'timeframe': _$GoalTimeframeEnumMap[instance.timeframe]!,
+      'frequency': _$GoalFrequencyEnumMap[instance.frequency]!,
+      'frequencyCount': instance.frequencyCount,
+      'startDate': instance.startDate,
+      'endDate': instance.endDate,
+      'status': _$GoalStatusEnumMap[instance.status]!,
+      'createdAt': instance.createdAt,
+      'modifiedAt': instance.modifiedAt,
+    };
+
+const _$GoalTimeframeEnumMap = {
+  GoalTimeframe.oneWeek: '1_week',
+  GoalTimeframe.oneMonth: '1_month',
+  GoalTimeframe.threeMonths: '3_months',
+  GoalTimeframe.sixMonths: '6_months',
+  GoalTimeframe.oneYear: '1_year',
+};
+
+const _$GoalFrequencyEnumMap = {
+  GoalFrequency.daily: 'daily',
+  GoalFrequency.nTimesWeek: 'n_times_week',
+  GoalFrequency.auto: 'auto',
+};
+
+const _$GoalStatusEnumMap = {
+  GoalStatus.active: 'active',
+  GoalStatus.completed: 'completed',
+  GoalStatus.deleted: 'deleted',
+};
+
+Generation _$GenerationFromJson(Map<String, dynamic> json) => Generation(
+      id: json['id'] as String?,
+      generatedAt: (json['generatedAt'] as num).toInt(),
+      weekStart: json['weekStart'] as String,
+      weekEnd: json['weekEnd'] as String,
+      taskIds: (json['taskIds'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          const [],
+      prompt: json['prompt'] as String,
+      response: json['response'] as String,
+      completedTaskIds: (json['completedTaskIds'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          const [],
+      skippedTaskIds: (json['skippedTaskIds'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          const [],
+      taskFeedback: (json['taskFeedback'] as Map<String, dynamic>?)?.map(
+            (k, e) => MapEntry(k, e as String),
+          ) ??
+          const {},
+    );
+
+Map<String, dynamic> _$GenerationToJson(Generation instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'generatedAt': instance.generatedAt,
+      'weekStart': instance.weekStart,
+      'weekEnd': instance.weekEnd,
+      'taskIds': instance.taskIds,
+      'prompt': instance.prompt,
+      'response': instance.response,
+      'completedTaskIds': instance.completedTaskIds,
+      'skippedTaskIds': instance.skippedTaskIds,
+      'taskFeedback': instance.taskFeedback,
+    };
+
 Accomplishment _$AccomplishmentFromJson(Map<String, dynamic> json) =>
     Accomplishment(
       id: json['id'] as String?,
@@ -39,6 +144,7 @@ Task _$TaskFromJson(Map<String, dynamic> json) => Task(
       title: json['title'] as String,
       description: json['description'] as String?,
       completed: json['completed'] as bool? ?? false,
+      type: json['type'] as String? ?? 'task',
       tags: (json['tags'] as List<dynamic>?)
               ?.map((e) => Tag.fromJson(e as Map<String, dynamic>))
               .toList() ??
@@ -49,6 +155,11 @@ Task _$TaskFromJson(Map<String, dynamic> json) => Task(
       startTime: json['startTime'] as String?,
       endTime: json['endTime'] as String?,
       recurringTemplateId: json['recurringTemplateId'] as String?,
+      goalId: json['goalId'] as String?,
+      calendarEventId: json['calendarEventId'] as String?,
+      feedback: json['feedback'] as String?,
+      multiDayGroupId: json['multiDayGroupId'] as String?,
+      multiDayPosition: json['multiDayPosition'] as String?,
       pushCount: (json['pushCount'] as num?)?.toInt() ?? 0,
       subtasks: (json['subtasks'] as List<dynamic>?)
               ?.map((e) => e as String)
@@ -63,12 +174,18 @@ Map<String, dynamic> _$TaskToJson(Task instance) => <String, dynamic>{
       'title': instance.title,
       'description': instance.description,
       'completed': instance.completed,
+      'type': instance.type,
       'tags': instance.tags,
       'dueDate': instance.dueDate,
       'startTime': instance.startTime,
       'endTime': instance.endTime,
       'completedTime': instance.completedTime,
       'recurringTemplateId': instance.recurringTemplateId,
+      'goalId': instance.goalId,
+      'calendarEventId': instance.calendarEventId,
+      'feedback': instance.feedback,
+      'multiDayGroupId': instance.multiDayGroupId,
+      'multiDayPosition': instance.multiDayPosition,
       'subtasks': instance.subtasks,
       'priority': _$EffortEnumMap[instance.priority]!,
       'pushCount': instance.pushCount,
