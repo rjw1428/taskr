@@ -19,9 +19,10 @@ class GoalListPage extends StatelessWidget {
 
         final goals = snapshot.data ?? [];
         final activeGoals = goals.where((g) => g.status == GoalStatus.active).toList();
+        final pausedGoals = goals.where((g) => g.status == GoalStatus.paused).toList();
         final completedGoals = goals.where((g) => g.status == GoalStatus.completed).toList();
 
-        if (activeGoals.isEmpty && completedGoals.isEmpty) {
+        if (activeGoals.isEmpty && pausedGoals.isEmpty && completedGoals.isEmpty) {
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(32),
@@ -57,6 +58,15 @@ class GoalListPage extends StatelessWidget {
               ),
               ...activeGoals.map((goal) => _GoalCard(goal: goal)),
             ],
+            if (pausedGoals.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Text('Paused',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.blueGrey)),
+              ),
+              ...pausedGoals.map((goal) => _GoalCard(goal: goal)),
+            ],
             if (completedGoals.isNotEmpty) ...[
               const SizedBox(height: 16),
               Padding(
@@ -91,13 +101,22 @@ class _GoalCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isCompleted = goal.status == GoalStatus.completed;
+    final isPaused = goal.status == GoalStatus.paused;
     return Card(
       color: isCompleted ? Colors.grey.shade900 : Colors.black87,
       margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       child: ListTile(
         leading: Icon(
-          isCompleted ? FontAwesomeIcons.circleCheck : FontAwesomeIcons.bullseye,
-          color: isCompleted ? Colors.green : Colors.orange,
+          isCompleted
+              ? FontAwesomeIcons.circleCheck
+              : isPaused
+                  ? FontAwesomeIcons.pause
+                  : FontAwesomeIcons.bullseye,
+          color: isCompleted
+              ? Colors.green
+              : isPaused
+                  ? Colors.blueGrey
+                  : Colors.orange,
         ),
         title: Text(
           goal.title,
@@ -107,7 +126,9 @@ class _GoalCard extends StatelessWidget {
           ),
         ),
         subtitle: Text(
-          '${goal.frequencyLabel} · ${_timeRemaining()}',
+          isPaused
+              ? '${goal.frequencyLabel} · Paused'
+              : '${goal.frequencyLabel} · ${_timeRemaining()}',
           style: const TextStyle(color: Colors.grey),
         ),
         trailing: const Icon(FontAwesomeIcons.chevronRight, size: 14, color: Colors.grey),

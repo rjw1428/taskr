@@ -77,6 +77,11 @@ class _AccomplishmentDetailView extends StatelessWidget {
               'Difficulty: ${accomplishment.difficulty.toString().split('.').last}',
               style: const TextStyle(fontSize: 16),
             ),
+            const SizedBox(height: 10),
+            Text(
+              'Difficulty Score: ${accomplishment.difficultyScore}/10',
+              style: const TextStyle(fontSize: 16),
+            ),
             const SizedBox(height: 20),
             Text(
               accomplishment.description ?? 'No description provided.',

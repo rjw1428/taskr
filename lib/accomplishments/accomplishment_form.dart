@@ -17,6 +17,7 @@ class _AccomplishmentFormState extends State<AccomplishmentForm> {
   String? _title;
   String? _description;
   Difficulty _difficulty = Difficulty.low;
+  int _difficultyScore = 1;
   String pageHeader = 'Add Accomplishment';
   String actionButton = 'Add';
 
@@ -27,6 +28,7 @@ class _AccomplishmentFormState extends State<AccomplishmentForm> {
       _title = widget.accomplishment!.title;
       _description = widget.accomplishment!.description ?? '';
       _difficulty = widget.accomplishment!.difficulty;
+      _difficultyScore = widget.accomplishment!.difficultyScore;
       pageHeader = 'Edit Accomplishment';
       actionButton = 'Update';
     }
@@ -82,6 +84,25 @@ class _AccomplishmentFormState extends State<AccomplishmentForm> {
                   });
                 },
               ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Text('Difficulty Score: ', style: TextStyle(fontSize: 16)),
+                  Text('$_difficultyScore', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              Slider(
+                value: _difficultyScore.toDouble(),
+                min: 1,
+                max: 10,
+                divisions: 9,
+                label: _difficultyScore.toString(),
+                onChanged: (double value) {
+                  setState(() {
+                    _difficultyScore = value.round();
+                  });
+                },
+              ),
               const SizedBox(height: 20),
               ElevatedButton(
                 onPressed: () {
@@ -102,6 +123,7 @@ class _AccomplishmentFormState extends State<AccomplishmentForm> {
                         description: _description,
                         date: widget.accomplishment!.date,
                         difficulty: _difficulty,
+                        difficultyScore: _difficultyScore,
                       );
                       Provider.of<AccomplishmentProvider>(context, listen: false)
                           .updateAccomplishment(updatedAccomplishment);
@@ -111,6 +133,7 @@ class _AccomplishmentFormState extends State<AccomplishmentForm> {
                         description: _description,
                         date: DateTime.now().toIso8601String(),
                         difficulty: _difficulty,
+                        difficultyScore: _difficultyScore,
                       );
                       Provider.of<AccomplishmentProvider>(context, listen: false).addAccomplishment(newAccomplishment);
                     }

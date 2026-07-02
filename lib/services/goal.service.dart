@@ -73,6 +73,24 @@ class GoalService with ChangeNotifier {
     await _goalCollection(user.uid).doc(goal.id).update(data);
   }
 
+  Future<void> pauseGoal(Goal goal) async {
+    final user = AuthService().user;
+    if (user == null) throw Exception('No user logged in');
+    await _goalCollection(user.uid).doc(goal.id).update({
+      'status': 'paused',
+      'modifiedAt': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
+  Future<void> resumeGoal(Goal goal) async {
+    final user = AuthService().user;
+    if (user == null) throw Exception('No user logged in');
+    await _goalCollection(user.uid).doc(goal.id).update({
+      'status': 'active',
+      'modifiedAt': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
   Future<void> deleteGoal(Goal goal) async {
     final user = AuthService().user;
     if (user == null) throw Exception('No user logged in');

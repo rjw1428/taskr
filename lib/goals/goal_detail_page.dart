@@ -69,6 +69,25 @@ class _GoalDetailPageState extends State<GoalDetailPage> {
     }
   }
 
+  Future<void> _togglePause() async {
+    if (_goal == null) return;
+    final goal = _goal!;
+    final pausing = goal.status == GoalStatus.active;
+    if (pausing) {
+      await _goalService.pauseGoal(goal);
+    } else {
+      await _goalService.resumeGoal(goal);
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(pausing
+            ? 'Goal paused — no new tasks will be generated'
+            : 'Goal resumed')),
+      );
+      _loadGoal();
+    }
+  }
+
   Future<void> _deleteGoal() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -105,6 +124,7 @@ class _GoalDetailPageState extends State<GoalDetailPage> {
     final goal = _goal!;
     final isCompleted = goal.status == GoalStatus.completed;
     final isDeleted = goal.status == GoalStatus.deleted;
+    final isPaused = goal.status == GoalStatus.paused;
     final totalTasks = _stats['totalTasks'] ?? 0;
     final completedTasks = _stats['completedTasks'] ?? 0;
     final weeksActive = _stats['weeksActive'] ?? 0;
@@ -122,6 +142,12 @@ class _GoalDetailPageState extends State<GoalDetailPage> {
         title: Text(goal.title),
         actions: [
           if (!isDeleted) ...[
+            if (!isCompleted)
+              IconButton(
+                icon: Icon(isPaused ? FontAwesomeIcons.play : FontAwesomeIcons.pause),
+                tooltip: isPaused ? 'Resume goal' : 'Pause goal',
+                onPressed: _togglePause,
+              ),
             IconButton(
               icon: const Icon(FontAwesomeIcons.penToSquare),
               onPressed: () async {
@@ -163,6 +189,29 @@ class _GoalDetailPageState extends State<GoalDetailPage> {
                     const SizedBox(height: 4),
                     Text('$completedTasks of $totalTasks tasks completed over $weeksActive weeks ($completionRate%)',
                         style: const TextStyle(color: Colors.grey)),
+                  ],
+                ),
+              ),
+
+            if (isPaused)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.blueGrey.withAlpha(40),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(FontAwesomeIcons.pause, color: Colors.blueGrey, size: 20),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Goal paused — no new tasks will be generated until you resume.',
+                        style: TextStyle(color: Colors.blueGrey),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -221,7 +270,7 @@ class _GoalDetailPageState extends State<GoalDetailPage> {
               ),
             ),
 
-            if (!isCompleted && !isDeleted) ...[
+            if (!isCompleted && !isDeleted && !isPaused) ...[
               const SizedBox(height: 24),
               Center(
                 child: ElevatedButton.icon(

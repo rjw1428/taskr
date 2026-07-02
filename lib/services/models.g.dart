@@ -68,6 +68,7 @@ const _$GoalFrequencyEnumMap = {
 
 const _$GoalStatusEnumMap = {
   GoalStatus.active: 'active',
+  GoalStatus.paused: 'paused',
   GoalStatus.completed: 'completed',
   GoalStatus.deleted: 'deleted',
 };
@@ -120,6 +121,7 @@ Accomplishment _$AccomplishmentFromJson(Map<String, dynamic> json) =>
       difficulty:
           $enumDecodeNullable(_$DifficultyEnumMap, json['difficulty']) ??
               Difficulty.low,
+      difficultyScore: (json['difficultyScore'] as num?)?.toInt() ?? 1,
     );
 
 Map<String, dynamic> _$AccomplishmentToJson(Accomplishment instance) =>
@@ -129,6 +131,7 @@ Map<String, dynamic> _$AccomplishmentToJson(Accomplishment instance) =>
       'description': instance.description,
       'date': instance.date,
       'difficulty': _$DifficultyEnumMap[instance.difficulty]!,
+      'difficultyScore': instance.difficultyScore,
     };
 
 const _$DifficultyEnumMap = {
@@ -163,6 +166,7 @@ Task _$TaskFromJson(Map<String, dynamic> json) => Task(
       reminderTime: json['reminderTime'] as String?,
       reminderTaskName: json['reminderTaskName'] as String?,
       pushCount: (json['pushCount'] as num?)?.toInt() ?? 0,
+      countdown: json['countdown'] as bool? ?? false,
       subtasks: (json['subtasks'] as List<dynamic>?)
               ?.map((e) => e as String)
               .toList() ??
@@ -193,6 +197,7 @@ Map<String, dynamic> _$TaskToJson(Task instance) => <String, dynamic>{
       'subtasks': instance.subtasks,
       'priority': _$EffortEnumMap[instance.priority]!,
       'pushCount': instance.pushCount,
+      'countdown': instance.countdown,
     };
 
 const _$EffortEnumMap = {

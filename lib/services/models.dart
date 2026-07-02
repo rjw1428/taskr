@@ -55,6 +55,7 @@ enum GoalFrequency {
 
 enum GoalStatus {
   active,
+  paused,
   completed,
   deleted,
 }
@@ -200,6 +201,7 @@ class Accomplishment {
   String? description;
   String date;
   Difficulty difficulty;
+  int difficultyScore;
 
   Accomplishment({
     this.id,
@@ -207,6 +209,7 @@ class Accomplishment {
     this.description,
     required this.date,
     this.difficulty = Difficulty.low,
+    this.difficultyScore = 1,
   });
 
   factory Accomplishment.fromJson(Map<String, dynamic> json) => _$AccomplishmentFromJson(json);
@@ -238,6 +241,7 @@ class Task {
   List<String> subtasks;
   Effort priority;
   int pushCount;
+  bool countdown;
 
   bool get isDivider => type == 'divider';
   bool get isMultiDay => multiDayGroupId != null;
@@ -267,6 +271,7 @@ class Task {
       this.reminderTime,
       this.reminderTaskName,
       this.pushCount = 0,
+      this.countdown = false,
       this.subtasks = const []});
 
   factory Task.fromJson(Map<String, dynamic> json) => _$TaskFromJson(json);
@@ -294,6 +299,7 @@ class Task {
     List<String>? subtasks,
     Effort? priority,
     int? pushCount,
+    bool? countdown,
     String? recurringTemplateId,
     String? goalId,
     String? calendarEventId,
@@ -318,6 +324,7 @@ class Task {
         subtasks: subtasks ?? this.subtasks,
         priority: priority ?? this.priority,
         pushCount: pushCount ?? this.pushCount,
+        countdown: countdown ?? this.countdown,
         recurringTemplateId: recurringTemplateId ?? this.recurringTemplateId,
         goalId: goalId ?? this.goalId,
         calendarEventId: calendarEventId ?? this.calendarEventId,

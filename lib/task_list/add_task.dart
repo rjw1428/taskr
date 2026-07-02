@@ -32,6 +32,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   bool _completed = false;
   bool _isRecurring = false;
   bool _isMultiDay = false;
+  bool _countdown = false;
   String? _multiDayEndDate;
   String? _multiDayStartDate;
   String? _reminderTime;
@@ -71,7 +72,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   }
 
   String _formatReminder(String isoString) {
-    final dt = DateTime.parse(isoString);
+    final dt = DateTime.parse(isoString).toLocal();
     final month = dt.month.toString().padLeft(2, '0');
     final day = dt.day.toString().padLeft(2, '0');
     final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
@@ -173,6 +174,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
         added: DateTime.now().millisecondsSinceEpoch,
         tags: _selectedTags,
         pushCount: 0,
+        countdown: _countdown,
         subtasks: [],
       );
       await _taskService.addTask(firstTask);
@@ -224,6 +226,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
           added: DateTime.now().millisecondsSinceEpoch,
           tags: _selectedTags,
           pushCount: 0,
+          countdown: _countdown,
           subtasks: [],
           multiDayGroupId: groupId,
           multiDayPosition: position,
@@ -287,7 +290,8 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
           multiDayGroupId: widget.task?.multiDayGroupId,
           multiDayPosition: widget.task?.multiDayPosition,
           reminderTime: _reminderTime,
-          reminderTaskName: widget.task?.reminderTaskName);
+          reminderTaskName: widget.task?.reminderTaskName,
+          countdown: _countdown);
 
       if (widget.task == null) {
         final taskId = await _taskService.addTask(newTask);
@@ -379,15 +383,22 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
       initialPriority = widget.task!.priority;
       _selectedTags = widget.task!.tags;
       _reminderTime = widget.task!.reminderTime;
+      _countdown = widget.task!.countdown;
       if (widget.task!.isMultiDay) {
         _isMultiDay = true;
         _loadMultiDayEndDate();
       }
     }
 
-    initialDueDate = _dueDate == null ? DateService().getSelectedDate() : DateService().getDate(widget.task!.dueDate!);
-    if (initialDueDate != null) {
-      _dueDate = DateService().getString(initialDueDate!);
+    if (_dueDate != null) {
+      initialDueDate = DateService().getDate(widget.task!.dueDate!);
+    } else if (widget.task == null) {
+      initialDueDate = DateService().getSelectedDate();
+      if (initialDueDate != null) {
+        _dueDate = DateService().getString(initialDueDate!);
+      }
+    } else {
+      initialDueDate = DateTime.now();
     }
   }
 
@@ -570,12 +581,11 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                           const Text('Item will be added to the backlog without a due date'),
                         if (_dueDate != null && widget.isBacklog)
                           const Text('Item will be scheduled on the selected date'),
-                        if (_dueDate != null)
-                          ExpansionTile(
+                        ExpansionTile(
                             title: const Text('Advanced'),
-                            initiallyExpanded: _isRecurring || _isMultiDay || _reminderTime != null,
+                            initiallyExpanded: _isRecurring || _isMultiDay || _reminderTime != null || _countdown,
                             children: [
-                              if (widget.task?.recurringTemplateId == null && !_isMultiDay)
+                              if (_dueDate != null && widget.task?.recurringTemplateId == null && !_isMultiDay)
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
@@ -590,7 +600,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                                     const Text('Recurring'),
                                   ],
                                 ),
-                              if ((widget.task == null || widget.task!.isMultiDay) && !_isRecurring)
+                              if (_dueDate != null && (widget.task == null || widget.task!.isMultiDay) && !_isRecurring)
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
@@ -640,20 +650,24 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                                 children: [
                                   ElevatedButton(
                                     onPressed: () async {
-                                      final defaultDate = DateService().getDate(_dueDate!);
+                                      final defaultDate = _dueDate != null
+                                          ? DateService().getDate(_dueDate!)
+                                          : DateTime.now();
                                       final date = await _selectDate(context, _reminderTime != null
-                                          ? DateTime.parse(_reminderTime!)
+                                          ? DateTime.parse(_reminderTime!).toLocal()
                                           : defaultDate);
                                       if (date == null) return;
                                       final time = await _selectTime(
                                         context,
                                         _reminderTime != null
-                                            ? TimeOfDay.fromDateTime(DateTime.parse(_reminderTime!))
+                                            ? TimeOfDay.fromDateTime(DateTime.parse(_reminderTime!).toLocal())
                                             : DateService().getRoundedTime(TimeOfDay.now()),
                                       );
                                       if (time == null) return;
                                       final dt = DateTime(date.year, date.month, date.day, time.hour, time.minute);
-                                      setState(() => _reminderTime = dt.toIso8601String());
+                                      // Store as a UTC instant (with 'Z') so the backend resolves
+                                      // the same absolute moment regardless of server timezone.
+                                      setState(() => _reminderTime = dt.toUtc().toIso8601String());
                                     },
                                     child: Text(
                                       _reminderTime != null
@@ -669,6 +683,21 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                                     ),
                                 ],
                               ),
+                              if (_dueDate != null)
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Checkbox(
+                                      value: _countdown,
+                                      onChanged: (bool? value) {
+                                        setState(() {
+                                          _countdown = value ?? false;
+                                        });
+                                      },
+                                    ),
+                                    const Text('Countdown'),
+                                  ],
+                                ),
                               if (_isRecurring)
                                 RecurringTaskForm(
                                   key: _recurringTaskFormKey,

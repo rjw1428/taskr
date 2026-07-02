@@ -12,12 +12,13 @@ class ReminderService {
   final _taskService = TaskService();
 
   Future<void> scheduleReminder(Task task) async {
-    if (task.reminderTime == null || task.id == null || task.dueDate == null) return;
+    if (task.reminderTime == null || task.id == null) return;
 
+    final taskDate = task.dueDate ?? TaskService.defaultUnassignedDate;
     final callable = _functions.httpsCallable('scheduleReminder');
     final result = await callable.call<Map<String, dynamic>>({
       'taskId': task.id,
-      'taskDate': task.dueDate,
+      'taskDate': taskDate,
       'reminderTime': task.reminderTime,
       'title': task.title,
     });

@@ -28,6 +28,27 @@ class TaskService {
     return _db.collection('todos').doc(userId).collection('recurring');
   }
 
+  CollectionReference<Map<String, dynamic>> countdownCollection(String userId) {
+    return _db.collection('todos').doc(userId).collection('countdowns');
+  }
+
+  Future<void> _syncCountdownIndex(String userId, Task task) async {
+    if (task.id == null) return;
+    final ref = countdownCollection(userId).doc(task.id);
+    final isNonStartMultiDay = task.multiDayGroupId != null && task.multiDayPosition != 'start';
+    if (task.countdown && task.dueDate != null && !task.completed && !isNonStartMultiDay) {
+      await ref.set({'title': task.title, 'dueDate': task.dueDate});
+    } else {
+      await ref.delete().catchError((_) {});
+    }
+  }
+
+  Stream<List<Map<String, dynamic>>> streamCountdowns(String userId) {
+    return countdownCollection(userId).snapshots().map((snap) => snap.docs
+        .map((doc) => {'taskId': doc.id, ...doc.data()})
+        .toList());
+  }
+
   Stream<List<String>> taskOrderStream(String userId, String? date) {
     return _db
         .collection('todos')
@@ -156,6 +177,7 @@ class TaskService {
       }, SetOptions(merge: true));
 
       completer.complete(id);
+      await _syncCountdownIndex(user.uid, task.copyWith(id: id));
       return completer.future;
     }
 
@@ -169,6 +191,7 @@ class TaskService {
       var newOrder = notCompleted + completed;
       await _db.collection('todos').doc(user.uid).collection("tasks").doc(date).set({"taskOrder": newOrder});
       completer.complete(id);
+      await _syncCountdownIndex(user.uid, task.copyWith(id: id));
       return completer.future;
     }
 
@@ -218,6 +241,7 @@ class TaskService {
     await _db.collection('todos').doc(user.uid).collection("tasks").doc(date).set({"taskOrder": update});
 
     completer.complete(id);
+    await _syncCountdownIndex(user.uid, task.copyWith(id: id));
     return completer.future;
   }
 
@@ -232,6 +256,7 @@ class TaskService {
       await PerformanceService().updatePerfomanceStats(user.uid, newTask, true);
     }
     await taskCollection(user.uid, date).doc(id).set(removeNulls(newTask.toDbTask()));
+    await _syncCountdownIndex(user.uid, newTask.copyWith(id: id));
   }
 
   Future<void> updateTaskByKey(Map<String, dynamic> update, Task task) async {
@@ -243,6 +268,9 @@ class TaskService {
     } else {
       if (update.containsKey('completed')) {
         await PerformanceService().updatePerfomanceStats(user.uid, task, !!update['completed']);
+        if (update['completed'] == true && task.countdown) {
+          await countdownCollection(user.uid).doc(taskId).delete().catchError((_) {});
+        }
       }
       return await taskCollection(user.uid, date).doc(taskId).update(update);
     }
@@ -263,6 +291,9 @@ class TaskService {
       }, SetOptions(merge: true));
       if (task.completed && !task.isDivider) {
         await PerformanceService().updatePerfomanceStats(user.uid, task, false);
+      }
+      if (task.countdown) {
+        await countdownCollection(user.uid).doc(taskId).delete().catchError((_) {});
       }
       return await taskCollection(user.uid, date).doc(taskId).delete();
     }
@@ -291,12 +322,17 @@ class TaskService {
 
   Future<void> pushTask(Task task) async {
     var user = AuthService().user!;
+    if (task.reminderTaskName != null) {
+      await ReminderService().cancelReminder(task);
+    }
     await deleteTask(task);
     final now = DateTime.now();
     final d = task.dueDate != null ? DateService().getDate(task.dueDate!) : now;
     final decrementScore = d.day == now.day && d.month == now.month && d.year == now.year;
     task.dueDate = DateService().incrementDate(d);
     task.pushCount += 1;
+    task.reminderTime = null;
+    task.reminderTaskName = null;
     await addTask(task);
     if (decrementScore) {
       await PerformanceService().decrementScore(user.uid, 1);
@@ -549,7 +585,8 @@ class TaskService {
     try {
       final response = await client.searchIndex(
         request: SearchForHits(
-          indexName: 'taskr',
+          // Replica sorted by due date asc (name says "desc" but it's ascending).
+          indexName: 'taskr_dueDate_desc',
           query: query,
           hitsPerPage: 50,
         ),

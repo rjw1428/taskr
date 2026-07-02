@@ -246,8 +246,58 @@ class TaskListState extends State<TaskListScreen> {
                           },
                         )
                       : null,
-                  header: Column(children: [
+                  header: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     if (!widget.isBacklog) DailyProgress(numerator: _completedCount, denominator: _totalCount),
+                    if (!widget.isBacklog)
+                      StreamBuilder<List<Map<String, dynamic>>>(
+                        stream: _taskService.streamCountdowns(userId),
+                        builder: (context, cdSnapshot) {
+                          if (!cdSnapshot.hasData) return const SizedBox.shrink();
+                          final viewed = DateService().getDate(selectedDate);
+                          final chips = cdSnapshot.data!.where((cd) {
+                            final due = cd['dueDate'] as String?;
+                            if (due == null) return false;
+                            final dueDate = DateService().getDate(due);
+                            return dueDate.isAfter(viewed);
+                          }).toList()
+                            ..sort((a, b) => (a['dueDate'] as String).compareTo(b['dueDate'] as String));
+                          if (chips.isEmpty) return const SizedBox.shrink();
+                          return Padding(
+                            padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+                            child: Wrap(
+                              alignment: WrapAlignment.start,
+                              spacing: 6,
+                              runSpacing: 4,
+                              children: chips.map((cd) {
+                                final dueDate = DateService().getDate(cd['dueDate'] as String);
+                                final days = dueDate.difference(viewed).inDays;
+                                return ConstrainedBox(
+                                  constraints: const BoxConstraints(maxWidth: 100),
+                                  child: ActionChip(
+                                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                                    backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                                    side: BorderSide.none,
+                                    label: Text(
+                                      '${cd['title']} · ${days}d',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                      ),
+                                    ),
+                                    onPressed: () {
+                                      final due = cd['dueDate'] as String;
+                                      setState(() => selectedDate = due);
+                                      DateService().setSelectedDate(DateService().getDate(due));
+                                    },
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          );
+                        },
+                      ),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
@@ -392,6 +442,9 @@ class TaskListState extends State<TaskListScreen> {
   }
 
   void deleteTaskWithUndo(Task task) {
+    if (task.reminderTaskName != null) {
+      ReminderService().cancelReminder(task);
+    }
     _taskService.deleteTask(task);
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
@@ -402,6 +455,9 @@ class TaskListState extends State<TaskListScreen> {
           label: 'Undo',
           onPressed: () {
             _taskService.restoreTask(task);
+            if (task.reminderTime != null) {
+              ReminderService().scheduleReminder(task);
+            }
           },
         ),
       ),
