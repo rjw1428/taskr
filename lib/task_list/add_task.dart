@@ -110,6 +110,19 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
       apiPending = true;
     });
 
+    try {
+      await _saveTask();
+    } catch (e) {
+      if (mounted) {
+        setState(() => apiPending = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save task: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _saveTask() async {
     // Save Recurring Task
     if (_isRecurring && _dueDate != null && _recurringTaskTemplate != null) {
       _recurringTaskTemplate!.startDate = DateService().getDate(_dueDate!);

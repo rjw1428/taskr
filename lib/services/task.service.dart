@@ -34,12 +34,19 @@ class TaskService {
 
   Future<void> _syncCountdownIndex(String userId, Task task) async {
     if (task.id == null) return;
-    final ref = countdownCollection(userId).doc(task.id);
-    final isNonStartMultiDay = task.multiDayGroupId != null && task.multiDayPosition != 'start';
-    if (task.countdown && task.dueDate != null && !task.completed && !isNonStartMultiDay) {
-      await ref.set({'title': task.title, 'dueDate': task.dueDate});
-    } else {
-      await ref.delete().catchError((_) {});
+    // The countdown index is a denormalized cache; a failure here must never
+    // break the primary task write (which would, e.g., leave the add-task form
+    // stuck open because the caller never reaches its pop()).
+    try {
+      final ref = countdownCollection(userId).doc(task.id);
+      final isNonStartMultiDay = task.multiDayGroupId != null && task.multiDayPosition != 'start';
+      if (task.countdown && task.dueDate != null && !task.completed && !isNonStartMultiDay) {
+        await ref.set({'title': task.title, 'dueDate': task.dueDate});
+      } else {
+        await ref.delete();
+      }
+    } catch (_) {
+      // Ignore; the index will be reconciled on the next task mutation.
     }
   }
 
