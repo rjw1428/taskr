@@ -10,6 +10,7 @@ import 'package:taskr/services/services.dart';
 import 'package:taskr/services/tag.provider.dart';
 import 'package:taskr/shared/progress_bar.dart';
 import 'package:taskr/task_list/divider_item.dart';
+import 'package:taskr/task_list/health_page.dart';
 import 'package:taskr/task_list/journal_modal.dart';
 import 'package:taskr/task_list/task_item.dart';
 import '../shared/shared.dart';
@@ -208,39 +209,74 @@ class TaskListState extends State<TaskListScreen> {
                             final hasJournal = journalSnapshot.data != null && journalSnapshot.data!.hasData;
                             return Padding(
                               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                              child: OutlinedButton.icon(
-                                onPressed: () {
-                                  Navigator.of(context, rootNavigator: true).push(
-                                    MaterialPageRoute(
-                                      fullscreenDialog: true,
-                                      builder: (_) => JournalModal(date: selectedDate),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      onPressed: () {
+                                        Navigator.of(context, rootNavigator: true).push(
+                                          MaterialPageRoute(
+                                            fullscreenDialog: true,
+                                            builder: (_) => JournalModal(date: selectedDate),
+                                          ),
+                                        );
+                                      },
+                                      icon: Stack(
+                                        clipBehavior: Clip.none,
+                                        children: [
+                                          const Icon(FontAwesomeIcons.book, size: 16),
+                                          if (hasJournal)
+                                            Positioned(
+                                              right: -4,
+                                              top: -4,
+                                              child: Container(
+                                                width: 8,
+                                                height: 8,
+                                                decoration: const BoxDecoration(
+                                                  color: Colors.orange,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                      label: const Text('Journal'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.white70,
+                                        side: const BorderSide(color: Colors.white24),
+                                      ),
                                     ),
-                                  );
-                                },
-                                icon: Stack(
-                                  clipBehavior: Clip.none,
-                                  children: [
-                                    const Icon(FontAwesomeIcons.book, size: 16),
-                                    if (hasJournal)
-                                      Positioned(
-                                        right: -4,
-                                        top: -4,
-                                        child: Container(
-                                          width: 8,
-                                          height: 8,
-                                          decoration: const BoxDecoration(
-                                            color: Colors.orange,
-                                            shape: BoxShape.circle,
+                                  ),
+                                  StreamBuilder<HealthEntry?>(
+                                    stream: HealthService().streamEntry(selectedDate),
+                                    builder: (context, healthSnapshot) {
+                                      final hasHealth =
+                                          healthSnapshot.data != null && healthSnapshot.data!.hasData;
+                                      if (!hasHealth) return const SizedBox.shrink();
+                                      return Expanded(
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(left: 12),
+                                          child: OutlinedButton.icon(
+                                            onPressed: () {
+                                              Navigator.of(context, rootNavigator: true).push(
+                                                MaterialPageRoute(
+                                                  fullscreenDialog: true,
+                                                  builder: (_) => HealthPage(date: selectedDate),
+                                                ),
+                                              );
+                                            },
+                                            icon: const Icon(FontAwesomeIcons.heartPulse, size: 16),
+                                            label: const Text('Health'),
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: Colors.white70,
+                                              side: const BorderSide(color: Colors.white24),
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                  ],
-                                ),
-                                label: const Text('Journal'),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.white70,
-                                  side: const BorderSide(color: Colors.white24),
-                                ),
+                                      );
+                                    },
+                                  ),
+                                ],
                               ),
                             );
                           },

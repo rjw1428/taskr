@@ -33,6 +33,54 @@ class JournalEntry {
       (gratitude != null && gratitude!.isNotEmpty);
 }
 
+@JsonSerializable()
+class HealthEntry {
+  String? id;
+  String date;
+  int? sleepScore;
+  int? sleepSeconds;
+  int? deepSeconds;
+  int? lightSeconds;
+  int? remSeconds;
+  int? awakeSeconds;
+  int? bodyBatteryHigh;
+  int? bodyBatteryLow;
+  int? bodyBatteryCharged;
+  int? bodyBatteryDrained;
+  int? stressAvg;
+  int? stressMax;
+  int? steps;
+  int? floorsClimbed;
+  int? activeCalories;
+  int? restingHeartRate;
+
+  HealthEntry({
+    this.id,
+    required this.date,
+    this.sleepScore,
+    this.sleepSeconds,
+    this.deepSeconds,
+    this.lightSeconds,
+    this.remSeconds,
+    this.awakeSeconds,
+    this.bodyBatteryHigh,
+    this.bodyBatteryLow,
+    this.bodyBatteryCharged,
+    this.bodyBatteryDrained,
+    this.stressAvg,
+    this.stressMax,
+    this.steps,
+    this.floorsClimbed,
+    this.activeCalories,
+    this.restingHeartRate,
+  });
+
+  factory HealthEntry.fromJson(Map<String, dynamic> json) => _$HealthEntryFromJson(json);
+  Map<String, dynamic> toJson() => _$HealthEntryToJson(this);
+
+  bool get hasData => sleepSeconds != null || steps != null || stressAvg != null || bodyBatteryHigh != null;
+}
+
 enum GoalTimeframe {
   @JsonValue('1_week')
   oneWeek,

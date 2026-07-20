@@ -12,6 +12,11 @@ class GoalService with ChangeNotifier {
   final _db = FirebaseFirestore.instance;
   final _taskService = TaskService();
 
+  // If fewer than this many days remain in the current week (including today),
+  // generate tasks for next week instead. Otherwise a goal created late in the
+  // week has most of its days already in the past, and those tasks get dropped.
+  static const _minDaysForCurrentWeek = 3;
+
   static const _systemInstruction =
     "You are a personal development coach. Given a user's goal, generate a list of concrete, actionable tasks for the coming week. "
     "Each task should be specific and achievable in a single session. "
@@ -187,7 +192,15 @@ class GoalService with ChangeNotifier {
     }
 
     final now = DateTime.now();
-    final monday = now.subtract(Duration(days: now.weekday - 1));
+    final today = DateTime(now.year, now.month, now.day);
+    // Monday of the current week (weekday: Mon=1 .. Sun=7).
+    var monday = today.subtract(Duration(days: now.weekday - 1));
+    // Roll forward to next week when little of the current week is left, so
+    // mid/late-week goal creation doesn't silently drop most of its tasks.
+    final daysLeftInWeek = 7 - (now.weekday - 1); // includes today
+    if (daysLeftInWeek < _minDaysForCurrentWeek) {
+      monday = monday.add(const Duration(days: 7));
+    }
     final weekStart = DateService().getString(monday);
     final weekEnd = DateService().getString(monday.add(const Duration(days: 6)));
 
@@ -201,7 +214,7 @@ class GoalService with ChangeNotifier {
     for (final td in taskData) {
       final dayOffset = (td['dayOffset'] as num?)?.toInt() ?? 0;
       final taskDate = monday.add(Duration(days: dayOffset.clamp(0, 6)));
-      if (taskDate.isBefore(DateTime(now.year, now.month, now.day))) continue;
+      if (taskDate.isBefore(today)) continue;
 
       final effort = _parseEffort(td['effort'] as String?);
       final task = Task(

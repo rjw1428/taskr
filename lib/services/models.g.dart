@@ -23,6 +23,49 @@ Map<String, dynamic> _$JournalEntryToJson(JournalEntry instance) =>
       'gratitude': instance.gratitude,
     };
 
+HealthEntry _$HealthEntryFromJson(Map<String, dynamic> json) => HealthEntry(
+      id: json['id'] as String?,
+      date: json['date'] as String,
+      sleepScore: (json['sleepScore'] as num?)?.toInt(),
+      sleepSeconds: (json['sleepSeconds'] as num?)?.toInt(),
+      deepSeconds: (json['deepSeconds'] as num?)?.toInt(),
+      lightSeconds: (json['lightSeconds'] as num?)?.toInt(),
+      remSeconds: (json['remSeconds'] as num?)?.toInt(),
+      awakeSeconds: (json['awakeSeconds'] as num?)?.toInt(),
+      bodyBatteryHigh: (json['bodyBatteryHigh'] as num?)?.toInt(),
+      bodyBatteryLow: (json['bodyBatteryLow'] as num?)?.toInt(),
+      bodyBatteryCharged: (json['bodyBatteryCharged'] as num?)?.toInt(),
+      bodyBatteryDrained: (json['bodyBatteryDrained'] as num?)?.toInt(),
+      stressAvg: (json['stressAvg'] as num?)?.toInt(),
+      stressMax: (json['stressMax'] as num?)?.toInt(),
+      steps: (json['steps'] as num?)?.toInt(),
+      floorsClimbed: (json['floorsClimbed'] as num?)?.toInt(),
+      activeCalories: (json['activeCalories'] as num?)?.toInt(),
+      restingHeartRate: (json['restingHeartRate'] as num?)?.toInt(),
+    );
+
+Map<String, dynamic> _$HealthEntryToJson(HealthEntry instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'date': instance.date,
+      'sleepScore': instance.sleepScore,
+      'sleepSeconds': instance.sleepSeconds,
+      'deepSeconds': instance.deepSeconds,
+      'lightSeconds': instance.lightSeconds,
+      'remSeconds': instance.remSeconds,
+      'awakeSeconds': instance.awakeSeconds,
+      'bodyBatteryHigh': instance.bodyBatteryHigh,
+      'bodyBatteryLow': instance.bodyBatteryLow,
+      'bodyBatteryCharged': instance.bodyBatteryCharged,
+      'bodyBatteryDrained': instance.bodyBatteryDrained,
+      'stressAvg': instance.stressAvg,
+      'stressMax': instance.stressMax,
+      'steps': instance.steps,
+      'floorsClimbed': instance.floorsClimbed,
+      'activeCalories': instance.activeCalories,
+      'restingHeartRate': instance.restingHeartRate,
+    };
+
 Goal _$GoalFromJson(Map<String, dynamic> json) => Goal(
       id: json['id'] as String?,
       title: json['title'] as String,

@@ -8,4 +8,5 @@ export 'messaging.dart';
 export 'goal.service.dart';
 export 'calendar.service.dart';
 export 'journal.service.dart';
+export 'health.service.dart';
 export 'reminder.service.dart';

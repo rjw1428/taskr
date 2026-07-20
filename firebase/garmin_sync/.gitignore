@@ -1,0 +1,5 @@
+garmin_tokens.txt
+__pycache__/
+.venv/
+venv/
+*.log

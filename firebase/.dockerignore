@@ -1,0 +1,5 @@
+garmin_sync/venv
+garmin_sync/.venv
+garmin_sync/__pycache__
+garmin_sync/garmin_tokens.txt
+functions/node_modules
