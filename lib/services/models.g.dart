@@ -290,3 +290,67 @@ Map<String, dynamic> _$RecurringTaskToJson(RecurringTask instance) =>
       'endDate': instance.endDate?.toIso8601String(),
       'dayOfMonth': instance.dayOfMonth,
     };
+
+Kid _$KidFromJson(Map<String, dynamic> json) => Kid(
+      name: json['name'] as String,
+      age: (json['age'] as num).toInt(),
+      birthday: json['birthday'] as String?,
+      dateAdded: json['dateAdded'] as String,
+    );
+
+Map<String, dynamic> _$KidToJson(Kid instance) => <String, dynamic>{
+      'name': instance.name,
+      'age': instance.age,
+      'birthday': instance.birthday,
+      'dateAdded': instance.dateAdded,
+    };
+
+ConversationLog _$ConversationLogFromJson(Map<String, dynamic> json) =>
+    ConversationLog(
+      id: json['id'] as String?,
+      date: json['date'] as String,
+      entry: json['entry'] as String,
+      createdAt: (json['createdAt'] as num?)?.toInt(),
+      updatedAt: (json['updatedAt'] as num?)?.toInt(),
+    );
+
+Map<String, dynamic> _$ConversationLogToJson(ConversationLog instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'date': instance.date,
+      'entry': instance.entry,
+      'createdAt': instance.createdAt,
+      'updatedAt': instance.updatedAt,
+    };
+
+Person _$PersonFromJson(Map<String, dynamic> json) => Person(
+      id: json['id'] as String?,
+      name: json['name'] as String,
+      age: (json['age'] as num?)?.toInt(),
+      birthday: json['birthday'] as String?,
+      job: json['job'] as String?,
+      spouse: json['spouse'] as String?,
+      kids: (json['kids'] as List<dynamic>?)
+              ?.map((e) => Kid.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
+      logs: (json['logs'] as List<dynamic>?)
+              ?.map((e) => ConversationLog.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
+      createdAt: (json['createdAt'] as num?)?.toInt(),
+      lastUpdated: (json['lastUpdated'] as num?)?.toInt(),
+    );
+
+Map<String, dynamic> _$PersonToJson(Person instance) => <String, dynamic>{
+      'id': instance.id,
+      'name': instance.name,
+      'age': instance.age,
+      'birthday': instance.birthday,
+      'job': instance.job,
+      'spouse': instance.spouse,
+      'kids': instance.kids.map((e) => e.toJson()).toList(),
+      'logs': instance.logs.map((e) => e.toJson()).toList(),
+      'createdAt': instance.createdAt,
+      'lastUpdated': instance.lastUpdated,
+    };

@@ -15,6 +15,7 @@ import 'package:taskr/services/accomplishment.provider.dart';
 import 'package:taskr/services/auth.service.dart';
 import 'package:taskr/services/goal.service.dart';
 import 'package:taskr/services/models.dart';
+import 'package:taskr/services/people.provider.dart';
 import 'package:taskr/services/tag.provider.dart';
 import 'package:taskr/about/about.dart';
 import 'package:taskr/settings/settings.dart';
@@ -294,6 +295,9 @@ class _MyAppState extends State<MyApp> {
         ),
         ChangeNotifierProvider<GoalService>(
           create: (_) => GoalService(),
+        ),
+        ChangeNotifierProvider<PeopleProvider>(
+          create: (_) => PeopleProvider(),
         ),
       ],
       child: MaterialApp(

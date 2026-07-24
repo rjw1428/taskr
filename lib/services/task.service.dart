@@ -492,7 +492,11 @@ class TaskService {
   Future<void> _deleteRecurringInstances(String templateId, RecurringTask template) async {
     final user = AuthService().user!;
 
-    final instances = _generateRecurringTaskInstances(template);
+    // Expand EVERY occurrence across the whole series (start -> endDate), not just
+    // the first month. Creation materializes up to 30 occurrences, but this used to
+    // regenerate only a one-month window, so "Delete Series" left every later
+    // occurrence orphaned in the database (they kept re-appearing on the list).
+    final instances = _generateAllRecurringInstances(template);
     for (var instance in instances) {
       final dateStr = DateService().getString(instance);
       final tasksSnapshot =
@@ -502,15 +506,49 @@ class TaskService {
         var data = doc.data();
         data['id'] = doc.id;
         final task = Task.fromJson(data);
+        // Preserve completed occurrences as history; only remove outstanding ones.
+        // Reuse deleteTask so taskOrder, reminders and countdowns are cleaned up too.
         if (!task.completed) {
-          final taskId = doc.id;
-          await _db.collection('todos').doc(user.uid).collection("tasks").doc(dateStr).update({
-            "taskOrder": FieldValue.arrayRemove([taskId])
-          });
-          await doc.reference.delete();
+          await deleteTask(task);
         }
       }
     }
+  }
+
+  RecurrenceRule _buildRecurrenceRule(RecurringTask template) {
+    final type = getRecurrenceFrequency(template.recurrenceType);
+    final untilDate = template.endDate?.toUtc();
+    switch (template.recurrenceType) {
+      case 'Weekly':
+        return RecurrenceRule(
+          frequency: type,
+          interval: template.frequency ?? 1,
+          until: untilDate,
+          byWeekDays: getWeeklyRecurrenceList(template.daysOfWeek!),
+        );
+      case 'Monthly':
+        return RecurrenceRule(
+          frequency: type,
+          interval: template.frequency ?? 1,
+          until: untilDate,
+          byMonthDays: [template.dayOfMonth!],
+        );
+      default:
+        return RecurrenceRule(
+          frequency: type,
+          interval: template.frequency ?? 1,
+          until: untilDate,
+        );
+    }
+  }
+
+  // Full series expansion used when deleting a series. Templates always carry an
+  // end date (enforced by the recurring task form), so this is finite; the take()
+  // cap is only a guard against a malformed template with a missing/far-future end.
+  List<DateTime> _generateAllRecurringInstances(RecurringTask template) {
+    final start = template.startDate?.toUtc() ?? DateTime.now().toUtc();
+    final rule = _buildRecurrenceRule(template);
+    return rule.getInstances(start: start).take(1000).toList();
   }
 
   List<DateTime> _generateRecurringTaskInstances(RecurringTask template) {

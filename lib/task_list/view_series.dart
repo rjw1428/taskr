@@ -80,6 +80,48 @@ class _ViewSeriesState extends State<ViewSeries> {
     }
   }
 
+  // Shown when the series template no longer exists (e.g. a series that was only
+  // partially deleted by an older version of the app, leaving orphaned occurrences).
+  // The series definition is gone, so we can't act on the whole series, but the user
+  // can still clear each leftover occurrence from here.
+  Widget _buildOrphanedSeries(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(24.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.link_off, size: 48),
+          const SizedBox(height: 16),
+          const Text(
+            'This recurring series no longer has a template. It was likely deleted '
+            'earlier, leaving a few leftover occurrences behind.',
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'You can remove this occurrence here, then repeat for any others that '
+            'are still showing up.',
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              await _taskService.deleteTask(widget.task);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Occurrence deleted')),
+                );
+                Navigator.of(context).pop();
+              }
+            },
+            child: const Text('Delete This Occurrence'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -92,7 +134,7 @@ class _ViewSeriesState extends State<ViewSeries> {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           } else if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
+            return _buildOrphanedSeries(context);
           } else if (snapshot.hasData) {
             _recurringTask ??= snapshot.data;
             return SingleChildScrollView(

@@ -3,6 +3,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:taskr/goals/goal_list.dart';
 import 'package:taskr/performance/performance_page.dart';
 import 'package:taskr/task_list/task_list.dart';
+import 'package:taskr/people/people_list.dart';
 
 class RouteOption {
   final int index;
@@ -38,6 +39,12 @@ final Map<String, RouteOption> routeConfig = {
       isBacklog: true,
     ),
     icon: FontAwesomeIcons.tableColumns,
+  ),
+  '/people': const RouteOption(
+    index: 4,
+    label: "People",
+    page: PeopleListPage(),
+    icon: FontAwesomeIcons.users,
   )
 };
 

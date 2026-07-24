@@ -112,6 +112,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         );
+      // Index 4 (People) supplies its own FloatingActionButton from within
+      // PeopleListPage, so the home shell must not add a second one.
       default:
         return null;
     }

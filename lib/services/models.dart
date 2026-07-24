@@ -445,3 +445,75 @@ class RecurringTask {
     return copy;
   }
 }
+
+@JsonSerializable()
+class Kid {
+  String name;
+  int age;
+  String? birthday;
+  String dateAdded;
+
+  Kid({
+    required this.name,
+    required this.age,
+    this.birthday,
+    required this.dateAdded,
+  });
+
+  factory Kid.fromJson(Map<String, dynamic> json) => _$KidFromJson(json);
+  Map<String, dynamic> toJson() => _$KidToJson(this);
+}
+
+@JsonSerializable()
+class ConversationLog {
+  String? id;
+  String date;
+  String entry;
+  int? createdAt;
+  int? updatedAt;
+
+  ConversationLog({
+    this.id,
+    required this.date,
+    required this.entry,
+    this.createdAt,
+    this.updatedAt,
+  });
+
+  factory ConversationLog.fromJson(Map<String, dynamic> json) => _$ConversationLogFromJson(json);
+  Map<String, dynamic> toJson() => _$ConversationLogToJson(this);
+}
+
+// explicitToJson is required because Person contains nested serializable lists
+// (kids, logs). Without it the generated toJson emits raw Kid/ConversationLog
+// instances, which Firestore cannot serialize ("Invalid argument: Instance of
+// 'ConversationLog'").
+@JsonSerializable(explicitToJson: true)
+class Person {
+  String? id;
+  String name;
+  int? age;
+  String? birthday;
+  String? job;
+  String? spouse;
+  List<Kid> kids;
+  List<ConversationLog> logs;
+  int? createdAt;
+  int? lastUpdated;
+
+  Person({
+    this.id,
+    required this.name,
+    this.age,
+    this.birthday,
+    this.job,
+    this.spouse,
+    this.kids = const [],
+    this.logs = const [],
+    this.createdAt,
+    this.lastUpdated,
+  });
+
+  factory Person.fromJson(Map<String, dynamic> json) => _$PersonFromJson(json);
+  Map<String, dynamic> toJson() => _$PersonToJson(this);
+}
