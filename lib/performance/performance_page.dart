@@ -9,6 +9,7 @@ import 'package:taskr/services/accomplishment.provider.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/accomplishments/accomplishment_detail_page.dart';
 import 'package:taskr/accomplishments/accomplishment_color.dart';
+import 'package:taskr/services/tag.provider.dart';
 
 class PerformancePage extends StatelessWidget {
   const PerformancePage({super.key});
@@ -86,6 +87,8 @@ class CurrentScoreState extends State<CurrentScore> {
       t.textFaint,
     ];
     final chartSeries = computeChartSeries(chartData, isShowingAll, seriesColors);
+    // Performance data is keyed by tag id; map to labels for the legend.
+    final tagNames = {for (final tg in Provider.of<TagProvider>(context).tags) tg.id: tg.label};
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(Insets.lg, Insets.md, Insets.lg, Insets.xxl),
@@ -176,7 +179,7 @@ class CurrentScoreState extends State<CurrentScore> {
                       runSpacing: Insets.sm,
                       children: chartSeries
                           .where((s) => s.shown)
-                          .map((s) => _LegendDot(color: s.color, label: s.key))
+                          .map((s) => _LegendDot(color: s.color, label: tagNames[s.key] ?? s.key))
                           .toList(),
                     ),
                   ),
