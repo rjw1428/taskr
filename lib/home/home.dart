@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:taskr/accomplishments/accomplishment_form.dart';
 import 'package:taskr/goals/goal_form.dart';
+import 'package:taskr/goals/habit_form.dart';
 import 'package:taskr/login/login.dart';
 import 'package:taskr/routing.dart';
 import 'package:taskr/services/services.dart';
@@ -61,6 +62,42 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _showGoalsCreateChooser() {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(FontAwesomeIcons.bullseye),
+              title: const Text('New Goal'),
+              subtitle: const Text('AI-generated tasks toward a target'),
+              onTap: () {
+                Navigator.pop(ctx);
+                showModalBottomSheet(
+                  isScrollControlled: true,
+                  useSafeArea: true,
+                  context: context,
+                  builder: (_) => const GoalForm(),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(FontAwesomeIcons.fire),
+              title: const Text('New Habit'),
+              subtitle: const Text('A recurring routine you build a streak on'),
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const HabitForm()));
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget? _buildFloatingActionButton() {
     switch (_selectedIndex) {
       case 0:
@@ -88,13 +125,8 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       case 2:
         return FloatingActionButton(
+          onPressed: _showGoalsCreateChooser,
           child: const Icon(FontAwesomeIcons.plus, size: 20),
-          onPressed: () => showModalBottomSheet(
-            isScrollControlled: true,
-            useSafeArea: true,
-            context: context,
-            builder: (BuildContext context) => const GoalForm(),
-          ),
         );
       case 3:
         return GestureDetector(

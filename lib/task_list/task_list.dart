@@ -39,8 +39,10 @@ class TaskListState extends State<TaskListScreen> {
   String? _streamKey;
   Stream<List<Task>>? _taskStream;
   Stream<List<Task>>? _subtaskStream;
+  Stream<List<Habit>>? _habitStream;
 
   void _ensureStreams(List<Tag> tags) {
+    _habitStream ??= HabitService().streamHabits();
     final key = "${widget.isBacklog}|$selectedDate|${tags.map((t) => t.id).join(',')}";
     if (key == _streamKey) return;
     _streamKey = key;
@@ -121,24 +123,35 @@ class TaskListState extends State<TaskListScreen> {
     var tagProvider = Provider.of<TagProvider>(context);
     var tags = tagProvider.tags;
     _ensureStreams(tags);
-    // The backlog also streams subtasks (across date partitions) so it can nest
-    // a parent's children beneath it, including ones scheduled to other days.
-    if (widget.isBacklog) {
-      return StreamBuilder<List<Task>>(
-        stream: _subtaskStream,
-        builder: (context, subSnap) {
-          final childrenByParent = <String, List<Task>>{};
-          for (final s in (subSnap.data ?? const <Task>[])) {
-            if (s.parentId != null) (childrenByParent[s.parentId!] ??= []).add(s);
-          }
-          return _buildTaskList(context, childrenByParent);
-        },
-      );
-    }
-    return _buildTaskList(context, const {});
+    // Stream habits so their instances can show a live streak on the card.
+    return StreamBuilder<List<Habit>>(
+      stream: _habitStream,
+      builder: (context, habitSnap) {
+        final habitStreaks = <String, int>{
+          for (final h in (habitSnap.data ?? const <Habit>[]))
+            if (h.id != null) h.id!: h.currentStreak,
+        };
+        // The backlog also streams subtasks (across date partitions) so it can
+        // nest a parent's children beneath it, including ones scheduled elsewhere.
+        if (widget.isBacklog) {
+          return StreamBuilder<List<Task>>(
+            stream: _subtaskStream,
+            builder: (context, subSnap) {
+              final childrenByParent = <String, List<Task>>{};
+              for (final s in (subSnap.data ?? const <Task>[])) {
+                if (s.parentId != null) (childrenByParent[s.parentId!] ??= []).add(s);
+              }
+              return _buildTaskList(context, childrenByParent, habitStreaks);
+            },
+          );
+        }
+        return _buildTaskList(context, const {}, habitStreaks);
+      },
+    );
   }
 
-  Widget _buildTaskList(BuildContext context, Map<String, List<Task>> childrenByParent) {
+  Widget _buildTaskList(
+      BuildContext context, Map<String, List<Task>> childrenByParent, Map<String, int> habitStreaks) {
     return StreamBuilder<List<Task>>(
         stream: _taskStream,
         builder: (context, snapshot) {
@@ -220,7 +233,8 @@ class TaskListState extends State<TaskListScreen> {
               children.add(AppReveal(
                 key: ValueKey(task.id!),
                 delay: staggerDelay(i),
-                child: displayTask(task, i, onComplete, widget.isBacklog, _taskService, deleteTaskWithUndo),
+                child: displayTask(
+                    task, i, onComplete, widget.isBacklog, _taskService, deleteTaskWithUndo, habitStreaks),
               ));
             }
           }
@@ -592,7 +606,8 @@ class TaskListState extends State<TaskListScreen> {
     });
   }
 
-  displayTask(Task task, int i, Function onComplete, bool isBacklog, TaskService taskService, Function(Task) onDelete) {
+  displayTask(Task task, int i, Function onComplete, bool isBacklog, TaskService taskService,
+      Function(Task) onDelete, Map<String, int> habitStreaks) {
     if (!task.isDivider) {
       _totalCount += PerformanceService().getScore(task.priority);
       if (task.completed) {
@@ -606,6 +621,7 @@ class TaskListState extends State<TaskListScreen> {
         onComplete: onComplete,
         isBacklog: isBacklog,
         taskService: taskService,
-        onDelete: onDelete);
+        onDelete: onDelete,
+        habitStreaks: habitStreaks);
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:taskr/goals/goal_detail_page.dart';
+import 'package:taskr/goals/habit_form.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/shared/shared.dart';
@@ -11,33 +12,57 @@ class GoalListPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final goalService = GoalService();
-    return StreamBuilder<List<Goal>>(
-      stream: goalService.streamGoals(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+    final habitService = HabitService();
+    return StreamBuilder<List<Habit>>(
+      stream: habitService.streamHabits(),
+      builder: (context, habitSnap) {
+        final habits = habitSnap.data ?? const <Habit>[];
+        // Keep upcoming habit instances materialized (rolling top-up).
+        for (final h in habits) {
+          if (h.status == 'active') habitService.ensureInstances(h);
         }
+        return StreamBuilder<List<Goal>>(
+          stream: goalService.streamGoals(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting && !habitSnap.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-        final goals = snapshot.data ?? [];
-        final activeGoals = goals.where((g) => g.status == GoalStatus.active).toList();
-        final pausedGoals = goals.where((g) => g.status == GoalStatus.paused).toList();
-        final completedGoals = goals.where((g) => g.status == GoalStatus.completed).toList();
+            final goals = snapshot.data ?? [];
+            final activeGoals = goals.where((g) => g.status == GoalStatus.active).toList();
+            final pausedGoals = goals.where((g) => g.status == GoalStatus.paused).toList();
+            final completedGoals = goals.where((g) => g.status == GoalStatus.completed).toList();
 
-        final theme = Theme.of(context);
-        final t = theme.appTokens;
+            final theme = Theme.of(context);
+            final t = theme.appTokens;
 
-        if (activeGoals.isEmpty && pausedGoals.isEmpty && completedGoals.isEmpty) {
-          return const EmptyState(
-            icon: FontAwesomeIcons.bullseye,
-            title: 'No goals yet',
-            message: 'Tap + to set your first goal and start building towards something great.',
-          );
-        }
+            if (habits.isEmpty &&
+                activeGoals.isEmpty &&
+                pausedGoals.isEmpty &&
+                completedGoals.isEmpty) {
+              return const EmptyState(
+                icon: FontAwesomeIcons.bullseye,
+                title: 'No goals or habits yet',
+                message: 'Tap + to set a goal or start a habit.',
+              );
+            }
 
-        return ListView(
-          padding: const EdgeInsets.all(Insets.sm),
-          children: [
-            if (activeGoals.isNotEmpty) ...[
+            return ListView(
+              padding: const EdgeInsets.all(Insets.sm),
+              children: [
+                if (habits.isNotEmpty) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: Insets.sm, vertical: Insets.xs),
+                    child: Text('Habits',
+                        style: theme.textTheme.titleMedium?.copyWith(color: t.goal)),
+                  ),
+                  ...habits.asMap().entries.map((e) => AppReveal(
+                        delay: staggerDelay(e.key),
+                        child: _HabitCard(habit: e.value),
+                      )),
+                  const SizedBox(height: Insets.lg),
+                ],
+                if (activeGoals.isNotEmpty) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: Insets.sm, vertical: Insets.xs),
                 child: Text('Active Goals',
@@ -72,9 +97,96 @@ class GoalListPage extends StatelessWidget {
                     child: _GoalCard(goal: e.value),
                   )),
             ],
-          ],
+              ],
+            );
+          },
         );
       },
+    );
+  }
+}
+
+class _HabitCard extends StatelessWidget {
+  final Habit habit;
+  const _HabitCard({required this.habit});
+
+  String _cadenceLabel() {
+    switch (habit.recurrenceType) {
+      case 'Weekly':
+        final days = (habit.daysOfWeek ?? {}).entries.where((e) => e.value).map((e) => e.key).toList();
+        return days.isEmpty ? 'Weekly' : days.join(' ');
+      case 'Monthly':
+        return 'Monthly · day ${habit.dayOfMonth ?? 1}';
+      case 'Yearly':
+        return 'Yearly';
+      default:
+        return 'Daily';
+    }
+  }
+
+  void _openEdit(BuildContext context) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => HabitForm(habit: habit)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final t = theme.appTokens;
+    final paused = habit.status == 'paused';
+    final streak = habit.currentStreak;
+    return Card(
+      color: theme.colorScheme.surface,
+      margin: const EdgeInsets.symmetric(horizontal: Insets.xs, vertical: Insets.xs),
+      child: ListTile(
+        leading: Icon(FontAwesomeIcons.fire, color: (!paused && streak > 0) ? t.goal : t.textFaint),
+        title: Text(habit.title, style: theme.textTheme.titleSmall),
+        subtitle: Text('${_cadenceLabel()}${paused ? " · paused" : ""}',
+            style: theme.textTheme.bodySmall?.copyWith(color: t.textMuted)),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!paused)
+              Text('$streak',
+                  style: theme.textTheme.titleMedium?.copyWith(color: t.goal, fontWeight: FontWeight.w800)),
+            PopupMenuButton<String>(
+              onSelected: (v) async {
+                if (v == 'edit') {
+                  _openEdit(context);
+                } else if (v == 'pause') {
+                  await HabitService().pauseHabit(habit);
+                } else if (v == 'resume') {
+                  await HabitService().resumeHabit(habit);
+                } else if (v == 'delete') {
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: Text('Delete "${habit.title}"?'),
+                      content: const Text('Future occurrences are removed; completed history stays.'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: Text('Delete', style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (ok == true) await HabitService().deleteHabit(habit);
+                }
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                if (paused)
+                  const PopupMenuItem(value: 'resume', child: Text('Resume'))
+                else
+                  const PopupMenuItem(value: 'pause', child: Text('Pause')),
+                const PopupMenuItem(value: 'delete', child: Text('Delete')),
+              ],
+            ),
+          ],
+        ),
+        onTap: () => _openEdit(context),
+      ),
     );
   }
 }

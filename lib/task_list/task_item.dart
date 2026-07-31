@@ -20,6 +20,8 @@ class TaskItem extends StatefulWidget {
   final bool isBacklog;
   final Function(Task) onDelete;
   final TaskService taskService;
+  // habitId -> current streak, supplied by the list screen for habit instances.
+  final Map<String, int> habitStreaks;
   const TaskItem(
       {super.key,
       required this.task,
@@ -27,7 +29,8 @@ class TaskItem extends StatefulWidget {
       required this.onComplete,
       required this.isBacklog,
       required this.taskService,
-      required this.onDelete});
+      required this.onDelete,
+      this.habitStreaks = const {}});
 
   @override
   TaskItemState createState() => TaskItemState();
@@ -161,6 +164,9 @@ class TaskItemState extends State<TaskItem> {
                                       // Updates the child and rolls the parent's
                                       // completed-counter (auto-complete/reopen).
                                       await widget.taskService.toggleSubtaskComplete(widget.task, value);
+                                    } else if (widget.task.habitId != null) {
+                                      // Updates the instance and recomputes the habit streak.
+                                      await HabitService().toggleComplete(widget.task, value);
                                     } else {
                                       const completeTimeFormat = "${DateService.stringFmt} ${DateService.dbTimeFormat}";
                                       // TAGS HERE ARE NAME, NOT ID
@@ -185,6 +191,22 @@ class TaskItemState extends State<TaskItem> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
+                                    if (widget.task.habitId != null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(bottom: 1),
+                                        child: Row(
+                                          children: [
+                                            Icon(FontAwesomeIcons.fire, size: 9, color: theme.appTokens.goal),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                                '${widget.habitStreaks[widget.task.habitId] ?? 0} day streak',
+                                                style: theme.textTheme.labelSmall?.copyWith(
+                                                    fontSize: 9,
+                                                    letterSpacing: 0.6,
+                                                    color: theme.appTokens.goal)),
+                                          ],
+                                        ),
+                                      ),
                                     if (widget.task.isSubtask && widget.task.parentTitle != null)
                                       Padding(
                                         padding: const EdgeInsets.only(bottom: 1),

@@ -20,11 +20,11 @@
 
 ## 3. Habits UI
 
-- [ ] 3.1 `habit_form.dart` — title, cadence (reuse `RecurringTaskForm` with an optional `hideEndDate` flag), Effort segmented control, optional reminder time
-- [ ] 3.2 Habits section in `goal_list.dart` — `StreamBuilder<List<Habit>>`, `_HabitCard` (flame icon, title, cadence + 🔥 streak with liveness guard, inline pause/delete menu), call `ensureInstances` on build
-- [ ] 3.3 FAB chooser in `home.dart` case 2 (Goals tab): "New Goal" / "New Habit"
-- [ ] 3.4 `task_item.dart` — streak badge (🔥 N) on habit instances; route habit completion through `toggleHabitComplete`; pass a `habitStreaks` map from the list screen (default `{}`)
-- [ ] 3.5 Wire the List/Goals screens to stream habits and supply the streak map to `TaskItem`
+- [x] 3.1 `habit_form.dart` — title, cadence (reuse `RecurringTaskForm` with an optional `hideEndDate` flag), Effort segmented control, optional reminder time
+- [x] 3.2 Habits section in `goal_list.dart` — `StreamBuilder<List<Habit>>`, `_HabitCard` (flame icon, title, cadence + 🔥 streak with liveness guard, inline pause/delete menu), call `ensureInstances` on build
+- [x] 3.3 FAB chooser in `home.dart` case 2 (Goals tab): "New Goal" / "New Habit"
+- [x] 3.4 `task_item.dart` — streak badge (🔥 N) on habit instances; route habit completion through `toggleHabitComplete`; pass a `habitStreaks` map from the list screen (default `{}`)
+- [x] 3.5 Wire the List/Goals screens to stream habits and supply the streak map to `TaskItem`
 
 ## 4. Notification Center (app)
 

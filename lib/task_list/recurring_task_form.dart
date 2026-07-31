@@ -5,11 +5,17 @@ import 'package:taskr/services/models.dart';
 
 class RecurringTaskForm extends StatefulWidget {
   const RecurringTaskForm(
-      {super.key, required this.startDate, required this.onRecurringTaskChanged, this.recurringTask});
+      {super.key,
+      required this.startDate,
+      required this.onRecurringTaskChanged,
+      this.recurringTask,
+      this.hideEndDate = false});
 
   final String? startDate;
   final void Function(RecurringTask) onRecurringTaskChanged;
   final RecurringTask? recurringTask;
+  // Habits are open-ended: hide + don't require the end date.
+  final bool hideEndDate;
 
   @override
   State<RecurringTaskForm> createState() => RecurringTaskFormState();
@@ -89,7 +95,7 @@ class RecurringTaskFormState extends State<RecurringTaskForm> {
     }
 
     // The validator on the TextFormField should handle this, but as a fallback
-    if (_endDate == null) {
+    if (!widget.hideEndDate && _endDate == null) {
       return 'Please select an end date.';
     }
     return null;
@@ -196,6 +202,7 @@ class RecurringTaskFormState extends State<RecurringTaskForm> {
               ),
             ),
           ],
+          if (!widget.hideEndDate)
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
