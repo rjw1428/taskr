@@ -396,31 +396,36 @@ class TaskService {
     List<Map<String, dynamic>> tasks = await getTasksInOrder(user.uid, task.dueDate!);
 
     // Find the slot for the new task, preserving the existing order of everything
-    // else. Two rules drive the search:
-    //   1. New tasks always sit ahead of completed ones, so stop at the first
+    // else. Three rules drive the search:
+    //   1. An untimed Info task always goes to the very top of the list.
+    //   2. New tasks always sit ahead of completed ones, so stop at the first
     //      completed task.
-    //   2. A timed task (start or end time) slots chronologically among the other
+    //   3. A timed task (start or end time) slots chronologically among the other
     //      timed tasks, so stop at the first incomplete timed task scheduled later
     //      than it. Untimed tasks don't stop the scan — the new timed task flows
     //      past them into its time slot.
-    // An untimed new task has no time key, so it only stops at completed tasks —
-    // landing at the end of the incomplete run, right before the completed ones.
+    // An untimed (non-Info) task has no time key, so it only stops at completed
+    // tasks — landing at the end of the incomplete run, right before the completed
+    // ones. An Info task with a time follows the normal timed placement.
     final order = tasks.map((t) => t['id'] as String).toList();
     final newTime = task.startTime ?? task.endTime;
 
-    var insertAt = order.length;
-    for (int i = 0; i < tasks.length; i++) {
-      final t = tasks[i];
-      if (t['completed'] == true) {
-        insertAt = i;
-        break;
-      }
-      if (newTime != null) {
-        final tTime = (t['startTime'] ?? t['endTime']) as String?;
-        if (tTime != null &&
-            DateService().isTimeLessThan(DateService().getTime(newTime), DateService().getTime(tTime))) {
+    final isTopPinnedInfo = task.priority == Effort.info && newTime == null;
+    var insertAt = isTopPinnedInfo ? 0 : order.length;
+    if (!isTopPinnedInfo) {
+      for (int i = 0; i < tasks.length; i++) {
+        final t = tasks[i];
+        if (t['completed'] == true) {
           insertAt = i;
           break;
+        }
+        if (newTime != null) {
+          final tTime = (t['startTime'] ?? t['endTime']) as String?;
+          if (tTime != null &&
+              DateService().isTimeLessThan(DateService().getTime(newTime), DateService().getTime(tTime))) {
+            insertAt = i;
+            break;
+          }
         }
       }
     }
