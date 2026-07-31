@@ -467,7 +467,9 @@ class TaskService {
       await PerformanceService().updatePerfomanceStats(user.uid, oldTask, false);
       await PerformanceService().updatePerfomanceStats(user.uid, newTask, true);
     }
-    await taskCollection(user.uid, date).doc(id).set(removeNulls(newTask.toDbTask()));
+    final data = removeNulls(newTask.toDbTask());
+    data['userId'] = user.uid; // keep owner stamp so collection-group subtask reads still match
+    await taskCollection(user.uid, date).doc(id).set(data);
     await _syncCountdownIndex(user.uid, newTask.copyWith(id: id));
   }
 
