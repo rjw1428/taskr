@@ -2,11 +2,11 @@
 
 ## 1. Data Model & Index
 
-- [ ] 1.1 Add `Habit` model to `models.dart` (id, title, effort, recurrenceType, frequency, daysOfWeek, dayOfMonth, startDate, reminderTime, status, currentStreak, longestStreak, lastCompletedDate, lastMaterializedDate, createdAt, modifiedAt)
-- [ ] 1.2 Add `String? habitId` to `Task` (constructor, copyWith, serialization)
-- [ ] 1.3 Add `AppNotification` model (id, title, body, data, type, sentAt, read)
-- [ ] 1.4 Regenerate `models.g.dart` (`build_runner`)
-- [ ] 1.5 Add `(userId, habitId)` collection-group index to `firestore.indexes.json` (mirrors the `(userId, parentId)` index)
+- [x] 1.1 Add `Habit` model to `models.dart` (id, title, effort, recurrenceType, frequency, daysOfWeek, dayOfMonth, startDate, reminderTime, status, currentStreak, longestStreak, lastCompletedDate, lastMaterializedDate, createdAt, modifiedAt)
+- [x] 1.2 Add `String? habitId` to `Task` (constructor, copyWith, serialization)
+- [x] 1.3 Add `AppNotification` model (id, title, body, data, type, sentAt, read)
+- [x] 1.4 Regenerate `models.g.dart` (`build_runner`)
+- [x] 1.5 Add `(userId, habitId)` collection-group index to `firestore.indexes.json` (mirrors the `(userId, parentId)` index)
 
 ## 2. Habit Service & Generation
 
