@@ -33,6 +33,21 @@ class TaskListState extends State<TaskListScreen> {
   late String userId;
   final TaskService _taskService = TaskService();
 
+  // Memoized streams so rebuilds don't tear down and re-subscribe Firestore
+  // listeners (which caused sluggish backlog updates). Recreated only when the
+  // day, backlog flag, or tag set actually changes.
+  String? _streamKey;
+  Stream<List<Task>>? _taskStream;
+  Stream<List<Task>>? _subtaskStream;
+
+  void _ensureStreams(List<Tag> tags) {
+    final key = "${widget.isBacklog}|$selectedDate|${tags.map((t) => t.id).join(',')}";
+    if (key == _streamKey) return;
+    _streamKey = key;
+    _taskStream = _taskService.streamTasks(userId, widget.isBacklog ? null : selectedDate, tags);
+    _subtaskStream = widget.isBacklog ? _taskService.streamSubtasks(userId, tags) : null;
+  }
+
   bool _isSearching = false;
   List<Task>? _searchResults;
   bool _searchLoading = false;
@@ -105,26 +120,27 @@ class TaskListState extends State<TaskListScreen> {
   Widget build(BuildContext context) {
     var tagProvider = Provider.of<TagProvider>(context);
     var tags = tagProvider.tags;
+    _ensureStreams(tags);
     // The backlog also streams subtasks (across date partitions) so it can nest
     // a parent's children beneath it, including ones scheduled to other days.
     if (widget.isBacklog) {
       return StreamBuilder<List<Task>>(
-        stream: _taskService.streamSubtasks(userId, tags),
+        stream: _subtaskStream,
         builder: (context, subSnap) {
           final childrenByParent = <String, List<Task>>{};
           for (final s in (subSnap.data ?? const <Task>[])) {
             if (s.parentId != null) (childrenByParent[s.parentId!] ??= []).add(s);
           }
-          return _buildTaskList(context, tags, childrenByParent);
+          return _buildTaskList(context, childrenByParent);
         },
       );
     }
-    return _buildTaskList(context, tags, const {});
+    return _buildTaskList(context, const {});
   }
 
-  Widget _buildTaskList(BuildContext context, List<Tag> tags, Map<String, List<Task>> childrenByParent) {
+  Widget _buildTaskList(BuildContext context, Map<String, List<Task>> childrenByParent) {
     return StreamBuilder<List<Task>>(
-        stream: _taskService.streamTasks(userId, widget.isBacklog ? null : selectedDate, tags),
+        stream: _taskStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting && _tasks == null) {
             return const LoadingScreen(message: 'Loading Tasks...');
