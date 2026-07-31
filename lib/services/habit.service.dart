@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:taskr/services/auth.service.dart';
 import 'package:taskr/services/date.service.dart';
@@ -126,11 +127,13 @@ class HabitService {
   /// if scheduled but not yet completed, is treated as pending (not a miss).
   Future<void> recomputeStreak(Habit h) async {
     if (h.id == null) return;
-    final snap = await _habitInstanceDocs(h.id!);
+    final snap = await _habitInstanceQuery(h.id!);
+    if (snap == null) return; // index not ready — skip rather than clobber the streak
     final completedByDate = <String, bool>{};
-    for (final doc in snap) {
-      final date = doc['dueDate'] as String?;
-      if (date != null) completedByDate[date] = (doc['completed'] as bool?) ?? false;
+    for (final doc in snap.docs) {
+      final data = doc.data();
+      final date = data['dueDate'] as String?;
+      if (date != null) completedByDate[date] = (data['completed'] as bool?) ?? false;
     }
     final todayStr = _dates.getString(DateTime.now());
     final start = _dates.getDate(h.startDate);
@@ -214,21 +217,26 @@ class HabitService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> _habitInstanceDocs(String habitId) async {
-    final snap = await _db
-        .collectionGroup('items')
-        .where('userId', isEqualTo: _uid)
-        .where('habitId', isEqualTo: habitId)
-        .get();
-    return snap.docs.map((doc) => doc.data()).toList();
+  // These collection-group reads need the (userId, habitId) index. If it isn't
+  // deployed yet they fail with failed-precondition; degrade gracefully (return
+  // empty) so habit management (delete/toggle) still works — streak/cleanup
+  // simply wait for the index. Callers treat an empty result as "no instances".
+  Future<QuerySnapshot<Map<String, dynamic>>?> _habitInstanceQuery(String habitId) async {
+    try {
+      return await _db
+          .collectionGroup('items')
+          .where('userId', isEqualTo: _uid)
+          .where('habitId', isEqualTo: habitId)
+          .get();
+    } catch (e) {
+      debugPrint('Habit instance query failed (index building?): $e');
+      return null;
+    }
   }
 
   Future<List<Task>> _habitInstances(String habitId) async {
-    final snap = await _db
-        .collectionGroup('items')
-        .where('userId', isEqualTo: _uid)
-        .where('habitId', isEqualTo: habitId)
-        .get();
+    final snap = await _habitInstanceQuery(habitId);
+    if (snap == null) return [];
     return snap.docs.map((doc) {
       final data = {...doc.data(), 'id': doc.id};
       data['tags'] = <dynamic>[];
