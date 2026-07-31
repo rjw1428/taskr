@@ -296,6 +296,15 @@ class TaskService {
     await _relocateTask(child, date ?? defaultUnassignedDate, {});
   }
 
+  /// Delete a single subtask and reconcile its parent's counters (and
+  /// auto-complete state) from the remaining children.
+  Future<void> deleteSubtask(Task child) async {
+    await deleteTask(child);
+    if (child.parentId != null) {
+      await recomputeParentCounters(child.parentId!);
+    }
+  }
+
   /// Assign a date to a parent: cascade only its **unassigned, incomplete**
   /// children onto that date. Hand-dated and completed children are untouched.
   Future<void> assignParentDate(Task parent, String date) async {

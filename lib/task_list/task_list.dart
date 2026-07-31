@@ -13,6 +13,7 @@ import 'package:taskr/task_list/divider_item.dart';
 import 'package:taskr/task_list/health_page.dart';
 import 'package:taskr/task_list/journal_modal.dart';
 import 'package:taskr/task_list/task_item.dart';
+import 'package:taskr/task_list/subtask_group.dart';
 import '../shared/shared.dart';
 
 class TaskListScreen extends StatefulWidget {
@@ -104,6 +105,24 @@ class TaskListState extends State<TaskListScreen> {
   Widget build(BuildContext context) {
     var tagProvider = Provider.of<TagProvider>(context);
     var tags = tagProvider.tags;
+    // The backlog also streams subtasks (across date partitions) so it can nest
+    // a parent's children beneath it, including ones scheduled to other days.
+    if (widget.isBacklog) {
+      return StreamBuilder<List<Task>>(
+        stream: _taskService.streamSubtasks(userId, tags),
+        builder: (context, subSnap) {
+          final childrenByParent = <String, List<Task>>{};
+          for (final s in (subSnap.data ?? const <Task>[])) {
+            if (s.parentId != null) (childrenByParent[s.parentId!] ??= []).add(s);
+          }
+          return _buildTaskList(context, tags, childrenByParent);
+        },
+      );
+    }
+    return _buildTaskList(context, tags, const {});
+  }
+
+  Widget _buildTaskList(BuildContext context, List<Tag> tags, Map<String, List<Task>> childrenByParent) {
     return StreamBuilder<List<Task>>(
         stream: _taskService.streamTasks(userId, widget.isBacklog ? null : selectedDate, tags),
         builder: (context, snapshot) {
@@ -122,18 +141,44 @@ class TaskListState extends State<TaskListScreen> {
           _tasks = snapshot.data!;
           _completedCount = 0;
           _totalCount = 0;
-          onComplete(int taskIndex) {
+
+          // Rows actually rendered at the top level: hide container parents on a
+          // day (they live only in the backlog), and hide subtasks in the
+          // backlog (they're shown nested under their parent).
+          final visible = <Task>[];
+          for (final task in _tasks!) {
+            if (!widget.isBacklog && task.isParent) continue;
+            if (widget.isBacklog && task.isSubtask) continue;
+            visible.add(task);
+          }
+
+          // Reorder/complete operate on the visible subset, then merge back into
+          // the full partition order so hidden ids keep their positions.
+          void persistVisibleOrder(List<String> newVisibleIds) {
+            final fullIds = _tasks!.map((t) => t.id!).toList();
+            final visibleIds = visible.map((t) => t.id!).toSet();
+            final positions = <int>[];
+            for (int k = 0; k < fullIds.length; k++) {
+              if (visibleIds.contains(fullIds[k])) positions.add(k);
+            }
+            for (int k = 0; k < positions.length && k < newVisibleIds.length; k++) {
+              fullIds[positions[k]] = newVisibleIds[k];
+            }
+            _taskService.updateTaskOrder(userId, fullIds, widget.isBacklog ? null : selectedDate);
+          }
+
+          onComplete(int vIndex) {
             setState(() {
-              var list = _tasks!.map((task) => task.id!).toList();
-              var taskId = list.removeAt(taskIndex);
-              list.add(taskId);
-              _taskService.updateTaskOrder(userId, list, widget.isBacklog ? null : selectedDate);
+              final ids = visible.map((t) => t.id!).toList();
+              final moved = ids.removeAt(vIndex);
+              ids.add(moved);
+              persistVisibleOrder(ids);
             });
           }
 
           List<Widget> children = [];
-          for (int i = 0; i < _tasks!.length; i++) {
-            final task = _tasks![i];
+          for (int i = 0; i < visible.length; i++) {
+            final task = visible[i];
             if (task.isDivider) {
               children.add(AppReveal(
                 key: ValueKey(task.id!),
@@ -142,6 +187,17 @@ class TaskListState extends State<TaskListScreen> {
                   divider: task,
                   index: i,
                   onDelete: deleteTaskWithUndo,
+                ),
+              ));
+            } else if (widget.isBacklog && task.isParent) {
+              children.add(AppReveal(
+                key: ValueKey(task.id!),
+                delay: staggerDelay(i),
+                child: SubtaskGroupCard(
+                  parent: task,
+                  childTasks: childrenByParent[task.id!] ?? const <Task>[],
+                  index: i,
+                  taskService: _taskService,
                 ),
               ));
             } else {
@@ -411,24 +467,18 @@ class TaskListState extends State<TaskListScreen> {
                   ]),
                   buildDefaultDragHandles: false,
                   onReorder: (int oldIndex, int newIndex) {
+                    if (_isSearching) return;
                     setState(() {
+                      final ids = visible.map((t) => t.id!).toList();
                       final delta = newIndex > oldIndex ? -1 : 0;
-                      var list = _tasks!.map((task) => task.id!).toList();
-                      if (newIndex == list.length) {
-                        var swapId = list.removeAt(oldIndex);
-                        list.add(swapId);
-
-                        var swapItem = _tasks!.removeAt(oldIndex);
-                        _tasks!.add(swapItem);
+                      if (newIndex >= ids.length) {
+                        final m = ids.removeAt(oldIndex);
+                        ids.add(m);
                       } else {
-                        var item = list.removeAt(oldIndex);
-                        list.insert(newIndex + delta, item);
-
-                        var swapItem = _tasks!.removeAt(oldIndex);
-                        _tasks!.insert(newIndex + delta, swapItem);
+                        final m = ids.removeAt(oldIndex);
+                        ids.insert(newIndex + delta, m);
                       }
-
-                      _taskService.updateTaskOrder(userId, list, widget.isBacklog ? null : selectedDate);
+                      persistVisibleOrder(ids);
                     });
                   },
                   children: children));

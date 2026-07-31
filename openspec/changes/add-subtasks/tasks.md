@@ -33,11 +33,11 @@
 
 ## 5. Backlog UI
 
-- [ ] 5.1 In the backlog list, render each parent as a container with its children nested beneath (combine the `unassigned` partition with `streamSubtasks` grouped by parent)
-- [ ] 5.2 Show a date chip on children that are scheduled to a date
-- [ ] 5.3 Add an "add subtask" affordance on a backlog parent
-- [ ] 5.4 Add "assign date to parent" affordance that triggers the cascade (4.2)
-- [ ] 5.5 Show an `n/m done` progress indicator on the backlog parent using the child counters
+- [x] 5.1 In the backlog list, render each parent as a container with its children nested beneath (combine the `unassigned` partition with `streamSubtasks` grouped by parent)
+- [x] 5.2 Show a date chip on children that are scheduled to a date
+- [x] 5.3 Add an "add subtask" affordance on a backlog parent
+- [x] 5.4 Add "assign date to parent" affordance that triggers the cascade (4.2)
+- [x] 5.5 Show an `n/m done` progress indicator on the backlog parent using the child counters
 
 ## 6. To-Do List UI
 
@@ -48,9 +48,9 @@
 
 ## 7. Scoring & Edge Cases
 
-- [ ] 7.1 Implement scoring: a container parent contributes no score of its own; each child scores by its own priority; confirm performance stats aren't double-counted
-- [ ] 7.2 Handle deleting a scheduled child (removes from its day; decrements parent counters)
-- [ ] 7.3 Handle the delete-parent prompt in the UI (delete steps vs keep steps → calls 3.5)
+- [x] 7.1 Implement scoring: a container parent contributes no score of its own; each child scores by its own priority; confirm performance stats aren't double-counted
+- [x] 7.2 Handle deleting a scheduled child (removes from its day; decrements parent counters)
+- [x] 7.3 Handle the delete-parent prompt in the UI (delete steps vs keep steps → calls 3.5)
 
 ## 8. Testing & Verification
 

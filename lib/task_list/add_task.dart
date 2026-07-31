@@ -297,6 +297,8 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
           multiDayPosition: widget.task?.multiDayPosition,
           reminderTime: _reminderTime,
           reminderTaskName: widget.task?.reminderTaskName,
+          parentId: widget.task?.parentId,
+          parentTitle: widget.task?.parentTitle,
           countdown: _countdown);
 
       if (widget.task == null) {
