@@ -543,6 +543,8 @@ class TaskService {
     }
     await deleteTask(task);
     final now = DateTime.now();
+    // The day the points are being pushed FROM (captured before dueDate is bumped).
+    final fromDate = task.dueDate ?? DateService().getString(now);
     final d = task.dueDate != null ? DateService().getDate(task.dueDate!) : now;
     final decrementScore = d.day == now.day && d.month == now.month && d.year == now.year;
     task.dueDate = DateService().incrementDate(d);
@@ -550,6 +552,8 @@ class TaskService {
     task.reminderTime = null;
     task.reminderTaskName = null;
     await addTask(task);
+    // Record the effort points pushed off the from-date (any day, not just today).
+    await PerformanceService().recordPush(user.uid, task, fromDate);
     if (decrementScore) {
       await PerformanceService().decrementScore(user.uid, 1);
     }

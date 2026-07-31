@@ -79,6 +79,27 @@ class PerformanceService {
         .set({'completed': update, 'date': DateService().getDate(date)}, SetOptions(merge: true));
   }
 
+  /// Records the effort points "pushed" off [fromDate] when a task is deferred.
+  /// Mirrors the `completed` tally but writes a separate `pushed` map on the
+  /// same per-day performance doc (ALL + Other/tag keys). Always additive.
+  Future<void> recordPush(String userId, Task task, String fromDate) async {
+    final ref = await score(userId).collection('performance').doc(fromDate).get();
+    final existing = ref.exists && (ref.data()!['pushed'] != null) ? ref.data()!['pushed'] : {};
+    final points = getScore(task.priority);
+    final update = Map.from(existing);
+    update['ALL'] = (update['ALL'] ?? 0) + points;
+    if (task.tags.isEmpty) {
+      update['Other'] = (update['Other'] ?? 0) + points;
+    }
+    for (final tag in task.tags) {
+      update[tag.id] = (update[tag.id] ?? 0) + points;
+    }
+    await score(userId)
+        .collection('performance')
+        .doc(fromDate)
+        .set({'pushed': update, 'date': DateService().getDate(fromDate)}, SetOptions(merge: true));
+  }
+
   int getScore(Effort priority) {
     if (priority == Effort.high) {
       return 3;

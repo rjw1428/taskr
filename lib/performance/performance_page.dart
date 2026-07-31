@@ -92,6 +92,18 @@ class CurrentScoreState extends State<CurrentScore> {
     // Performance data is keyed by tag id; map to labels for the legend.
     final tagNames = {for (final tg in Provider.of<TagProvider>(context).tags) tg.id: tg.label};
 
+    // Points pushed off each of the last 7 days (from the same performance docs).
+    final pushedByDate = <String, int>{};
+    for (final day in performance) {
+      final ts = day['date'] as Timestamp?;
+      if (ts == null) continue;
+      final pushed = day['pushed'] as Map<String, dynamic>?;
+      pushedByDate[DateService().getString(ts.toDate())] = (pushed?['ALL'] as int?) ?? 0;
+    }
+    final pushedDays = List.generate(7, (i) => DateTime.now().subtract(Duration(days: 6 - i)));
+    final pushedValues = pushedDays.map((d) => pushedByDate[DateService().getString(d)] ?? 0).toList();
+    final pushedLabels = pushedDays.map((d) => DateFormat('E').format(d)).toList();
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(Insets.lg, Insets.md, Insets.lg, Insets.xxl),
       child: Column(
@@ -190,6 +202,8 @@ class CurrentScoreState extends State<CurrentScore> {
           ),
           const SizedBox(height: Insets.lg),
           AppCard(child: PerformanceHeatmap(userId: widget.userId)),
+          const SizedBox(height: Insets.lg),
+          _PushedChartCard(values: pushedValues, labels: pushedLabels),
           const SizedBox(height: Insets.lg),
           Padding(
             padding: const EdgeInsets.only(left: Insets.xs, bottom: Insets.sm),
@@ -370,6 +384,108 @@ class _LegendDot extends StatelessWidget {
         const SizedBox(width: 6),
         Text(label, style: theme.textTheme.labelMedium?.copyWith(color: theme.appTokens.textMuted)),
       ],
+    );
+  }
+}
+
+/// Bar chart of effort points pushed (deferred) off each of the last 7 days.
+class _PushedChartCard extends StatelessWidget {
+  final List<int> values; // oldest -> today
+  final List<String> labels;
+  const _PushedChartCard({required this.values, required this.labels});
+
+  double _leftInterval(int maxV) {
+    if (maxV <= 4) return 1;
+    if (maxV <= 10) return 2;
+    return (maxV / 4).ceilToDouble();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final t = theme.appTokens;
+    final total = values.fold<int>(0, (a, b) => a + b);
+    final maxV = values.fold<int>(0, (a, b) => a > b ? a : b);
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Points pushed', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 2),
+          Text('Deferred to another day · last 7 days',
+              style: theme.textTheme.bodySmall?.copyWith(color: t.textFaint)),
+          const SizedBox(height: Insets.md),
+          if (total == 0)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: Insets.lg),
+              child: Text('Nothing pushed — nice.',
+                  style: theme.textTheme.bodySmall?.copyWith(color: t.textMuted)),
+            )
+          else
+            SizedBox(
+              height: 150,
+              child: BarChart(BarChartData(
+                alignment: BarChartAlignment.spaceAround,
+                maxY: (maxV * 1.25).ceilToDouble().clamp(1, double.infinity),
+                minY: 0,
+                gridData: const FlGridData(show: false),
+                borderData: FlBorderData(
+                  show: true,
+                  border: Border(bottom: BorderSide(color: t.hairline, width: 2)),
+                ),
+                titlesData: FlTitlesData(
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 28,
+                      interval: _leftInterval(maxV),
+                      getTitlesWidget: (v, m) => leftTitleWidgets(v, m, t.textMuted),
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 28,
+                      getTitlesWidget: (v, m) {
+                        final i = v.toInt();
+                        final label = (i >= 0 && i < labels.length) ? labels[i] : '';
+                        return SideTitleWidget(
+                          axisSide: m.axisSide,
+                          space: 8,
+                          child: Text(label,
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: t.textMuted)),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                barTouchData: BarTouchData(
+                  touchTooltipData: BarTouchTooltipData(
+                    getTooltipColor: (_) => t.surfaceRaised,
+                    getTooltipItem: (group, gi, rod, ri) => BarTooltipItem(
+                      '${rod.toY.toInt()} pts',
+                      TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+                barGroups: [
+                  for (int i = 0; i < values.length; i++)
+                    BarChartGroupData(x: i, barRods: [
+                      BarChartRodData(
+                        toY: values[i].toDouble(),
+                        color: theme.colorScheme.error,
+                        width: 14,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                      ),
+                    ]),
+                ],
+              )),
+            ),
+        ],
+      ),
     );
   }
 }
