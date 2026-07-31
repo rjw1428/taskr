@@ -9,7 +9,6 @@ import 'package:taskr/services/services.dart';
 import 'package:taskr/shared/shared.dart';
 import 'package:taskr/task_list/add_task.dart';
 import 'package:taskr/goals/goal_detail_page.dart';
-import 'package:taskr/services/goal.service.dart';
 import 'package:taskr/task_list/copy_task.dart';
 import 'package:taskr/task_list/task_feedback_dialog.dart';
 import 'package:taskr/task_list/view_series.dart';
@@ -114,8 +113,13 @@ class TaskItemState extends State<TaskItem> {
         curve: Motion.standard,
         margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
         decoration: BoxDecoration(
-          color: done ? Color.alphaBlend(p.fill.withAlpha(140), theme.colorScheme.surface) : p.fill,
-          border: Border.all(color: p.border),
+          // Completed cards recede: blend the priority fill hard toward the
+          // page background so they read as "done" and don't compete with
+          // active tasks. Keyline and border are muted too.
+          color: done
+              ? Color.alphaBlend(theme.scaffoldBackgroundColor.withAlpha(205), p.fill)
+              : p.fill,
+          border: Border.all(color: done ? theme.appTokens.hairline : p.border),
           borderRadius: borderRadius,
           boxShadow: done ? null : theme.appTokens.raisedShadow,
         ),
@@ -127,8 +131,8 @@ class TaskItemState extends State<TaskItem> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Severity keyline
-                Container(width: 4, color: p.accent),
+                // Severity keyline (muted once completed)
+                Container(width: 4, color: done ? p.accent.withAlpha(70) : p.accent),
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),

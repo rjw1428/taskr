@@ -749,7 +749,6 @@ class TaskService {
   }
 
   List<DateTime> _generateRecurringTaskInstances(RecurringTask template) {
-    final user = AuthService().user!;
     final type = getRecurrenceFrequency(template.recurrenceType);
     final untilDate = template.endDate?.toUtc();
     RecurrenceRule rule;

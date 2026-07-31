@@ -5,6 +5,7 @@ import 'package:taskr/people/person_detail.dart';
 import 'package:taskr/people/person_form.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/people.provider.dart';
+import 'package:taskr/people/person_avatar.dart';
 import 'package:taskr/shared/shared.dart';
 
 class PeopleListPage extends StatefulWidget {
@@ -35,6 +36,7 @@ class _PeopleListPageState extends State<PeopleListPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final t = theme.appTokens;
     return Consumer<PeopleProvider>(
       builder: (context, peopleProvider, _) {
         final sortedAndFiltered = _getSortedAndFiltered(peopleProvider.people);
@@ -93,22 +95,52 @@ class _PeopleListPageState extends State<PeopleListPage> {
                             message: _searchQuery.isEmpty ? 'Add a person to get started' : null,
                           )
                         : ListView.builder(
+                            padding: const EdgeInsets.fromLTRB(Insets.lg, 0, Insets.lg, Insets.xxl),
                             itemCount: sortedAndFiltered.length,
                             itemBuilder: (context, index) {
                               final person = sortedAndFiltered[index];
-                              return AppReveal(
-                                delay: staggerDelay(index),
-                                child: ListTile(
-                                  title: Text(person.name),
-                                  subtitle: person.job != null ? Text(person.job!) : null,
-                                  trailing: const Icon(FontAwesomeIcons.chevronRight, size: 16),
-                                  onTap: () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) => PersonDetailPage(personId: person.id!),
-                                      ),
-                                    );
-                                  },
+                              final subtitle = person.job ??
+                                  (person.logs.isNotEmpty
+                                      ? '${person.logs.length} ${person.logs.length == 1 ? 'note' : 'notes'}'
+                                      : null);
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: Insets.sm),
+                                child: AppReveal(
+                                  delay: staggerDelay(index),
+                                  child: AppCard(
+                                    padding: const EdgeInsets.all(Insets.md),
+                                    onTap: () {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) => PersonDetailPage(personId: person.id!),
+                                        ),
+                                      );
+                                    },
+                                    child: Row(
+                                      children: [
+                                        PersonAvatar(name: person.name),
+                                        const SizedBox(width: Insets.md),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(person.name, style: theme.textTheme.titleMedium),
+                                              if (subtitle != null)
+                                                Padding(
+                                                  padding: const EdgeInsets.only(top: 2),
+                                                  child: Text(subtitle,
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: theme.textTheme.bodySmall
+                                                          ?.copyWith(color: t.textMuted)),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                        Icon(FontAwesomeIcons.chevronRight, size: 13, color: t.textFaint),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               );
                             },

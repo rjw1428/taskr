@@ -4,7 +4,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'
     as local_notifications;
@@ -199,43 +198,6 @@ class _MyAppState extends State<MyApp> {
           icon: '@mipmap/ic_launcher',
         ),
       ),
-    );
-  }
-
-  // Method to show a general notification dialog
-  void _showNotificationDialog(RemoteNotification notification) {
-    final context = navigatorKey.currentContext;
-    if (context == null) {
-      debugPrint("Cannot show notification dialog without a context");
-      return;
-    }
-    if (!mounted) return; // Ensure the State is still mounted
-
-    showDialog(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: Text(notification.title ?? 'New Message'),
-          content: SingleChildScrollView(
-            child: ListBody(
-              children: <Widget>[
-                Text(
-                  notification.body ?? '',
-                  style: Theme.of(dialogContext).textTheme.bodyMedium,
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              child: const Text('Ok'),
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-              },
-            ),
-          ],
-        );
-      },
     );
   }
 

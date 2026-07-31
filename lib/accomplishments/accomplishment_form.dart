@@ -72,7 +72,7 @@ class _AccomplishmentFormState extends State<AccomplishmentForm> {
                 },
               ),
               DropdownButtonFormField<Difficulty>(
-                value: _difficulty,
+                initialValue: _difficulty,
                 decoration: const InputDecoration(labelText: 'Difficulty'),
                 items: Difficulty.values.map((Difficulty difficulty) {
                   return DropdownMenuItem<Difficulty>(

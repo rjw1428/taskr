@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:taskr/people/person_form.dart';
 import 'package:taskr/people/log_form.dart';
+import 'package:taskr/people/person_avatar.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/people.provider.dart';
 import 'package:taskr/shared/shared.dart';
@@ -61,8 +62,7 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildPersonInfo(person),
-                const Divider(),
+                _buildPersonInfo(context, person),
                 _buildLogsSection(context, person, peopleProvider),
               ],
             ),
@@ -84,30 +84,89 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
     );
   }
 
-  Widget _buildPersonInfo(Person person) {
+  Widget _buildPersonInfo(BuildContext context, Person person) {
+    final theme = Theme.of(context);
+    final t = theme.appTokens;
+    final facts = <Widget>[];
+    if (person.age != null) facts.add(_fact(context, 'Age', person.age.toString()));
+    if (person.birthday != null) {
+      facts.add(_fact(context, 'Birthday', DateFormat('MMM d').format(DateTime.parse(person.birthday!))));
+    }
+    if (person.spouse != null) facts.add(_fact(context, 'Spouse', person.spouse!));
+    if (person.job != null) facts.add(_fact(context, 'Job', person.job!));
+
     return Padding(
-      padding: const EdgeInsets.all(Insets.lg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (person.age != null) _buildInfoRow('Age', person.age.toString()),
-          if (person.birthday != null) _buildInfoRow('Birthday', DateFormat('MMM d, yyyy').format(DateTime.parse(person.birthday!))),
-          if (person.job != null) _buildInfoRow('Job', person.job!),
-          if (person.spouse != null) _buildInfoRow('Spouse', person.spouse!),
-          if (person.kids.isNotEmpty) ...[
-            const SizedBox(height: Insets.md),
-            const Text('Kids', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: Insets.sm),
-            ...person.kids.map((kid) {
-              final age = _calculateAge(kid);
-              return Padding(
-                padding: const EdgeInsets.only(bottom: Insets.sm),
-                child: Text('${kid.name}, $age'),
-              );
-            }),
+      padding: const EdgeInsets.fromLTRB(Insets.lg, Insets.lg, Insets.lg, Insets.sm),
+      child: AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                PersonAvatar(name: person.name, size: 52),
+                const SizedBox(width: Insets.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(person.name, style: theme.textTheme.titleLarge),
+                      if (person.job != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(person.job!,
+                              style: theme.textTheme.bodySmall?.copyWith(color: t.textMuted)),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (facts.isNotEmpty || person.kids.isNotEmpty) ...[
+              const SizedBox(height: Insets.lg),
+              Divider(height: 1, color: t.hairline),
+              const SizedBox(height: Insets.md),
+            ],
+            if (facts.isNotEmpty)
+              Wrap(spacing: Insets.xl, runSpacing: Insets.md, children: facts),
+            if (person.kids.isNotEmpty) ...[
+              const SizedBox(height: Insets.md),
+              Text('KIDS',
+                  style: theme.textTheme.labelSmall?.copyWith(color: t.textFaint, letterSpacing: 1.2)),
+              const SizedBox(height: Insets.sm),
+              Wrap(
+                spacing: Insets.sm,
+                runSpacing: Insets.sm,
+                children: person.kids.map((kid) {
+                  final age = _calculateAge(kid);
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withAlpha(28),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text('${kid.name} · $age',
+                        style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.primary)),
+                  );
+                }).toList(),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
+    );
+  }
+
+  Widget _fact(BuildContext context, String label, String value) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label.toUpperCase(),
+            style: theme.textTheme.labelSmall?.copyWith(color: theme.appTokens.textFaint, letterSpacing: 1)),
+        const SizedBox(height: 2),
+        Text(value, style: theme.textTheme.titleSmall),
+      ],
     );
   }
 
@@ -131,18 +190,6 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
       }
       return age;
     }
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Insets.sm),
-      child: Row(
-        children: [
-          Text('$label: ', style: const TextStyle(fontWeight: FontWeight.bold)),
-          Expanded(child: Text(value)),
-        ],
-      ),
-    );
   }
 
   Widget _buildLogsSection(BuildContext context, Person person, PeopleProvider peopleProvider) {

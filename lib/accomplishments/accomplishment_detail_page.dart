@@ -57,7 +57,7 @@ class _AccomplishmentDetailView extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(accomplishment.title),
-        actions: [],
+        actions: const [],
       ),
       body: Padding(
         padding: const EdgeInsets.all(Insets.lg),

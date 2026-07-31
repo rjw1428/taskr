@@ -31,5 +31,5 @@ void main() async {
   // Write back to about.dart
   await aboutFile.writeAsString(aboutFileContent);
 
-  print('Successfully updated lib/about/about.dart with version: $version and commit: $commitHash');
+  stdout.writeln('Successfully updated lib/about/about.dart with version: $version and commit: $commitHash');
 }

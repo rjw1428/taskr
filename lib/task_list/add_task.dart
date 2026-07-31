@@ -74,7 +74,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
     final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
     final minute = dt.minute.toString().padLeft(2, '0');
     final period = dt.hour >= 12 ? 'PM' : 'AM';
-    return '$month/$day ${hour}:$minute $period';
+    return '$month/$day $hour:$minute $period';
   }
 
   Future<void> _loadMultiDayEndDate() async {
@@ -635,6 +635,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                                             ? DateTime.parse(_reminderTime!).toLocal()
                                             : defaultDate);
                                     if (date == null) return;
+                                    if (!context.mounted) return;
                                     final time = await _selectTime(
                                       context,
                                       _reminderTime != null
