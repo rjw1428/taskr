@@ -10,13 +10,13 @@
 
 ## 2. Habit Service & Generation
 
-- [ ] 2.1 Create `HabitService` (+ barrel export in `services.dart`): `habitCollection`, `streamHabits`, `getHabit`
-- [ ] 2.2 `_toRecurringTask(habit, {until})` — convert a habit to a bounded `RecurringTask` so existing RRULE helpers apply
-- [ ] 2.3 Centralize instance generation in `TaskService` (extract the inline RRULE block from `add_task.dart`) into a reusable generator
-- [ ] 2.4 `ensureInstances(habit, horizonDays: 60)` — rolling top-up: generate only missing scheduled dates via the helpers + `addTask`, guard on `lastMaterializedDate` + existence
-- [ ] 2.5 `addHabit`, `updateHabit` (delete future incomplete instances + re-ensure), `pauseHabit`/`resumeHabit`, `deleteHabit`
-- [ ] 2.6 `recomputeStreak(habit)` — collection-group query `items where userId==uid and habitId==h.id`; backward-walk scheduled occurrences (today pending, not missed); set currentStreak/longestStreak/lastCompletedDate
-- [ ] 2.7 `TaskService.toggleHabitComplete(instance, completed)` — update instance + call `recomputeStreak`; scoring stays in the card
+- [x] 2.1 Create `HabitService` (+ barrel export in `services.dart`): `habitCollection`, `streamHabits`, `getHabit`
+- [x] 2.2 `_toRecurringTask(habit, {until})` — convert a habit to a bounded `RecurringTask` so existing RRULE helpers apply
+- [x] 2.3 Centralize instance generation in `TaskService` (extract the inline RRULE block from `add_task.dart`) into a reusable generator
+- [x] 2.4 `ensureInstances(habit, horizonDays: 60)` — rolling top-up: generate only missing scheduled dates via the helpers + `addTask`, guard on `lastMaterializedDate` + existence
+- [x] 2.5 `addHabit`, `updateHabit` (delete future incomplete instances + re-ensure), `pauseHabit`/`resumeHabit`, `deleteHabit`
+- [x] 2.6 `recomputeStreak(habit)` — collection-group query `items where userId==uid and habitId==h.id`; backward-walk scheduled occurrences (today pending, not missed); set currentStreak/longestStreak/lastCompletedDate
+- [x] 2.7 `TaskService.toggleHabitComplete(instance, completed)` — update instance + call `recomputeStreak`; scoring stays in the card
 
 ## 3. Habits UI
 

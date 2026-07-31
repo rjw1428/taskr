@@ -813,6 +813,14 @@ class TaskService {
     return instances;
   }
 
+  /// Scheduled instance dates for [template] from [start], bounded by the
+  /// template's endDate (habits set endDate to their rolling horizon). Reuses
+  /// the shared RRULE builder so habits and recurring tasks share one generator.
+  List<DateTime> generateInstancesInWindow(RecurringTask template, DateTime start) {
+    final rule = _buildRecurrenceRule(template);
+    return rule.getInstances(start: start.toUtc()).take(500).toList();
+  }
+
   Future<void> deleteRecurringTemplate(Task task, RecurringTask template) async {
     final user = AuthService().user!;
     try {

@@ -1,0 +1,238 @@
+import 'dart:math';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
+import 'package:taskr/services/auth.service.dart';
+import 'package:taskr/services/date.service.dart';
+import 'package:taskr/services/models.dart';
+import 'package:taskr/services/task.service.dart';
+import 'package:taskr/shared/shared.dart';
+
+/// Manual, open-ended habits backed by the recurring-task generation engine.
+/// A habit materializes real task instances (stamped with `habitId`) on a
+/// rolling horizon; completing an instance scores its Effort through the normal
+/// task flow, while the streak is tracked separately here and never affects the
+/// score.
+class HabitService {
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final TaskService _taskService = TaskService();
+  final DateService _dates = DateService();
+
+  // Guards against concurrent top-ups within the app (e.g. Habits list + List
+  // tab both calling ensureInstances at once) creating duplicate instances.
+  static final Set<String> _materializing = {};
+
+  String get _uid => AuthService().user!.uid;
+
+  CollectionReference<Map<String, dynamic>> habitCollection(String uid) =>
+      _db.collection('todos').doc(uid).collection('habits');
+
+  Stream<List<Habit>> streamHabits() {
+    return habitCollection(_uid).snapshots().map((snap) {
+      final habits = snap.docs.map((doc) => Habit.fromJson({...doc.data(), 'id': doc.id})).toList();
+      habits.sort((a, b) => (b.createdAt ?? 0).compareTo(a.createdAt ?? 0));
+      return habits;
+    });
+  }
+
+  Future<Habit?> getHabit(String id) async {
+    final doc = await habitCollection(_uid).doc(id).get();
+    if (!doc.exists) return null;
+    return Habit.fromJson({...doc.data()!, 'id': doc.id});
+  }
+
+  RecurringTask _toRecurringTask(Habit h, {required DateTime start, required DateTime until}) {
+    return RecurringTask(
+      recurrenceType: h.recurrenceType,
+      frequency: h.frequency,
+      daysOfWeek: h.daysOfWeek,
+      dayOfMonth: h.dayOfMonth ?? 1,
+      startDate: start,
+      endDate: until,
+    );
+  }
+
+  Future<String> addHabit(Habit h) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final data = removeNulls(h.toJson())..remove('id');
+    data['createdAt'] = now;
+    data['modifiedAt'] = now;
+    final ref = await habitCollection(_uid).add(data);
+    h.id = ref.id;
+    h.createdAt = now;
+    await ensureInstances(h);
+    return ref.id;
+  }
+
+  /// Rolling top-up: materialize only the missing scheduled dates from
+  /// (lastMaterialized+1 or today) through today+horizon. Idempotent via the
+  /// lastMaterializedDate bookkeeping + an in-memory guard.
+  Future<void> ensureInstances(Habit h, {int horizonDays = 60}) async {
+    if (h.status != 'active' || h.id == null) return;
+    if (_materializing.contains(h.id)) return;
+    _materializing.add(h.id!);
+    try {
+      final todayStr = _dates.getString(DateTime.now());
+      final today = _dates.getDate(todayStr);
+      final start = _dates.getDate(h.startDate);
+      DateTime windowStart = start.isAfter(today) ? start : today;
+      if (h.lastMaterializedDate != null) {
+        final next = _dates.getDate(h.lastMaterializedDate!).add(const Duration(days: 1));
+        if (next.isAfter(windowStart)) windowStart = next;
+      }
+      final until = today.add(Duration(days: horizonDays));
+      if (windowStart.isAfter(until)) return;
+
+      final template = _toRecurringTask(h, start: windowStart, until: until);
+      final instances = _taskService.generateInstancesInWindow(template, windowStart);
+      String? lastDate = h.lastMaterializedDate;
+      for (final inst in instances) {
+        final dateStr = _dates.getString(inst);
+        await _taskService.addTask(Task(
+          added: DateTime.now().millisecondsSinceEpoch,
+          title: h.title,
+          priority: h.effort,
+          completed: false,
+          dueDate: dateStr,
+          habitId: h.id,
+        ));
+        lastDate = dateStr;
+      }
+      if (lastDate != null && lastDate != h.lastMaterializedDate) {
+        h.lastMaterializedDate = lastDate;
+        await habitCollection(_uid).doc(h.id).update({'lastMaterializedDate': lastDate});
+      }
+    } finally {
+      _materializing.remove(h.id);
+    }
+  }
+
+  /// Toggle a habit instance's completion and recompute the streak. Scoring
+  /// stays in updateTaskByKey/the card (Effort points); the streak is separate.
+  Future<void> toggleComplete(Task instance, bool completed) async {
+    const fmt = "${DateService.stringFmt} ${DateService.dbTimeFormat}";
+    await _taskService.updateTaskByKey({
+      'completed': completed,
+      'completedTime': completed ? DateFormat(fmt).format(DateTime.now()) : null,
+    }, instance);
+    if (instance.habitId != null) await recomputeStreakById(instance.habitId!);
+  }
+
+  Future<void> recomputeStreakById(String id) async {
+    final h = await getHabit(id);
+    if (h != null) await recomputeStreak(h);
+  }
+
+  /// Streak = consecutive most-recent scheduled occurrences completed. Today,
+  /// if scheduled but not yet completed, is treated as pending (not a miss).
+  Future<void> recomputeStreak(Habit h) async {
+    if (h.id == null) return;
+    final snap = await _habitInstanceDocs(h.id!);
+    final completedByDate = <String, bool>{};
+    for (final doc in snap) {
+      final date = doc['dueDate'] as String?;
+      if (date != null) completedByDate[date] = (doc['completed'] as bool?) ?? false;
+    }
+    final todayStr = _dates.getString(DateTime.now());
+    final start = _dates.getDate(h.startDate);
+    final today = _dates.getDate(todayStr);
+    final template = _toRecurringTask(h, start: start, until: today);
+    final scheduled = _taskService
+        .generateInstancesInWindow(template, start)
+        .map((d) => _dates.getString(d))
+        .where((d) => d.compareTo(todayStr) <= 0)
+        .toList();
+
+    int i = scheduled.length - 1;
+    if (i >= 0 && scheduled[i] == todayStr && !(completedByDate[todayStr] ?? false)) {
+      i--; // today is pending, not a miss
+    }
+    int streak = 0;
+    String? lastCompleted;
+    for (; i >= 0; i--) {
+      final date = scheduled[i];
+      if (completedByDate[date] == true) {
+        streak++;
+        lastCompleted ??= date;
+      } else {
+        break;
+      }
+    }
+
+    await habitCollection(_uid).doc(h.id).update({
+      'currentStreak': streak,
+      'longestStreak': max(h.longestStreak, streak),
+      'lastCompletedDate': lastCompleted,
+      'modifiedAt': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
+  Future<void> updateHabit(Habit h) async {
+    final data = h.toJson()
+      ..remove('id')
+      ..remove('currentStreak')
+      ..remove('longestStreak')
+      ..remove('lastCompletedDate')
+      ..remove('createdAt');
+    data['modifiedAt'] = DateTime.now().millisecondsSinceEpoch;
+    data['lastMaterializedDate'] = null; // force regeneration of the future
+    await habitCollection(_uid).doc(h.id).update(data);
+    h.lastMaterializedDate = null;
+    await _deleteFutureIncomplete(h.id!);
+    await ensureInstances(h);
+  }
+
+  Future<void> pauseHabit(Habit h) async {
+    await habitCollection(_uid).doc(h.id).update({
+      'status': 'paused',
+      'modifiedAt': DateTime.now().millisecondsSinceEpoch,
+    });
+    await _deleteFutureIncomplete(h.id!);
+  }
+
+  Future<void> resumeHabit(Habit h) async {
+    await habitCollection(_uid).doc(h.id).update({
+      'status': 'active',
+      'modifiedAt': DateTime.now().millisecondsSinceEpoch,
+    });
+    h.status = 'active';
+    await ensureInstances(h);
+  }
+
+  Future<void> deleteHabit(Habit h) async {
+    await _deleteFutureIncomplete(h.id!);
+    await habitCollection(_uid).doc(h.id).delete();
+  }
+
+  // Delete a habit's future incomplete instances (preserve completed history).
+  Future<void> _deleteFutureIncomplete(String habitId) async {
+    final todayStr = _dates.getString(DateTime.now());
+    final instances = await _habitInstances(habitId);
+    for (final t in instances) {
+      if (!t.completed && t.dueDate != null && t.dueDate!.compareTo(todayStr) >= 0) {
+        await _taskService.deleteTask(t);
+      }
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _habitInstanceDocs(String habitId) async {
+    final snap = await _db
+        .collectionGroup('items')
+        .where('userId', isEqualTo: _uid)
+        .where('habitId', isEqualTo: habitId)
+        .get();
+    return snap.docs.map((doc) => doc.data()).toList();
+  }
+
+  Future<List<Task>> _habitInstances(String habitId) async {
+    final snap = await _db
+        .collectionGroup('items')
+        .where('userId', isEqualTo: _uid)
+        .where('habitId', isEqualTo: habitId)
+        .get();
+    return snap.docs.map((doc) {
+      final data = {...doc.data(), 'id': doc.id};
+      data['tags'] = <dynamic>[];
+      return Task.fromJson(data);
+    }).toList();
+  }
+}
