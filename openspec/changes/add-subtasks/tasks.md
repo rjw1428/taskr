@@ -17,19 +17,19 @@
 
 ## 3. Subtask Lifecycle (service)
 
-- [ ] 3.1 `addSubtask(parent, title, ...)` — create a child task with `parentId`/`parentTitle`; if it's the parent's first child, inherit the parent's `dueDate` and clear the parent's own day placement (becomes a container)
-- [ ] 3.2 Increment `childCount` on the parent within the same operation
-- [ ] 3.3 Reopen the parent (set incomplete) when a new incomplete child is added to a completed parent
-- [ ] 3.4 Auto-complete/reopen transaction: toggling a child's `completed` updates the child and the parent's `childCompletedCount` atomically; set parent complete when completed == count, reopen when it drops below
-- [ ] 3.5 `deleteParent(parent, {required keepChildren})` — either delete parent + all children, or delete the parent and null out each child's `parentId`/`parentTitle` (orphan to standalone)
-- [ ] 3.6 Add a `recomputeParentCounters(parentId)` recovery path (recount via `streamSubtasks`) for counter drift
-- [ ] 3.7 Guard rails: block converting a recurring or multi-day task into a parent (and adding subtasks to one)
+- [x] 3.1 `addSubtask(parent, title, ...)` — create a child task with `parentId`/`parentTitle`; if it's the parent's first child, inherit the parent's `dueDate` and clear the parent's own day placement (becomes a container)
+- [x] 3.2 Increment `childCount` on the parent within the same operation
+- [x] 3.3 Reopen the parent (set incomplete) when a new incomplete child is added to a completed parent
+- [x] 3.4 Auto-complete/reopen transaction: toggling a child's `completed` updates the child and the parent's `childCompletedCount` atomically; set parent complete when completed == count, reopen when it drops below
+- [x] 3.5 `deleteParent(parent, {required keepChildren})` — either delete parent + all children, or delete the parent and null out each child's `parentId`/`parentTitle` (orphan to standalone)
+- [x] 3.6 Add a `recomputeParentCounters(parentId)` recovery path (recount via `streamSubtasks`) for counter drift
+- [x] 3.7 Guard rails: block converting a recurring or multi-day task into a parent (and adding subtasks to one)
 
 ## 4. Scheduling & Cascade (service)
 
-- [ ] 4.1 Scheduling a child reuses the existing schedule/move path (unassigned → date partition); verify `parentId`/`parentTitle` survive the move
-- [ ] 4.2 `assignParentDate(parent, date)` — move only the parent's `unassigned`, incomplete children to `date`; leave hand-dated and completed children untouched
-- [ ] 4.3 Confirm `pushTask` on a subtask moves only that child (carry-the-remainder is automatic); completed siblings unaffected
+- [x] 4.1 Scheduling a child reuses the existing schedule/move path (unassigned → date partition); verify `parentId`/`parentTitle` survive the move
+- [x] 4.2 `assignParentDate(parent, date)` — move only the parent's `unassigned`, incomplete children to `date`; leave hand-dated and completed children untouched
+- [x] 4.3 Confirm `pushTask` on a subtask moves only that child (carry-the-remainder is automatic); completed siblings unaffected
 
 ## 5. Backlog UI
 
@@ -41,10 +41,10 @@
 
 ## 6. To-Do List UI
 
-- [ ] 6.1 Render a scheduled subtask as a normal task row that also shows the parent title (e.g. "Book venue · Plan Q3 offsite")
-- [ ] 6.2 Hide parents-with-children from day lists (they are backlog-only)
-- [ ] 6.3 Add an "add subtask" affordance on a day task; adding the first subtask converts the task to a container and keeps the child on the day (date inheritance)
-- [ ] 6.4 Wire child completion on the day to the auto-complete transaction (3.4)
+- [x] 6.1 Render a scheduled subtask as a normal task row that also shows the parent title (e.g. "Book venue · Plan Q3 offsite")
+- [x] 6.2 Hide parents-with-children from day lists (they are backlog-only)
+- [x] 6.3 Add an "add subtask" affordance on a day task; adding the first subtask converts the task to a container and keeps the child on the day (date inheritance)
+- [x] 6.4 Wire child completion on the day to the auto-complete transaction (3.4)
 
 ## 7. Scoring & Edge Cases
 

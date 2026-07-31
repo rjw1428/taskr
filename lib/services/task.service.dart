@@ -10,6 +10,7 @@ import 'package:rxdart/rxdart.dart';
 import 'package:taskr/shared/shared.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:rrule/rrule.dart';
+import 'package:intl/intl.dart';
 
 class TaskService {
   final _db = FirebaseFirestore.instance;
@@ -143,6 +144,166 @@ class TaskService {
               return Task.fromJson(data);
             }).toList())
         .handleError((error) => debugPrint("SUBTASKS: $error"));
+  }
+
+  // ─── Subtasks ──────────────────────────────────────────────────────────
+
+  /// One-time fetch of a parent's children (used for delete + counter recompute).
+  Future<List<Task>> getSubtasksOf(String parentId) async {
+    final user = AuthService().user!;
+    final snap = await _db
+        .collectionGroup('items')
+        .where('userId', isEqualTo: user.uid)
+        .where('parentId', isEqualTo: parentId)
+        .get();
+    return snap.docs.map((doc) {
+      final data = {...doc.data(), 'id': doc.id};
+      data['tags'] = <dynamic>[]; // tags are irrelevant to the operations that use this
+      return Task.fromJson(data);
+    }).toList();
+  }
+
+  /// Move a task's document to another date partition, preserving its id and
+  /// keeping `taskOrder` consistent on both sides. `targetDate` is a day string
+  /// or [defaultUnassignedDate] for the backlog. `extra` merges field overrides.
+  Future<void> _relocateTask(Task task, String targetDate, Map<String, dynamic> extra) async {
+    final user = AuthService().user!;
+    final oldDate = task.dueDate ?? defaultUnassignedDate;
+    final id = task.id!;
+    final data = removeNulls(task.toDbTask());
+    data['userId'] = user.uid;
+    if (targetDate == defaultUnassignedDate) {
+      data.remove('dueDate');
+    } else {
+      data['dueDate'] = targetDate;
+    }
+    data.addAll(extra);
+    final tasksDoc = _db.collection('todos').doc(user.uid).collection('tasks');
+    await taskCollection(user.uid, targetDate).doc(id).set(data);
+    await tasksDoc.doc(targetDate).set({
+      'taskOrder': FieldValue.arrayUnion([id])
+    }, SetOptions(merge: true));
+    if (oldDate != targetDate) {
+      await taskCollection(user.uid, oldDate).doc(id).delete();
+      await tasksDoc.doc(oldDate).set({
+        'taskOrder': FieldValue.arrayRemove([id])
+      }, SetOptions(merge: true));
+    }
+  }
+
+  /// Add a subtask to [parent]. The first child inherits the parent's date and
+  /// converts the parent into a backlog-only container (moved to `unassigned`);
+  /// later children start unassigned. Adding an incomplete child reopens a
+  /// previously-completed parent.
+  Future<String> addSubtask(Task parent, String title, {Effort? priority}) async {
+    final user = AuthService().user;
+    if (user == null) throw "No user logged in when adding subtask";
+    if (parent.recurringTemplateId != null || parent.isMultiDay) {
+      throw "Recurring and multi-day tasks can't have subtasks";
+    }
+    final isFirstChild = !parent.isParent;
+    final child = Task(
+      added: DateTime.now().millisecondsSinceEpoch,
+      title: title.trim(),
+      priority: priority ?? parent.priority,
+      completed: false,
+      dueDate: isFirstChild ? parent.dueDate : null,
+      parentId: parent.id,
+      parentTitle: parent.title,
+      tags: const [],
+    );
+    final childId = await addTask(child);
+
+    if (isFirstChild) {
+      // Convert to a container: move to the backlog and seed counters.
+      await _relocateTask(parent, defaultUnassignedDate, {
+        'childCount': 1,
+        'childCompletedCount': 0,
+        'completed': false,
+      });
+    } else {
+      await taskCollection(user.uid, defaultUnassignedDate).doc(parent.id!).update({
+        'childCount': FieldValue.increment(1),
+        'completed': false, // reopen if it had been auto-completed
+      });
+    }
+    return childId;
+  }
+
+  /// Toggle a subtask's completion, updating the parent's completed-counter in
+  /// the same transaction and auto-completing / reopening the parent.
+  Future<void> toggleSubtaskComplete(Task child, bool completed) async {
+    final user = AuthService().user!;
+    final childDate = child.dueDate ?? defaultUnassignedDate;
+    final childRef = taskCollection(user.uid, childDate).doc(child.id!);
+    final parentRef = taskCollection(user.uid, defaultUnassignedDate).doc(child.parentId!);
+    const completeTimeFormat = "${DateService.stringFmt} ${DateService.dbTimeFormat}";
+
+    await _db.runTransaction((transaction) async {
+      final parentSnap = await transaction.get(parentRef);
+      transaction.update(childRef, {
+        'completed': completed,
+        'completedTime': completed ? DateFormat(completeTimeFormat).format(DateTime.now()) : null,
+      });
+      if (parentSnap.exists) {
+        final data = parentSnap.data()!;
+        final count = (data['childCount'] as num?)?.toInt() ?? 0;
+        var done = ((data['childCompletedCount'] as num?)?.toInt() ?? 0) + (completed ? 1 : -1);
+        done = done.clamp(0, count);
+        transaction.update(parentRef, {
+          'childCompletedCount': done,
+          'completed': count > 0 && done >= count,
+        });
+      }
+    });
+  }
+
+  /// Delete a parent, either removing its children too or orphaning them into
+  /// standalone tasks (nulling their parent reference).
+  Future<void> deleteParent(Task parent, {required bool keepChildren}) async {
+    final user = AuthService().user!;
+    final children = await getSubtasksOf(parent.id!);
+    for (final child in children) {
+      if (keepChildren) {
+        final date = child.dueDate ?? defaultUnassignedDate;
+        await taskCollection(user.uid, date).doc(child.id!).update({
+          'parentId': FieldValue.delete(),
+          'parentTitle': FieldValue.delete(),
+        });
+      } else {
+        await deleteTask(child);
+      }
+    }
+    await deleteTask(parent);
+  }
+
+  /// Recompute a parent's counters from its actual children (drift recovery).
+  Future<void> recomputeParentCounters(String parentId) async {
+    final user = AuthService().user!;
+    final children = await getSubtasksOf(parentId);
+    final count = children.length;
+    final done = children.where((c) => c.completed).length;
+    await taskCollection(user.uid, defaultUnassignedDate).doc(parentId).update({
+      'childCount': count,
+      'childCompletedCount': done,
+      'completed': count > 0 && done >= count,
+    });
+  }
+
+  /// Schedule (or unschedule, with `date == null`) a subtask, preserving its
+  /// parent link. Moves the child's document to the target partition.
+  Future<void> scheduleSubtask(Task child, String? date) async {
+    await _relocateTask(child, date ?? defaultUnassignedDate, {});
+  }
+
+  /// Assign a date to a parent: cascade only its **unassigned, incomplete**
+  /// children onto that date. Hand-dated and completed children are untouched.
+  Future<void> assignParentDate(Task parent, String date) async {
+    final children = await getSubtasksOf(parent.id!);
+    for (final child in children) {
+      if (child.completed || child.dueDate != null) continue;
+      await _relocateTask(child, date, {});
+    }
   }
 
   Future<List<Map<String, dynamic>>> getTasks(String userId, String? date) async {

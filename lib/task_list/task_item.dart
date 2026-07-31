@@ -153,12 +153,18 @@ class TaskItemState extends State<TaskItem> {
                                       PerformanceService().decrementScore(AuthService().user!.uid,
                                           PerformanceService().getScore(widget.task.priority));
                                     }
-                                    const completeTimeFormat = "${DateService.stringFmt} ${DateService.dbTimeFormat}";
-                                    // TAGS HERE ARE NAME, NOT ID
-                                    await widget.taskService.updateTaskByKey({
-                                      "completed": value,
-                                      "completedTime": DateFormat(completeTimeFormat).format(DateTime.now())
-                                    }, widget.task);
+                                    if (widget.task.isSubtask) {
+                                      // Updates the child and rolls the parent's
+                                      // completed-counter (auto-complete/reopen).
+                                      await widget.taskService.toggleSubtaskComplete(widget.task, value);
+                                    } else {
+                                      const completeTimeFormat = "${DateService.stringFmt} ${DateService.dbTimeFormat}";
+                                      // TAGS HERE ARE NAME, NOT ID
+                                      await widget.taskService.updateTaskByKey({
+                                        "completed": value,
+                                        "completedTime": DateFormat(completeTimeFormat).format(DateTime.now())
+                                      }, widget.task);
+                                    }
                                     if (value && widget.task.goalId != null && widget.task.id != null) {
                                       _backfillGoalGeneration(widget.task);
                                     }
@@ -175,6 +181,24 @@ class TaskItemState extends State<TaskItem> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
+                                    if (widget.task.isSubtask && widget.task.parentTitle != null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(bottom: 1),
+                                        child: Row(
+                                          children: [
+                                            Icon(FontAwesomeIcons.arrowTurnUp,
+                                                size: 9, color: ink.withAlpha(150)),
+                                            const SizedBox(width: 4),
+                                            Flexible(
+                                              child: Text(widget.task.parentTitle!,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: theme.textTheme.labelSmall?.copyWith(
+                                                      fontSize: 10, color: ink.withAlpha(180))),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                                     if (widget.task.goalId != null)
                                       Padding(
                                         padding: const EdgeInsets.only(bottom: 1),
@@ -312,6 +336,34 @@ class TaskItemState extends State<TaskItem> {
     }
   }
 
+  Future<void> _showAddSubtaskDialog(BuildContext context) async {
+    final controller = TextEditingController();
+    final messenger = ScaffoldMessenger.of(context);
+    final title = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add subtask'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(labelText: 'Subtask'),
+          onSubmitted: (v) => Navigator.pop(ctx, v),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Add')),
+        ],
+      ),
+    );
+    if (title == null || title.trim().isEmpty) return;
+    try {
+      await widget.taskService.addSubtask(widget.task, title.trim());
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Could not add subtask: $e')));
+    }
+  }
+
   Widget actionButtons(BuildContext context, bool isBacklog) {
     return PopupMenuButton(
         onSelected: (value) async {
@@ -359,9 +411,24 @@ class TaskItemState extends State<TaskItem> {
             }
           } else if (value == "SEND_TO_CALENDAR") {
             _sendToCalendar();
+          } else if (value == "ADD_SUBTASK") {
+            _showAddSubtaskDialog(context);
           }
         },
         itemBuilder: (context) => [
+              // Subtasks: only tasks that aren't already a subtask, recurring, or
+              // multi-day can take subtasks (one level; guarded in the service too).
+              if (!widget.task.isSubtask &&
+                  widget.task.recurringTemplateId == null &&
+                  !widget.task.isMultiDay)
+                const PopupMenuItem(
+                    value: "ADD_SUBTASK",
+                    child: Row(
+                      children: [
+                        Icon(FontAwesomeIcons.listUl),
+                        Padding(padding: EdgeInsets.only(left: 8), child: Text('Add subtask'))
+                      ],
+                    )),
               if (!isBacklog && !widget.task.completed)
                 const PopupMenuItem(
                     value: "PUSH",
