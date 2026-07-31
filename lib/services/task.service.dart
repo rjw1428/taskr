@@ -395,62 +395,38 @@ class TaskService {
 
     List<Map<String, dynamic>> tasks = await getTasksInOrder(user.uid, task.dueDate!);
 
-    // If no start time, make the last not-completed task
-    if (task.startTime == null) {
-      var completed = tasks.where((t) => t['completed']).map((t) => t['id']).toList();
-      var notCompleted = tasks.where((t) => !t['completed']).map((t) => t['id']).toList();
-      notCompleted.add(id);
-      var newOrder = notCompleted + completed;
-      await _db.collection('todos').doc(user.uid).collection("tasks").doc(date).set({"taskOrder": newOrder});
-      completer.complete(id);
-      await _syncCountdownIndex(user.uid, task.copyWith(id: id));
-      return completer.future;
-    }
+    // Find the slot for the new task, preserving the existing order of everything
+    // else. Two rules drive the search:
+    //   1. New tasks always sit ahead of completed ones, so stop at the first
+    //      completed task.
+    //   2. A timed task (start or end time) slots chronologically among the other
+    //      timed tasks, so stop at the first incomplete timed task scheduled later
+    //      than it. Untimed tasks don't stop the scan — the new timed task flows
+    //      past them into its time slot.
+    // An untimed new task has no time key, so it only stops at completed tasks —
+    // landing at the end of the incomplete run, right before the completed ones.
+    final order = tasks.map((t) => t['id'] as String).toList();
+    final newTime = task.startTime ?? task.endTime;
 
-    // If there is a start time, iterate through to find either the first completed
-    // or the first with the time > the added task, while preserving the order of tasks
-    // without a start time
-    var lowerItems = [];
-    var index = 0;
+    var insertAt = order.length;
     for (int i = 0; i < tasks.length; i++) {
-      var t = tasks[i];
-      index = i;
-
-      if (t['completed']) {
-        lowerItems.add(id);
+      final t = tasks[i];
+      if (t['completed'] == true) {
+        insertAt = i;
         break;
       }
-
-      if (t['startTime'] == null) {
-        lowerItems.add(id);
-        break;
+      if (newTime != null) {
+        final tTime = (t['startTime'] ?? t['endTime']) as String?;
+        if (tTime != null &&
+            DateService().isTimeLessThan(DateService().getTime(newTime), DateService().getTime(tTime))) {
+          insertAt = i;
+          break;
+        }
       }
-
-      // if (t.startTime == null) {
-      //   lowerItems.add(t.id);
-      //   continue;
-      // }
-
-      if (DateService()
-          .isTimeLessThan(DateService().getTime(task.startTime!), DateService().getTime(t['startTime']!))) {
-        lowerItems.add(id);
-        break;
-      }
-      lowerItems.add(t['id']);
     }
-    var update = lowerItems;
-    if (tasks.isEmpty) {
-      update = [id];
-    } else if (index == tasks.length - 1) {
-      if (!update.contains(id)) {
-        update = update + [id];
-      } else {
-        update = update + tasks.sublist(index).map((t) => t['id']!).toList();
-      }
-    } else if (index < tasks.length) {
-      update = update + tasks.sublist(index).map((t) => t['id']!).toList();
-    }
-    await _db.collection('todos').doc(user.uid).collection("tasks").doc(date).set({"taskOrder": update});
+
+    final newOrder = [...order.sublist(0, insertAt), id, ...order.sublist(insertAt)];
+    await _db.collection('todos').doc(user.uid).collection("tasks").doc(date).set({"taskOrder": newOrder});
 
     completer.complete(id);
     await _syncCountdownIndex(user.uid, task.copyWith(id: id));
