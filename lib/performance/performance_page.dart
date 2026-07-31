@@ -7,6 +7,8 @@ import 'package:taskr/performance/performance_average_header.dart';
 import 'package:provider/provider.dart';
 import 'package:taskr/services/accomplishment.provider.dart';
 import 'package:taskr/services/models.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 import 'package:taskr/accomplishments/accomplishment_detail_page.dart';
 import 'package:taskr/accomplishments/accomplishment_color.dart';
 import 'package:taskr/services/tag.provider.dart';
@@ -194,8 +196,93 @@ class CurrentScoreState extends State<CurrentScore> {
             child: Text('Latest accomplishments', style: theme.textTheme.titleMedium),
           ),
           const _AccomplishmentsSummary(),
+          const SizedBox(height: Insets.lg),
+          Padding(
+            padding: const EdgeInsets.only(left: Insets.xs, bottom: Insets.sm),
+            child: Text('Records', style: theme.textTheme.titleMedium),
+          ),
+          _RecordsCard(userId: widget.userId),
         ],
       ),
+    );
+  }
+}
+
+/// All-time records shown at the bottom of the Performance tab.
+class _RecordsCard extends StatelessWidget {
+  final String userId;
+  const _RecordsCard({required this.userId});
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: _highestScore(context)),
+          const SizedBox(width: Insets.lg),
+          Expanded(child: _longestStreak(context)),
+        ],
+      ),
+    );
+  }
+
+  Widget _stat(BuildContext context, String label, String value, String sub) {
+    final theme = Theme.of(context);
+    final t = theme.appTokens;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label.toUpperCase(),
+            style: theme.textTheme.labelSmall?.copyWith(color: t.textFaint, letterSpacing: 1.2)),
+        const SizedBox(height: 4),
+        Text(value,
+            style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w800, fontFeatures: const [FontFeature.tabularFigures()])),
+        const SizedBox(height: 2),
+        Text(sub, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: t.textMuted)),
+      ],
+    );
+  }
+
+  Widget _highestScore(BuildContext context) {
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: PerformanceService().streamPerformanceForMonth(
+        userId,
+        DateTime.now().subtract(const Duration(days: 364)),
+        DateTime.now(),
+      ),
+      builder: (context, snap) {
+        int best = 0;
+        DateTime? bestDate;
+        for (final d in snap.data ?? const <Map<String, dynamic>>[]) {
+          final completed = d['completed'] as Map<String, dynamic>?;
+          final v = (completed?['ALL'] as int?) ?? 0;
+          if (v > best) {
+            best = v;
+            bestDate = (d['date'] as Timestamp?)?.toDate();
+          }
+        }
+        return _stat(context, 'Best day', '$best pts',
+            bestDate != null ? DateFormat('MMM d, yyyy').format(bestDate) : 'Complete tasks to set a record');
+      },
+    );
+  }
+
+  Widget _longestStreak(BuildContext context) {
+    return StreamBuilder<List<Habit>>(
+      stream: HabitService().streamHabits(),
+      builder: (context, snap) {
+        Habit? best;
+        for (final h in snap.data ?? const <Habit>[]) {
+          if (best == null || h.longestStreak > best.longestStreak) best = h;
+        }
+        if (best == null || best.longestStreak == 0) {
+          return _stat(context, 'Longest streak', '—', 'Build a habit streak');
+        }
+        final sub = best.lastCompletedDate != null ? '${best.title} · ${best.lastCompletedDate}' : best.title;
+        return _stat(context, 'Longest streak', '${best.longestStreak} days', sub);
+      },
     );
   }
 }

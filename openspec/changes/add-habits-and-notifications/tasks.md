@@ -42,9 +42,9 @@
 
 ## 6. Performance Records Card
 
-- [ ] 6.1 Compute all-time highest daily score (+ date) from performance history (scan, or a maintained `stats` doc)
-- [ ] 6.2 Compute longest streak (+ habit name + last-completed date) from streamed habits
-- [ ] 6.3 Render a "Records" `AppCard` at the bottom of `performance_page.dart` (highest score, longest streak, room for a couple more basic stats); graceful empty values
+- [x] 6.1 Compute all-time highest daily score (+ date) from performance history (scan, or a maintained `stats` doc)
+- [x] 6.2 Compute longest streak (+ habit name + last-completed date) from streamed habits
+- [x] 6.3 Render a "Records" `AppCard` at the bottom of `performance_page.dart` (highest score, longest streak, room for a couple more basic stats); graceful empty values
 
 ## 7. Verification
 
