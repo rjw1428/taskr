@@ -129,21 +129,30 @@ class TaskService {
   /// collection-group index and the matching security rule.
   Stream<List<Task>> streamSubtasks(String userId, List<Tag> tags) {
     final tagMap = tags.fold({}, (acc, cur) => {...acc, cur.id: cur.toJson()});
-    return _db
-        .collectionGroup('items')
-        .where('userId', isEqualTo: userId)
-        .where('parentId', isNotEqualTo: null)
-        .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) {
-              final data = {...doc.data(), 'id': doc.id};
-              final rawTags = (data['tags'] as List?) ?? [];
-              data['tags'] = rawTags
-                  .map((tag) => tag is String ? tagMap[tag] : tagMap[tag['id']])
-                  .where((t) => t != null)
-                  .toList();
-              return Task.fromJson(data);
-            }).toList())
-        .handleError((error) => debugPrint("SUBTASKS: $error"));
+    // Rx.retryWhen re-subscribes after an error instead of leaving the stream
+    // dead. This is what makes the backlog self-heal while the collection-group
+    // index is still building (or after a transient network error) — without it
+    // the first error stranded the UI until a manual screen refresh.
+    return Rx.retryWhen<List<Task>>(
+      () => _db
+          .collectionGroup('items')
+          .where('userId', isEqualTo: userId)
+          .where('parentId', isNotEqualTo: null)
+          .snapshots()
+          .map((snapshot) => snapshot.docs.map((doc) {
+                final data = {...doc.data(), 'id': doc.id};
+                final rawTags = (data['tags'] as List?) ?? [];
+                data['tags'] = rawTags
+                    .map((tag) => tag is String ? tagMap[tag] : tagMap[tag['id']])
+                    .where((t) => t != null)
+                    .toList();
+                return Task.fromJson(data);
+              }).toList()),
+      (error, stackTrace) {
+        debugPrint("SUBTASKS retry (will re-subscribe): $error");
+        return Stream<void>.fromFuture(Future<void>.delayed(const Duration(seconds: 3)));
+      },
+    );
   }
 
   // ─── Subtasks ──────────────────────────────────────────────────────────
