@@ -401,8 +401,11 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
     if (_dueDate != null) {
       initialDueDate = DateService().getDate(widget.task!.dueDate!);
     } else if (widget.task == null) {
+      // New task: on the backlog default to no due date; on the to-do list
+      // default to the day currently in view. The date picker still opens at a
+      // sensible day either way.
       initialDueDate = DateService().getSelectedDate();
-      if (initialDueDate != null) {
+      if (!widget.isBacklog) {
         _dueDate = DateService().getString(initialDueDate!);
       }
     } else {
