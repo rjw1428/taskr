@@ -84,6 +84,7 @@ class CurrentScoreState extends State<CurrentScore> {
       t.of(Effort.low).accent,
       t.textFaint,
     ];
+    final chartSeries = computeChartSeries(chartData, isShowingAll, seriesColors);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(Insets.lg, Insets.md, Insets.lg, Insets.xxl),
@@ -159,12 +160,25 @@ class CurrentScoreState extends State<CurrentScore> {
                           top: const BorderSide(color: Colors.transparent),
                         ),
                       ),
-                      lineBarsData: lineChartBarData1(chartData, isShowingAll, seriesColors),
+                      lineBarsData: seriesToBars(chartSeries, isShowingAll),
                       maxY: maxYAxis.toDouble(),
                       minY: 0,
                     ),
                   ),
                 ),
+                // Breakdown legend: identify which line is which tag.
+                if (!isShowingAll)
+                  Padding(
+                    padding: const EdgeInsets.only(top: Insets.md),
+                    child: Wrap(
+                      spacing: Insets.lg,
+                      runSpacing: Insets.sm,
+                      children: chartSeries
+                          .where((s) => s.shown)
+                          .map((s) => _LegendDot(color: s.color, label: s.key))
+                          .toList(),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -193,16 +207,24 @@ Widget leftTitleWidgets(double value, TitleMeta meta, Color color) {
   return Text(value.toInt().toString(), style: style, textAlign: TextAlign.center);
 }
 
-List<LineChartBarData> lineChartBarData1(
-    List<Map<String, dynamic>> chartData, bool showAll, List<Color> seriesColors) {
-  List<LineChartBarData> lines2 = [];
+class ChartSeries {
+  final String key;
+  final Color color;
+  final bool shown;
+  final List<FlSpot> spots;
+  const ChartSeries(this.key, this.color, this.shown, this.spots);
+}
 
-  Set uniqueKeys = {};
+/// Build the per-series data (key + color + spots). In "Total" mode only the
+/// ALL series is shown; in "Breakdown" mode each tag/effort series is shown.
+/// The `key` is surfaced so the UI can render a matching legend.
+List<ChartSeries> computeChartSeries(
+    List<Map<String, dynamic>> chartData, bool showAll, List<Color> seriesColors) {
+  final Set uniqueKeys = {};
   for (int i = 0; i < chartData.length; i++) {
     uniqueKeys.addAll(chartData[i].keys);
   }
-
-  Map<String, List<FlSpot>> lines = {};
+  final Map<String, List<FlSpot>> lines = {};
   for (int i = 0; i < chartData.length; i++) {
     for (var key in uniqueKeys) {
       int value = chartData[i][key] ?? 0;
@@ -214,24 +236,51 @@ List<LineChartBarData> lineChartBarData1(
       }
     }
   }
-
-  for (int j = 0; j < lines.keys.length; j++) {
-    final key = lines.keys.toList()[j];
+  final series = <ChartSeries>[];
+  final keys = lines.keys.toList();
+  for (int j = 0; j < keys.length; j++) {
+    final key = keys[j];
     final show = showAll ? key == 'ALL' : key != 'ALL';
-    final values = lines.values.toList()[j];
-    Color c = showAll ? seriesColors[0] : seriesColors[j % seriesColors.length];
-    lines2.add(LineChartBarData(
-        isCurved: true,
-        show: show,
-        preventCurveOverShooting: true,
-        color: c,
-        barWidth: 4,
-        isStrokeCapRound: true,
-        dotData: FlDotData(show: show),
-        belowBarData: BarAreaData(show: showAll),
-        spots: values));
+    final color = showAll ? seriesColors[0] : seriesColors[j % seriesColors.length];
+    series.add(ChartSeries(key, color, show, lines[key]!));
   }
-  return lines2;
+  return series;
+}
+
+List<LineChartBarData> seriesToBars(List<ChartSeries> series, bool showAll) {
+  return series
+      .map((s) => LineChartBarData(
+            isCurved: true,
+            show: s.shown,
+            preventCurveOverShooting: true,
+            color: s.color,
+            barWidth: 4,
+            isStrokeCapRound: true,
+            dotData: FlDotData(show: s.shown),
+            belowBarData: BarAreaData(show: showAll),
+            spots: s.spots,
+          ))
+      .toList();
+}
+
+/// A colored dot + label used in the breakdown legend.
+class _LegendDot extends StatelessWidget {
+  final Color color;
+  final String label;
+  const _LegendDot({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 6),
+        Text(label, style: theme.textTheme.labelMedium?.copyWith(color: theme.appTokens.textMuted)),
+      ],
+    );
+  }
 }
 
 class _AccomplishmentsSummary extends StatelessWidget {
