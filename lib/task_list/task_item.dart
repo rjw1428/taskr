@@ -292,7 +292,8 @@ class TaskItemState extends State<TaskItem> {
                             ReorderableDragStartListener(
                               index: widget.index,
                               child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                // Wider hit area so the drag handle is easy to grab.
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                 child: Icon(FontAwesomeIcons.gripLines, size: 16, color: ink.withAlpha(120)),
                               ),
                             ),

@@ -108,7 +108,7 @@ class _SubtaskGroupCardState extends State<SubtaskGroupCard> {
                           ReorderableDragStartListener(
                             index: widget.index,
                             child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                               child: Icon(FontAwesomeIcons.gripLines, size: 16, color: t.textFaint),
                             ),
                           ),
