@@ -413,7 +413,7 @@ class _PushedChartCard extends StatelessWidget {
         children: [
           Text('Points pushed', style: theme.textTheme.titleMedium),
           const SizedBox(height: 2),
-          Text('Deferred to another day · last 7 days',
+          Text('$total ${total == 1 ? 'point' : 'points'} deferred · last 7 days',
               style: theme.textTheme.bodySmall?.copyWith(color: t.textFaint)),
           const SizedBox(height: Insets.md),
           if (total == 0)
