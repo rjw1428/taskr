@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
@@ -202,19 +203,21 @@ class HabitService {
   }
 
   Future<void> deleteHabit(Habit h) async {
-    await _deleteFutureIncomplete(h.id!);
+    // Remove the template first so the habit clears from the UI immediately,
+    // then clean up its future instances in the background (best-effort).
     await habitCollection(_uid).doc(h.id).delete();
+    unawaited(_deleteFutureIncomplete(h.id!)
+        .catchError((e) => debugPrint('Habit instance cleanup failed: $e')));
   }
 
   // Delete a habit's future incomplete instances (preserve completed history).
+  // Deletions run in parallel so cleanup of a long horizon isn't slow.
   Future<void> _deleteFutureIncomplete(String habitId) async {
     final todayStr = _dates.getString(DateTime.now());
     final instances = await _habitInstances(habitId);
-    for (final t in instances) {
-      if (!t.completed && t.dueDate != null && t.dueDate!.compareTo(todayStr) >= 0) {
-        await _taskService.deleteTask(t);
-      }
-    }
+    await Future.wait(instances
+        .where((t) => !t.completed && t.dueDate != null && t.dueDate!.compareTo(todayStr) >= 0)
+        .map((t) => _taskService.deleteTask(t)));
   }
 
   // These collection-group reads need the (userId, habitId) index. If it isn't
