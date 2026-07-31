@@ -3,6 +3,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:taskr/goals/goal_form.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
+import 'package:taskr/shared/shared.dart';
 
 class GoalDetailPage extends StatefulWidget {
   final String goalId;
@@ -98,7 +99,7 @@ class _GoalDetailPageState extends State<GoalDetailPage> {
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: Text('Delete', style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
           ),
         ],
       ),
@@ -121,6 +122,8 @@ class _GoalDetailPageState extends State<GoalDetailPage> {
       );
     }
 
+    final theme = Theme.of(context);
+    final t = theme.appTokens;
     final goal = _goal!;
     final isCompleted = goal.status == GoalStatus.completed;
     final isDeleted = goal.status == GoalStatus.deleted;
@@ -161,7 +164,7 @@ class _GoalDetailPageState extends State<GoalDetailPage> {
               },
             ),
             IconButton(
-              icon: const Icon(FontAwesomeIcons.trashCan, color: Colors.red),
+              icon: Icon(FontAwesomeIcons.trashCan, color: theme.colorScheme.error),
               onPressed: _deleteGoal,
             ),
           ],
@@ -175,20 +178,21 @@ class _GoalDetailPageState extends State<GoalDetailPage> {
             if (isCompleted)
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(Insets.md),
+                margin: const EdgeInsets.only(bottom: Insets.lg),
                 decoration: BoxDecoration(
-                  color: Colors.green.withAlpha(40),
-                  borderRadius: BorderRadius.circular(8),
+                  color: t.of(Effort.low).fill,
+                  borderRadius: BorderRadius.circular(Corners.sm),
+                  border: Border.all(color: t.of(Effort.low).border),
                 ),
                 child: Column(
                   children: [
-                    const Icon(FontAwesomeIcons.trophy, color: Colors.green, size: 32),
-                    const SizedBox(height: 8),
-                    Text('Goal Complete!', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.green)),
-                    const SizedBox(height: 4),
+                    Icon(FontAwesomeIcons.trophy, color: t.of(Effort.low).accent, size: 32),
+                    const SizedBox(height: Insets.sm),
+                    Text('Goal Complete!', style: theme.textTheme.titleMedium?.copyWith(color: t.of(Effort.low).ink)),
+                    const SizedBox(height: Insets.xs),
                     Text('$completedTasks of $totalTasks tasks completed over $weeksActive weeks ($completionRate%)',
-                        style: const TextStyle(color: Colors.grey)),
+                        style: theme.textTheme.bodySmall?.copyWith(color: t.of(Effort.low).ink)),
                   ],
                 ),
               ),
@@ -196,20 +200,21 @@ class _GoalDetailPageState extends State<GoalDetailPage> {
             if (isPaused)
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(Insets.md),
+                margin: const EdgeInsets.only(bottom: Insets.lg),
                 decoration: BoxDecoration(
-                  color: Colors.blueGrey.withAlpha(40),
-                  borderRadius: BorderRadius.circular(8),
+                  color: t.of(Effort.info).fill,
+                  borderRadius: BorderRadius.circular(Corners.sm),
+                  border: Border.all(color: t.of(Effort.info).border),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(FontAwesomeIcons.pause, color: Colors.blueGrey, size: 20),
-                    SizedBox(width: 12),
+                    Icon(FontAwesomeIcons.pause, color: t.of(Effort.info).accent, size: 20),
+                    const SizedBox(width: Insets.md),
                     Expanded(
                       child: Text(
                         'Goal paused — no new tasks will be generated until you resume.',
-                        style: TextStyle(color: Colors.blueGrey),
+                        style: theme.textTheme.bodyMedium?.copyWith(color: t.of(Effort.info).ink),
                       ),
                     ),
                   ],
@@ -217,61 +222,53 @@ class _GoalDetailPageState extends State<GoalDetailPage> {
               ),
 
             if (goal.description != null && goal.description!.isNotEmpty) ...[
-              Text(goal.description!, style: const TextStyle(fontSize: 16, color: Colors.white70)),
-              const SizedBox(height: 16),
+              Text(goal.description!, style: theme.textTheme.bodyLarge?.copyWith(color: t.textMuted)),
+              const SizedBox(height: Insets.lg),
             ],
 
-            Card(
-              color: Colors.black87,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _infoRow('Timeframe', goal.timeframeLabel),
-                    _infoRow('Frequency', goal.frequencyLabel),
-                    _infoRow('Started', goal.startDate),
-                    _infoRow('Ends', goal.endDate),
-                    const SizedBox(height: 8),
-                    if (!isCompleted && !isDeleted) ...[
-                      Text('Time Progress', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey)),
-                      const SizedBox(height: 4),
-                      LinearProgressIndicator(
-                        value: progress,
-                        backgroundColor: Colors.grey.shade800,
-                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.orange),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            Card(
-              color: Colors.black87,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Progress', style: Theme.of(context).textTheme.titleSmall),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _statWidget('Weeks', '$weeksActive'),
-                        _statWidget('Tasks Done', '$completedTasks/$totalTasks'),
-                        _statWidget('Rate', '$completionRate%'),
-                      ],
+            AppCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _infoRow('Timeframe', goal.timeframeLabel),
+                  _infoRow('Frequency', goal.frequencyLabel),
+                  _infoRow('Started', goal.startDate),
+                  _infoRow('Ends', goal.endDate),
+                  const SizedBox(height: Insets.sm),
+                  if (!isCompleted && !isDeleted) ...[
+                    Text('Time Progress', style: theme.textTheme.bodySmall?.copyWith(color: t.textMuted)),
+                    const SizedBox(height: Insets.xs),
+                    LinearProgressIndicator(
+                      value: progress,
+                      backgroundColor: t.hairline,
+                      valueColor: AlwaysStoppedAnimation<Color>(t.goal),
                     ),
                   ],
-                ),
+                ],
+              ),
+            ),
+            const SizedBox(height: Insets.lg),
+
+            AppCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Progress', style: theme.textTheme.titleSmall),
+                  const SizedBox(height: Insets.md),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _statWidget('Weeks', '$weeksActive'),
+                      _statWidget('Tasks Done', '$completedTasks/$totalTasks'),
+                      _statWidget('Rate', '$completionRate%'),
+                    ],
+                  ),
+                ],
               ),
             ),
 
             if (!isCompleted && !isDeleted && !isPaused) ...[
-              const SizedBox(height: 24),
+              const SizedBox(height: Insets.xl),
               Center(
                 child: ElevatedButton.icon(
                   onPressed: _regenerating ? null : _regenerate,
@@ -279,7 +276,10 @@ class _GoalDetailPageState extends State<GoalDetailPage> {
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                       : const Icon(FontAwesomeIcons.arrowsRotate),
                   label: const Text('Regenerate This Week\'s Tasks'),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primary,
+                    foregroundColor: theme.colorScheme.onPrimary,
+                  ),
                 ),
               ),
             ],
@@ -290,23 +290,28 @@ class _GoalDetailPageState extends State<GoalDetailPage> {
   }
 
   Widget _infoRow(String label, String value) {
+    final theme = Theme.of(context);
+    final t = theme.appTokens;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: Insets.xs),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: Colors.grey)),
-          Text(value, style: const TextStyle(color: Colors.white)),
+          Text(label, style: theme.textTheme.bodyMedium?.copyWith(color: t.textMuted)),
+          Text(value, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface)),
         ],
       ),
     );
   }
 
   Widget _statWidget(String label, String value) {
+    final theme = Theme.of(context);
+    final t = theme.appTokens;
     return Column(
       children: [
-        Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.orange)),
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        Text(value,
+            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: t.goal)),
+        Text(label, style: theme.textTheme.labelSmall?.copyWith(color: t.textMuted)),
       ],
     );
   }

@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:taskr/services/models.dart';
 import 'package:provider/provider.dart';
 import 'package:taskr/services/accomplishment.provider.dart';
-import 'package:taskr/shared/loading.dart';
-import 'package:taskr/shared/error.dart';
+import 'package:taskr/shared/shared.dart';
 
 class AccomplishmentDetailPage extends StatelessWidget {
   final Accomplishment accomplishment;
@@ -53,40 +52,43 @@ class _AccomplishmentDetailView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final t = theme.appTokens;
     return Scaffold(
       appBar: AppBar(
         title: Text(accomplishment.title),
         actions: [],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(Insets.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               accomplishment.title,
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: Insets.md),
             Text(
               'Date: ${accomplishment.date}',
-              style: const TextStyle(fontSize: 16),
+              style: theme.textTheme.bodyMedium?.copyWith(color: t.textMuted),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: Insets.md),
             Text(
               'Difficulty: ${accomplishment.difficulty.toString().split('.').last}',
-              style: const TextStyle(fontSize: 16),
+              style: theme.textTheme.bodyMedium?.copyWith(color: t.textMuted),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: Insets.md),
             Text(
               'Difficulty Score: ${accomplishment.difficultyScore}/10',
-              style: const TextStyle(fontSize: 16),
+              style: theme.textTheme.bodyMedium?.copyWith(color: t.textMuted),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: Insets.xl),
             Text(
               accomplishment.description ?? 'No description provided.',
-              style: const TextStyle(fontSize: 18),
+              style: theme.textTheme.bodyLarge,
             ),
+            const SizedBox(height: Insets.xl),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -102,8 +104,12 @@ class _AccomplishmentDetailView extends StatelessWidget {
                     );
                   },
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: Insets.md),
                 FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: theme.colorScheme.error,
+                    foregroundColor: theme.colorScheme.onError,
+                  ),
                   label: const Text('Delete'),
                   icon: const Icon(Icons.delete),
                   onPressed: () async {
@@ -121,7 +127,7 @@ class _AccomplishmentDetailView extends StatelessWidget {
                           ),
                           TextButton(
                             onPressed: () => Navigator.pop(context, true),
-                            child: const Text('Delete'),
+                            child: Text('Delete', style: TextStyle(color: theme.colorScheme.error)),
                           ),
                         ],
                       ),

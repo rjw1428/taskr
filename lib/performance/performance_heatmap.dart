@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:taskr/services/services.dart';
-import 'package:taskr/shared/error.dart';
+import 'package:taskr/shared/shared.dart';
 
 const int _weekCount = 13;
 const double _cellSize = 14.0;
@@ -51,29 +51,35 @@ class _PerformanceHeatmapState extends State<PerformanceHeatmap> {
           dailyScores[_dateKey(ts.toDate())] = score;
         }
 
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _MonthLabels(windowStart: windowStart, weekCount: _weekCount),
-              const SizedBox(height: 4),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _WeekdayLabels(),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: _Grid(
-                      windowStart: windowStart,
-                      today: _dateKey(today),
-                      dailyScores: dailyScores,
-                    ),
+        final theme = Theme.of(context);
+        final t = theme.appTokens;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Consistency', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 2),
+            Text('Daily points earned · last 13 weeks',
+                style: theme.textTheme.bodySmall?.copyWith(color: t.textFaint)),
+            const SizedBox(height: Insets.md),
+            _MonthLabels(windowStart: windowStart, weekCount: _weekCount),
+            const SizedBox(height: 4),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _WeekdayLabels(),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: _Grid(
+                    windowStart: windowStart,
+                    today: _dateKey(today),
+                    dailyScores: dailyScores,
                   ),
-                ],
-              ),
-            ],
-          ),
+                ),
+              ],
+            ),
+            const SizedBox(height: Insets.md),
+            const _HeatLegend(),
+          ],
         );
       },
     );
@@ -131,23 +137,60 @@ class _Cell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final t = theme.appTokens;
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: _colorForScore(score),
+        color: _colorForScore(theme, score),
         borderRadius: BorderRadius.circular(3.0),
-        border: score > 10 ? Border.all(color: Colors.yellow, width: 1.5) : null,
+        border: score > 10 ? Border.all(color: t.goal, width: 1.5) : null,
       ),
     );
   }
 
-  static Color _colorForScore(int score) {
-    if (score == 0) return Colors.grey[200]!;
-    if (score < 2) return Colors.green[100]!;
-    if (score < 5) return Colors.green[300]!;
-    if (score < 8) return Colors.green[500]!;
-    return Colors.green[700]!;
+  static Color _colorForScore(ThemeData theme, int score) {
+    final t = theme.appTokens;
+    if (score == 0) return t.surfaceRaised;
+    final level = score < 2
+        ? 0.25
+        : score < 5
+            ? 0.5
+            : score < 8
+                ? 0.75
+                : 1.0;
+    return Color.lerp(theme.colorScheme.surface, theme.colorScheme.primary, level)!;
+  }
+}
+
+class _HeatLegend extends StatelessWidget {
+  const _HeatLegend();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final t = theme.appTokens;
+    const levels = [0.0, 0.25, 0.5, 0.75, 1.0];
+    Color colorFor(double l) =>
+        l == 0 ? t.surfaceRaised : Color.lerp(theme.colorScheme.surface, theme.colorScheme.primary, l)!;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        Text('Less', style: theme.textTheme.labelSmall?.copyWith(color: t.textFaint)),
+        const SizedBox(width: 6),
+        ...levels.map((l) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(color: colorFor(l), borderRadius: BorderRadius.circular(3)),
+              ),
+            )),
+        const SizedBox(width: 6),
+        Text('More', style: theme.textTheme.labelSmall?.copyWith(color: t.textFaint)),
+      ],
+    );
   }
 }
 
@@ -156,6 +199,7 @@ class _WeekdayLabels extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = Theme.of(context).appTokens;
     return Column(
       children: List.generate(7, (i) {
         return Padding(
@@ -165,7 +209,7 @@ class _WeekdayLabels extends StatelessWidget {
             height: _cellSize,
             child: Text(
               _labels[i],
-              style: const TextStyle(fontSize: 9, color: Colors.grey),
+              style: TextStyle(fontSize: 9, color: t.textFaint),
               textAlign: TextAlign.center,
             ),
           ),
@@ -188,6 +232,7 @@ class _MonthLabels extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = Theme.of(context).appTokens;
     final labels = <String>[];
     int? prevMonth;
     for (int i = 0; i < weekCount; i++) {
@@ -207,7 +252,7 @@ class _MonthLabels extends StatelessWidget {
             .map((label) => Expanded(
                   child: Text(
                     label,
-                    style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.w500),
+                    style: TextStyle(fontSize: 10, color: t.textFaint, fontWeight: FontWeight.w500),
                   ),
                 ))
             .toList(),

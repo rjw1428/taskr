@@ -44,6 +44,8 @@ class CurrentScoreState extends State<CurrentScore> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final t = theme.appTokens;
     final performance = Provider.of<List<Map<String, dynamic>>?>(context);
 
     if (performance == null) {
@@ -51,137 +53,148 @@ class CurrentScoreState extends State<CurrentScore> {
     }
 
     if (performance.isEmpty) {
-      return const Center(
-        child: Text('Complete some tasks to get your performance info'),
+      return const EmptyState(
+        icon: Icons.query_stats,
+        title: 'No performance data yet',
+        message: 'Complete some tasks to start tracking your progress.',
       );
     }
 
     final chartData = performance.map((days) => days['completed'] as Map<String, dynamic>).toList();
 
-    final maxYAxis =
-        (chartData.map((day) => day['ALL'] as int).reduce((value, element) => value > element ? value : element) *
-                (isShowingAll ? 1.2 : 0.6))
-            .toInt();
+    // Y-axis max reflects the series actually shown: the total ('ALL') in Total
+    // mode, or the largest per-effort value in Breakdown mode. Previously the max
+    // was the total scaled by 0.6, so tall single-effort days ran off the top.
+    int displayedMax = 0;
+    for (final day in chartData) {
+      day.forEach((key, value) {
+        if (value is! int) return;
+        final included = isShowingAll ? key == 'ALL' : key != 'ALL';
+        if (included && value > displayedMax) displayedMax = value;
+      });
+    }
+    final maxYAxis = displayedMax <= 0 ? 4 : (displayedMax * 1.2).ceil();
 
-    debugPrint(maxYAxis.toString());
+    // Chart series colors derived from the theme (accent teal for the single
+    // "ALL" line, priority accents for the categorical breakdown).
+    final seriesColors = <Color>[
+      theme.colorScheme.primary,
+      t.of(Effort.high).accent,
+      t.of(Effort.medium).accent,
+      t.of(Effort.low).accent,
+      t.textFaint,
+    ];
+
     return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(Insets.lg, Insets.md, Insets.lg, Insets.xxl),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          PerformanceAverageHeader(userId: widget.userId),
-          const SizedBox(height: 16),
-          PerformanceHeatmap(userId: widget.userId),
-          const SizedBox(height: 16),
-          const Text(
-            'Latest Accomplishments',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1,
+          AppCard(child: PerformanceAverageHeader(userId: widget.userId)),
+          const SizedBox(height: Insets.lg),
+          AppCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Daily score', style: theme.textTheme.titleMedium),
+                    SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(value: true, label: Text('Total')),
+                        ButtonSegment(value: false, label: Text('Breakdown')),
+                      ],
+                      selected: {isShowingAll},
+                      showSelectedIcon: false,
+                      onSelectionChanged: (s) => setState(() => isShowingAll = s.first),
+                      style: const ButtonStyle(
+                        visualDensity: VisualDensity.compact,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: Insets.lg),
+                SizedBox(
+                  height: 180,
+                  child: LineChart(
+                    LineChartData(
+                      lineTouchData: LineTouchData(
+                        handleBuiltInTouches: true,
+                        touchTooltipData: LineTouchTooltipData(
+                          fitInsideHorizontally: true,
+                          fitInsideVertically: true,
+                          getTooltipColor: (touchedSpot) => t.surfaceRaised.withValues(alpha: 0.95),
+                          getTooltipItems: (data) => data.map((spot) {
+                            return LineTooltipItem(spot.y.toString(), TextStyle(color: theme.colorScheme.onSurface));
+                          }).toList(),
+                        ),
+                      ),
+                      gridData: const FlGridData(show: false),
+                      titlesData: FlTitlesData(
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 32,
+                              interval: 1,
+                              getTitlesWidget: (double value, TitleMeta meta) =>
+                                  bottomTitleWidgets(value, meta, chartData.length, t.textMuted)),
+                        ),
+                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                              getTitlesWidget: (v, m) => leftTitleWidgets(v, m, t.textMuted),
+                              showTitles: true,
+                              interval: 2),
+                        ),
+                      ),
+                      borderData: FlBorderData(
+                        show: true,
+                        border: Border(
+                          bottom: BorderSide(color: t.hairline, width: 2),
+                          left: const BorderSide(color: Colors.transparent),
+                          right: const BorderSide(color: Colors.transparent),
+                          top: const BorderSide(color: Colors.transparent),
+                        ),
+                      ),
+                      lineBarsData: lineChartBarData1(chartData, isShowingAll, seriesColors),
+                      maxY: maxYAxis.toDouble(),
+                      minY: 0,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: Insets.lg),
+          AppCard(child: PerformanceHeatmap(userId: widget.userId)),
+          const SizedBox(height: Insets.lg),
+          Padding(
+            padding: const EdgeInsets.only(left: Insets.xs, bottom: Insets.sm),
+            child: Text('Latest accomplishments', style: theme.textTheme.titleMedium),
           ),
           const _AccomplishmentsSummary(),
-          const SizedBox(height: 16),
-          Stack(
-            children: [
-              Center(
-                  child: SizedBox(
-                      width: MediaQuery.of(context).size.width * 0.8,
-                      height: 180,
-                      child: LineChart(
-                        LineChartData(
-                          lineTouchData: LineTouchData(
-                            handleBuiltInTouches: true,
-                            touchTooltipData: LineTouchTooltipData(
-                              fitInsideHorizontally: true,
-                              fitInsideVertically: true,
-                              getTooltipColor: (touchedSpot) => Colors.blueGrey.withValues(alpha: 0.8),
-                              getTooltipItems: (data) => data.map((spot) {
-                                return LineTooltipItem(spot.y.toString(), const TextStyle(color: Colors.white));
-                              }).toList(),
-                            ),
-                          ),
-                          gridData: const FlGridData(show: false),
-                          titlesData: FlTitlesData(
-                            bottomTitles: AxisTitles(
-                              sideTitles: SideTitles(
-                                  showTitles: true,
-                                  reservedSize: 32,
-                                  interval: 1,
-                                  getTitlesWidget: (double value, TitleMeta meta) =>
-                                      bottomTitleWidgets(value, meta, chartData.length)),
-                            ),
-                            rightTitles: const AxisTitles(
-                              sideTitles: SideTitles(showTitles: false),
-                            ),
-                            topTitles: const AxisTitles(
-                              sideTitles: SideTitles(showTitles: false),
-                            ),
-                            leftTitles: const AxisTitles(
-                              sideTitles: SideTitles(getTitlesWidget: leftTitleWidgets, showTitles: true, interval: 2),
-                            ),
-                          ),
-                          borderData: FlBorderData(
-                            show: true,
-                            border: const Border(
-                              bottom: BorderSide(color: Colors.red, width: 4),
-                              left: BorderSide(color: Colors.transparent),
-                              right: BorderSide(color: Colors.transparent),
-                              top: BorderSide(color: Colors.transparent),
-                            ),
-                          ),
-                          lineBarsData: lineChartBarData1(chartData, isShowingAll),
-                          maxY: maxYAxis.toDouble(),
-                          minY: 0,
-                        ),
-                      ))),
-              Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      IconButton(
-                        icon: Icon(
-                          Icons.refresh,
-                          color: Colors.white.withValues(alpha: isShowingAll ? 1.0 : 0.5),
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            isShowingAll = !isShowingAll;
-                          });
-                        },
-                      )
-                    ],
-                  )),
-            ],
-          ),
         ],
       ),
     );
   }
 }
 
-Widget bottomTitleWidgets(double value, TitleMeta meta, int dataLength) {
-  const style = TextStyle(
-    fontWeight: FontWeight.bold,
-    fontSize: 16,
-  );
-
+Widget bottomTitleWidgets(double value, TitleMeta meta, int dataLength, Color color) {
+  final style = TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: color);
   final day = DateService().dayAxisLabel(dataLength - 1 - value.toInt());
   return SideTitleWidget(axisSide: meta.axisSide, space: 10, child: Text(day, style: style));
 }
 
-Widget leftTitleWidgets(double value, TitleMeta meta) {
-  const style = TextStyle(
-    fontWeight: FontWeight.bold,
-    fontSize: 14,
-  );
-
+Widget leftTitleWidgets(double value, TitleMeta meta, Color color) {
+  final style = TextStyle(fontWeight: FontWeight.w600, fontSize: 11, color: color);
   return Text(value.toInt().toString(), style: style, textAlign: TextAlign.center);
 }
 
-List<LineChartBarData> lineChartBarData1(List<Map<String, dynamic>> chartData, bool showAll) {
+List<LineChartBarData> lineChartBarData1(
+    List<Map<String, dynamic>> chartData, bool showAll, List<Color> seriesColors) {
   List<LineChartBarData> lines2 = [];
 
   Set uniqueKeys = {};
@@ -206,7 +219,7 @@ List<LineChartBarData> lineChartBarData1(List<Map<String, dynamic>> chartData, b
     final key = lines.keys.toList()[j];
     final show = showAll ? key == 'ALL' : key != 'ALL';
     final values = lines.values.toList()[j];
-    Color c = showAll ? chartColors[0] : chartColors[j];
+    Color c = showAll ? seriesColors[0] : seriesColors[j % seriesColors.length];
     lines2.add(LineChartBarData(
         isCurved: true,
         show: show,
@@ -254,6 +267,7 @@ class _AccomplishmentsSummary extends StatelessWidget {
             child: ListView.builder(
               itemCount: latestAccomplishments.length,
               itemBuilder: (context, index) {
+                final t = Theme.of(context).appTokens;
                 var accomplishment = latestAccomplishments[index];
                 // Format the date to MM/dd
                 final DateTime date = DateTime.parse(accomplishment.date);
@@ -288,7 +302,7 @@ class _AccomplishmentsSummary extends StatelessWidget {
                           ),
                           Text(
                             formattedDate, // Display formatted date
-                            style: const TextStyle(fontSize: 14, color: Colors.grey),
+                            style: TextStyle(fontSize: 14, color: t.textMuted),
                           ),
                         ],
                       ),

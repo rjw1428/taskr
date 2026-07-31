@@ -1,9 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:taskr/services/services.dart';
+import 'package:taskr/shared/shared.dart';
 
 const _windows = [7, 30, 90, 365];
-const _labels = ['Last 7 days', 'Last month', 'Last 3 months', 'Last year'];
 
 class PerformanceAverageHeader extends StatefulWidget {
   final String userId;
@@ -20,6 +20,8 @@ class _PerformanceAverageHeaderState extends State<PerformanceAverageHeader> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final t = theme.appTokens;
     final today = _dateKey(DateTime.now());
     final streamStart = today.subtract(const Duration(days: 364));
 
@@ -41,51 +43,53 @@ class _PerformanceAverageHeaderState extends State<PerformanceAverageHeader> {
         }
 
         final windowDays = _windows[_windowIndex];
-        final label = _labels[_windowIndex];
         final average = _averageFor(windowDays, scoresByDay, today);
 
-        return InkWell(
-          onTap: () {
-            setState(() {
-              _windowIndex = (_windowIndex + 1) % _windows.length;
-            });
-          },
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('THIS PERIOD',
+                style: theme.textTheme.labelSmall?.copyWith(color: t.textFaint, letterSpacing: 1.4)),
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      average.toStringAsFixed(2),
-                      style: const TextStyle(
-                        fontSize: 36,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'avg points · $label',
-                          style: const TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
-                        const SizedBox(width: 4),
-                        const Icon(Icons.swap_horiz, size: 14, color: Colors.grey),
-                      ],
-                    ),
-                  ],
+                Text(
+                  average.toStringAsFixed(1),
+                  style: theme.textTheme.displaySmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text('avg points / day',
+                      style: theme.textTheme.bodySmall?.copyWith(color: t.textMuted)),
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: Insets.md),
+            SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<int>(
+                segments: const [
+                  ButtonSegment(value: 0, label: Text('7d')),
+                  ButtonSegment(value: 1, label: Text('30d')),
+                  ButtonSegment(value: 2, label: Text('90d')),
+                  ButtonSegment(value: 3, label: Text('1y')),
+                ],
+                selected: {_windowIndex},
+                showSelectedIcon: false,
+                onSelectionChanged: (s) => setState(() => _windowIndex = s.first),
+                style: const ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ),
+          ],
         );
       },
     );

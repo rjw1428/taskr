@@ -4,8 +4,8 @@ import 'package:provider/provider.dart';
 import 'package:taskr/login/login.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/tag.provider.dart';
-import 'package:taskr/shared/error.dart';
-import 'package:taskr/shared/loading.dart';
+import 'package:taskr/services/theme.provider.dart';
+import 'package:taskr/shared/shared.dart';
 import 'package:taskr/task_list/add_tag.dart';
 
 import '../services/services.dart';
@@ -47,6 +47,7 @@ class SettingsPageState extends State<SettingsForm> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     var tagProvider = Provider.of<TagProvider>(context);
     var tags = tagProvider.tags;
     return Scaffold(
@@ -55,38 +56,111 @@ class SettingsPageState extends State<SettingsForm> {
         ),
         body: ListView(
           scrollDirection: Axis.vertical,
+          padding: const EdgeInsets.symmetric(horizontal: Insets.lg, vertical: Insets.sm),
           children: [
-            const Text("Google Calendar", style: TextStyle(fontSize: 32)),
+            const SectionHeader('Appearance'),
+            const _ThemeModeRow(),
+            const SizedBox(height: Insets.sm),
+            const SectionHeader('Google Calendar'),
             _GoogleCalendarRow(userId: widget.userId),
-            const SizedBox(height: 16),
-            const Text("Tags", style: TextStyle(fontSize: 32)),
-            Container(
-              padding: const EdgeInsets.only(left: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: tags.map((Tag tag) {
-                  return Row(children: [
-                    Text(
-                      tag.label,
-                    ),
-                    IconButton(
-                        onPressed: () =>
-                            showDialog(context: context, builder: (BuildContext context) => AddTagScreen(tag: tag)),
-                        icon: const Icon(FontAwesomeIcons.penToSquare)),
-                    IconButton(
-                      onPressed: () => tagProvider.deleteTag(tag.id),
-                      icon: const Icon(FontAwesomeIcons.trashCan),
-                    )
-                  ]);
-                }).toList(),
+            const SizedBox(height: Insets.sm),
+            SectionHeader(
+              'Tags',
+              trailing: TextButton.icon(
+                onPressed: () => _editTag(),
+                icon: const Icon(FontAwesomeIcons.plus, size: 12),
+                label: const Text('Add'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
+                ),
               ),
-            )
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Insets.xs, vertical: Insets.xs),
+              child: tags.isEmpty
+                  ? Text(
+                      'No tags yet. Add one to label and group your tasks.',
+                      style: theme.textTheme.bodySmall,
+                    )
+                  : Wrap(
+                      spacing: Insets.sm,
+                      runSpacing: Insets.xs,
+                      children: tags
+                          .map((tag) => InputChip(
+                                avatar: Icon(FontAwesomeIcons.tag, size: 11, color: theme.colorScheme.primary),
+                                label: Text(tag.label),
+                                onPressed: () => _editTag(tag),
+                                onDeleted: () => _confirmDeleteTag(tag, tagProvider),
+                                deleteIcon: const Icon(FontAwesomeIcons.xmark, size: 12),
+                                deleteButtonTooltipMessage: 'Delete "${tag.label}"',
+                                tooltip: 'Edit "${tag.label}"',
+                                visualDensity: VisualDensity.compact,
+                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ))
+                          .toList(),
+                    ),
+            ),
+            const SizedBox(height: Insets.xl),
           ],
+        ));
+  }
+
+  void _editTag([Tag? tag]) {
+    showDialog(context: context, builder: (_) => AddTagScreen(tag: tag));
+  }
+
+  Future<void> _confirmDeleteTag(Tag tag, TagProvider provider) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete tag?'),
+        content: Text('Remove "${tag.label}"? It will no longer be available to tag tasks.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Delete', style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await provider.deleteTag(tag.id);
+      messenger.showSnackBar(SnackBar(content: Text('Deleted "${tag.label}"')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Could not delete tag: $e')));
+    }
+  }
+}
+
+class _ThemeModeRow extends StatelessWidget {
+  const _ThemeModeRow();
+
+  @override
+  Widget build(BuildContext context) {
+    final themeProvider = context.watch<ThemeProvider>();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Insets.xs, vertical: Insets.sm),
+      child: SizedBox(
+        width: double.infinity,
+        child: SegmentedButton<ThemeMode>(
+          segments: const [
+            ButtonSegment(
+                value: ThemeMode.system, label: Text('System'), icon: Icon(FontAwesomeIcons.mobileScreen, size: 14)),
+            ButtonSegment(
+                value: ThemeMode.light, label: Text('Light'), icon: Icon(FontAwesomeIcons.sun, size: 14)),
+            ButtonSegment(
+                value: ThemeMode.dark, label: Text('Dark'), icon: Icon(FontAwesomeIcons.moon, size: 14)),
+          ],
+          selected: {themeProvider.mode},
+          showSelectedIcon: false,
+          onSelectionChanged: (selection) => context.read<ThemeProvider>().setMode(selection.first),
         ),
-        floatingActionButton: FloatingActionButton(
-            child: const Icon(FontAwesomeIcons.plus, size: 20),
-            onPressed: () => showDialog(context: context, builder: (BuildContext context) => const AddTagScreen())));
+      ),
+    );
   }
 }
 
@@ -156,26 +230,33 @@ class _GoogleCalendarRowState extends State<_GoogleCalendarRow> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final t = theme.appTokens;
     return StreamBuilder<bool>(
       stream: CalendarService().watchConnected(widget.userId),
       builder: (context, snapshot) {
         final connected = snapshot.data ?? false;
         return Padding(
-          padding: const EdgeInsets.only(left: 16, top: 8, right: 16, bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: Insets.xs, vertical: Insets.sm),
           child: Row(
             children: [
               Expanded(
                 child: Text(
                   connected ? 'Connected' : 'Not connected',
-                  style: const TextStyle(fontSize: 16),
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: connected ? theme.colorScheme.primary : t.textMuted,
+                  ),
                 ),
               ),
               if (_busy)
-                const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: theme.colorScheme.primary))
               else if (connected)
-                TextButton(onPressed: _disconnect, child: const Text('Disconnect'))
+                SecondaryButton('Disconnect', onPressed: _disconnect)
               else
-                ElevatedButton(onPressed: _connect, child: const Text('Connect')),
+                PrimaryButton('Connect', onPressed: _connect, expand: false),
             ],
           ),
         );

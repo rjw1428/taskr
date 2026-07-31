@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
+import 'package:taskr/shared/shared.dart';
 
 class CopyTaskScreen extends StatelessWidget {
   final Task task;
@@ -8,22 +9,23 @@ class CopyTaskScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(Insets.xl),
         child: Material(
             color: Colors.transparent,
             child: Center(
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10.0),
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(Corners.md),
                 ),
                 child: Padding(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(Insets.xl),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text("Copy Task", style: TextStyle(fontSize: 40, color: Colors.black)),
+                        Text("Copy Task", style: theme.textTheme.headlineMedium),
                         SizedBox(
                           // width: MediaQuery.of(context).size.width * .5,
                           height: 500,
@@ -114,7 +116,7 @@ class TaskFormState extends State<TaskForm> {
             endTime: task.endTime,
             added: DateTime.now().millisecondsSinceEpoch,
             tags: task.tags,
-            subtasks: []);
+            );
         newTask.dueDate = DateService().getString(repeatedDates[i]);
         tasks.add(_taskService.addTask(newTask));
       }
@@ -169,11 +171,11 @@ class TaskFormState extends State<TaskForm> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Padding(
-                    padding: EdgeInsets.only(left: 8.0),
+                  Padding(
+                    padding: const EdgeInsets.only(left: Insets.sm),
                     child: Text(
                       'Repeat:',
-                      style: TextStyle(fontSize: 16),
+                      style: Theme.of(context).textTheme.titleSmall,
                     ),
                   ),
                   Row(
@@ -184,11 +186,11 @@ class TaskFormState extends State<TaskForm> {
                               children: [
                                 Text(
                                   DateService().getDayOfWeekByIndex(index),
-                                  style: const TextStyle(fontSize: 14),
+                                  style: Theme.of(context).textTheme.bodySmall,
                                 ),
                                 Text(
                                   DateService().getShortDay(repeatedDates[index]),
-                                  style: const TextStyle(fontSize: 14),
+                                  style: Theme.of(context).textTheme.bodySmall,
                                 ),
                                 Checkbox(
                                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,

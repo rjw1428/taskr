@@ -286,7 +286,11 @@ class Task {
   String? multiDayPosition;
   String? reminderTime;
   String? reminderTaskName;
-  List<String> subtasks;
+  String? parentId;
+  String? parentTitle;
+  String? userId;
+  int childCount;
+  int childCompletedCount;
   Effort priority;
   int pushCount;
   bool countdown;
@@ -296,6 +300,8 @@ class Task {
   bool get isMultiDayStart => multiDayPosition == 'start';
   bool get isMultiDayEnd => multiDayPosition == 'end';
   bool get isMultiDayMiddle => multiDayPosition == 'middle';
+  bool get isSubtask => parentId != null;
+  bool get isParent => childCount > 0;
 
   Task(
       {this.id,
@@ -320,7 +326,11 @@ class Task {
       this.reminderTaskName,
       this.pushCount = 0,
       this.countdown = false,
-      this.subtasks = const []});
+      this.parentId,
+      this.parentTitle,
+      this.userId,
+      this.childCount = 0,
+      this.childCompletedCount = 0});
 
   factory Task.fromJson(Map<String, dynamic> json) => _$TaskFromJson(json);
   Map<String, dynamic> toJson() => _$TaskToJson(this);
@@ -344,7 +354,11 @@ class Task {
     String? startTime,
     String? endTime,
     String? completedTime,
-    List<String>? subtasks,
+    String? parentId,
+    String? parentTitle,
+    String? userId,
+    int? childCount,
+    int? childCompletedCount,
     Effort? priority,
     int? pushCount,
     bool? countdown,
@@ -369,7 +383,11 @@ class Task {
         dueDate: dueDate ?? this.dueDate,
         startTime: startTime ?? this.startTime,
         endTime: endTime ?? this.endTime,
-        subtasks: subtasks ?? this.subtasks,
+        parentId: parentId ?? this.parentId,
+        parentTitle: parentTitle ?? this.parentTitle,
+        userId: userId ?? this.userId,
+        childCount: childCount ?? this.childCount,
+        childCompletedCount: childCompletedCount ?? this.childCompletedCount,
         priority: priority ?? this.priority,
         pushCount: pushCount ?? this.pushCount,
         countdown: countdown ?? this.countdown,

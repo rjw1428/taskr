@@ -6,6 +6,7 @@ import 'package:taskr/people/person_form.dart';
 import 'package:taskr/people/log_form.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/people.provider.dart';
+import 'package:taskr/shared/shared.dart';
 
 class PersonDetailPage extends StatefulWidget {
   final String personId;
@@ -67,7 +68,8 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
             ),
           ),
           floatingActionButton: FloatingActionButton(
-            backgroundColor: Colors.purple,
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            foregroundColor: Theme.of(context).colorScheme.onPrimary,
             child: const Icon(FontAwesomeIcons.plus, size: 20),
             onPressed: () {
               Navigator.of(context).push(
@@ -84,7 +86,7 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
 
   Widget _buildPersonInfo(Person person) {
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(Insets.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -93,13 +95,13 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
           if (person.job != null) _buildInfoRow('Job', person.job!),
           if (person.spouse != null) _buildInfoRow('Spouse', person.spouse!),
           if (person.kids.isNotEmpty) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: Insets.md),
             const Text('Kids', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
+            const SizedBox(height: Insets.sm),
             ...person.kids.map((kid) {
               final age = _calculateAge(kid);
               return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.only(bottom: Insets.sm),
                 child: Text('${kid.name}, $age'),
               );
             }),
@@ -133,7 +135,7 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
 
   Widget _buildInfoRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: Insets.sm),
       child: Row(
         children: [
           Text('$label: ', style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -155,16 +157,16 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
     });
 
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(Insets.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Conversation Log', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          Text('Conversation Log', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: Insets.md),
           if (logs.isEmpty)
             Center(
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 32),
+                padding: const EdgeInsets.symmetric(vertical: Insets.xxl),
                 child: Text(
                   'No logs yet',
                   style: Theme.of(context).textTheme.bodySmall,
@@ -182,12 +184,13 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
 
   Widget _buildLogItem(BuildContext context, Person person, ConversationLog log, PeopleProvider peopleProvider) {
     final theme = Theme.of(context);
+    final t = theme.appTokens;
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: Insets.sm),
       child: Padding(
         // Tight left/vertical padding keeps the focus on the message; the small
         // right inset leaves room for the compact menu button.
-        padding: const EdgeInsets.fromLTRB(12, 8, 4, 10),
+        padding: const EdgeInsets.fromLTRB(Insets.md, Insets.sm, Insets.xs, 10),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -198,7 +201,7 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
                   Text(
                     DateFormat('MMM d, yyyy').format(DateTime.parse(log.date)),
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.textTheme.bodySmall?.color?.withAlpha(150),
+                      color: t.textMuted,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -215,7 +218,7 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
                 padding: EdgeInsets.zero,
                 iconSize: 16,
                 tooltip: 'Log options',
-                icon: Icon(FontAwesomeIcons.ellipsisVertical, color: theme.disabledColor),
+                icon: Icon(FontAwesomeIcons.ellipsisVertical, color: t.textFaint),
                 onSelected: (value) {
                   if (value == 'edit') {
                     Navigator.of(context).push(
@@ -270,7 +273,7 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
                 );
               }
             },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: Text('Delete', style: TextStyle(color: Theme.of(pageContext).colorScheme.error)),
           ),
         ],
       ),
@@ -307,7 +310,7 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
                 );
               }
             },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: Text('Delete', style: TextStyle(color: Theme.of(pageContext).colorScheme.error)),
           ),
         ],
       ),

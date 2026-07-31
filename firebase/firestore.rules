@@ -5,6 +5,12 @@ service cloud.firestore {
     match /todos/{userId}/{document=**} {
       allow read, write: if request.auth.uid == userId;
     }
+    // Collection-group read so the backlog can gather a parent's subtasks
+    // across date partitions. Scoped to the owner via the denormalized userId
+    // field on each task item (see add-subtasks).
+    match /{path=**}/items/{itemId} {
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
     match /todos/{userId} {
        allow read, write: if request.auth.uid == userId;
     }

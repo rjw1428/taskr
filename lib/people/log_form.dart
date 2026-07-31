@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/people.provider.dart';
+import 'package:taskr/shared/shared.dart';
 
 class LogFormPage extends StatefulWidget {
   final String personId;
@@ -101,7 +102,7 @@ class _LogFormPageState extends State<LogFormPage> {
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(Insets.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -109,19 +110,19 @@ class _LogFormPageState extends State<LogFormPage> {
               controller: _dateController,
               decoration: InputDecoration(
                 labelText: 'Date',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(Corners.sm)),
                 suffixIcon: const Icon(FontAwesomeIcons.calendar, size: 16),
               ),
               readOnly: true,
               onTap: _selectDate,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: Insets.lg),
             TextField(
               controller: _entryController,
               decoration: InputDecoration(
                 labelText: 'What did you discuss?',
                 hintText: 'E.g., Talked about his new job, asked about the kids...',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(Corners.sm)),
                 alignLabelWithHint: true,
               ),
               minLines: 5,

@@ -6,7 +6,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
-import 'package:taskr/shared/constants.dart';
+import 'package:taskr/shared/shared.dart';
 import 'package:taskr/task_list/add_task.dart';
 import 'package:taskr/goals/goal_detail_page.dart';
 import 'package:taskr/services/goal.service.dart';
@@ -40,12 +40,14 @@ class TaskItemState extends State<TaskItem> {
   bool _calendarConnected = false;
   bool _sendingToCalendar = false;
   StreamSubscription<bool>? _calendarSub;
+  late final ConfettiController _confetti;
 
   TaskItemState();
 
   @override
   void initState() {
     super.initState();
+    _confetti = ConfettiController(duration: const Duration(seconds: 1));
     final user = AuthService().user;
     if (user != null) {
       _calendarSub = CalendarService().watchConnected(user.uid).listen((connected) {
@@ -56,6 +58,7 @@ class TaskItemState extends State<TaskItem> {
 
   @override
   void dispose() {
+    _confetti.dispose();
     _calendarSub?.cancel();
     super.dispose();
   }
@@ -83,157 +86,212 @@ class TaskItemState extends State<TaskItem> {
 
   @override
   Widget build(BuildContext context) {
-    final confetti = ConfettiController(duration: const Duration(seconds: 1));
+    final theme = Theme.of(context);
+    final p = theme.appTokens.of(widget.task.priority);
+    final done = widget.task.completed;
+    final ink = done ? p.ink.withAlpha(150) : p.ink;
     final timeFrame = DateService().timeFrameBuilder(widget.task);
 
     isExpandable = widget.task.description != null || widget.task.tags.isNotEmpty;
 
-    const double r = 10;
+    // Preserve the multi-day connected-corner logic; a full-round card otherwise.
+    const double r = Corners.md;
+    const double rTight = 4;
     BorderRadius borderRadius;
     if (widget.task.isMultiDayStart) {
-      borderRadius = const BorderRadius.only(
-        topLeft: Radius.circular(r),
-        bottomLeft: Radius.circular(r),
-      );
+      borderRadius = const BorderRadius.horizontal(left: Radius.circular(r), right: Radius.circular(rTight));
     } else if (widget.task.isMultiDayEnd) {
-      borderRadius = const BorderRadius.only(
-        topRight: Radius.circular(r),
-        bottomRight: Radius.circular(r),
-      );
+      borderRadius = const BorderRadius.horizontal(left: Radius.circular(rTight), right: Radius.circular(r));
     } else if (widget.task.isMultiDayMiddle) {
-      borderRadius = BorderRadius.zero;
+      borderRadius = const BorderRadius.all(Radius.circular(rTight));
     } else {
       borderRadius = BorderRadius.circular(r);
     }
 
     return Stack(children: [
-      Container(
-          decoration: BoxDecoration(
-            color: priorityColors[widget.task.priority]!.withAlpha(widget.task.completed ? 128 : 255),
-            border: Border.all(color: Colors.black45),
-            borderRadius: borderRadius,
-            boxShadow: const [BoxShadow(color: Colors.black45, offset: Offset(2.0, 4.0), blurRadius: 5.0)],
-          ),
-          margin: const EdgeInsets.all(4),
-          child: Padding(
-              padding: const EdgeInsets.only(top: 4, bottom: 4),
-              child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    setState(() => expanded = !expanded);
-                    debugPrint("${widget.task.title}: $expanded");
-                  },
-                  child: Row(
-                      // TASK
+      AnimatedContainer(
+        duration: reduceMotion(context) ? Duration.zero : Motion.fast,
+        curve: Motion.standard,
+        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        decoration: BoxDecoration(
+          color: done ? Color.alphaBlend(p.fill.withAlpha(140), theme.colorScheme.surface) : p.fill,
+          border: Border.all(color: p.border),
+          borderRadius: borderRadius,
+          boxShadow: done ? null : theme.appTokens.raisedShadow,
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: isExpandable ? () => setState(() => expanded = !expanded) : null,
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Severity keyline
+                Container(width: 4, color: p.accent),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            Checkbox(
-                                value: widget.task.completed,
-                                onChanged: (value) async {
-                                  if (value!) {
-                                    confetti.play();
-                                    PerformanceService().incrementScore(
-                                        AuthService().user!.uid, PerformanceService().getScore(widget.task.priority));
-                                    widget.onComplete(widget.index);
-                                  } else {
-                                    PerformanceService().decrementScore(
-                                        AuthService().user!.uid, PerformanceService().getScore(widget.task.priority));
-                                  }
-                                  const completeTimeFormat = "${DateService.stringFmt} ${DateService.dbTimeFormat}";
-                                  // TAGS HERE ARE NAME, NOT ID
-                                  await widget.taskService.updateTaskByKey({
-                                    "completed": value,
-                                    "completedTime": DateFormat(completeTimeFormat).format(DateTime.now())
-                                  }, widget.task);
-                                  if (value && widget.task.goalId != null && widget.task.id != null) {
-                                    _backfillGoalGeneration(widget.task);
-                                  }
-                                }),
-                            if (widget.task.pushCount > 0)
-                              Text('(${widget.task.pushCount}) ',
-                                  style: const TextStyle(fontSize: 18, color: Colors.white)),
-                            SizedBox(
-                              width: MediaQuery.of(context).size.width * .6 - (widget.task.pushCount > 0 ? 20 : 0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.max,
-                                children: [
-                                  if (widget.task.goalId != null)
-                                    Padding(
-                                      padding: const EdgeInsets.only(bottom: 2),
-                                      child: Row(
-                                        children: [
-                                          const Icon(FontAwesomeIcons.bullseye, size: 10, color: Colors.orange),
-                                          const SizedBox(width: 4),
-                                          Text('Goal', style: TextStyle(fontSize: 10, color: Colors.orange.shade300)),
-                                        ],
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Checkbox(
+                                  value: widget.task.completed,
+                                  activeColor: p.accent,
+                                  checkColor: theme.colorScheme.surface,
+                                  side: BorderSide(color: p.accent, width: 2),
+                                  onChanged: (value) async {
+                                    if (value!) {
+                                      if (!reduceMotion(context)) _confetti.play();
+                                      PerformanceService().incrementScore(AuthService().user!.uid,
+                                          PerformanceService().getScore(widget.task.priority));
+                                      widget.onComplete(widget.index);
+                                    } else {
+                                      PerformanceService().decrementScore(AuthService().user!.uid,
+                                          PerformanceService().getScore(widget.task.priority));
+                                    }
+                                    const completeTimeFormat = "${DateService.stringFmt} ${DateService.dbTimeFormat}";
+                                    // TAGS HERE ARE NAME, NOT ID
+                                    await widget.taskService.updateTaskByKey({
+                                      "completed": value,
+                                      "completedTime": DateFormat(completeTimeFormat).format(DateTime.now())
+                                    }, widget.task);
+                                    if (value && widget.task.goalId != null && widget.task.id != null) {
+                                      _backfillGoalGeneration(widget.task);
+                                    }
+                                  }),
+                              if (widget.task.pushCount > 0)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 4),
+                                  child: Text('(${widget.task.pushCount})',
+                                      style: theme.textTheme.labelMedium?.copyWith(
+                                          color: ink.withAlpha(180), fontWeight: FontWeight.w700)),
+                                ),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (widget.task.goalId != null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(bottom: 1),
+                                        child: Row(
+                                          children: [
+                                            Icon(FontAwesomeIcons.bullseye, size: 9, color: theme.appTokens.goal),
+                                            const SizedBox(width: 4),
+                                            Text('GOAL',
+                                                style: theme.textTheme.labelSmall?.copyWith(
+                                                    fontSize: 9, letterSpacing: 0.8, color: theme.appTokens.goal)),
+                                          ],
+                                        ),
                                       ),
+                                    if (timeFrame != '')
+                                      Text(timeFrame,
+                                          style: theme.textTheme.bodySmall?.copyWith(
+                                              color: ink.withAlpha(200), fontWeight: FontWeight.w600)),
+                                    Row(children: [
+                                      Flexible(
+                                        child: Text(
+                                          widget.task.title,
+                                          style: theme.textTheme.titleSmall?.copyWith(
+                                            color: ink,
+                                            decoration: done ? TextDecoration.lineThrough : null,
+                                            decorationColor: ink.withAlpha(140),
+                                          ),
+                                          maxLines: expanded ? null : 2,
+                                          overflow: expanded ? null : TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      if (isExpandable && !expanded)
+                                        Padding(
+                                          padding: const EdgeInsets.only(left: 6),
+                                          child: Icon(FontAwesomeIcons.solidCircle, size: 4, color: ink.withAlpha(140)),
+                                        ),
+                                    ]),
+                                    AnimatedSize(
+                                      duration: reduceMotion(context) ? Duration.zero : Motion.fast,
+                                      curve: Motion.standard,
+                                      alignment: Alignment.topLeft,
+                                      child: (isExpandable && expanded)
+                                          ? Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                if (widget.task.description != null)
+                                                  Padding(
+                                                    padding: const EdgeInsets.only(top: 4, bottom: 6),
+                                                    child: SelectableText(widget.task.description!,
+                                                        style: theme.textTheme.bodySmall
+                                                            ?.copyWith(color: ink.withAlpha(210))),
+                                                  ),
+                                                if (widget.task.tags.isNotEmpty)
+                                                  Padding(
+                                                    padding: const EdgeInsets.only(top: 2, bottom: 4),
+                                                    child: Wrap(
+                                                      spacing: 6,
+                                                      runSpacing: 4,
+                                                      children: widget.task.tags
+                                                          .map((tag) => Container(
+                                                                padding: const EdgeInsets.symmetric(
+                                                                    horizontal: 8, vertical: 3),
+                                                                decoration: BoxDecoration(
+                                                                  color: ink.withAlpha(28),
+                                                                  borderRadius: BorderRadius.circular(999),
+                                                                ),
+                                                                child: Text(tag.label,
+                                                                    style: theme.textTheme.labelSmall?.copyWith(
+                                                                        fontSize: 10, color: ink, letterSpacing: 0.2)),
+                                                              ))
+                                                          .toList(),
+                                                    ),
+                                                  ),
+                                              ],
+                                            )
+                                          : const SizedBox(width: double.infinity),
                                     ),
-                                  if (timeFrame != '')
-                                    Text(timeFrame, style: const TextStyle(fontSize: 14, color: Colors.white)),
-                                  Row(children: [
-                                    Flexible(
-                                        // width: MediaQuery.of(context).size.width * .5,
-                                        child: SelectableText(
-                                      widget.task.title,
-                                      style: const TextStyle(
-                                          fontSize: 16, color: Colors.white, overflow: TextOverflow.ellipsis),
-                                    )),
-                                    if (isExpandable && !expanded)
-                                      const Padding(
-                                          padding: EdgeInsets.only(left: 8),
-                                          child: Icon(
-                                            FontAwesomeIcons.solidCircle,
-                                            size: 4,
-                                          ))
-                                  ]),
-                                  if (widget.task.description != null && expanded)
-                                    Padding(
-                                        padding: const EdgeInsets.only(bottom: 10),
-                                        child: SelectableText(
-                                          widget.task.description!,
-                                          style: const TextStyle(fontSize: 12, color: Colors.white),
-                                        )),
-                                  if (widget.task.tags.isNotEmpty && expanded)
-                                    Wrap(
-                                        spacing: 4,
-                                        children: widget.task.tags
-                                            .map((tag) => Chip(
-                                                labelPadding: const EdgeInsets.all(0),
-                                                label: Text(
-                                                  tag.label,
-                                                  style: const TextStyle(fontSize: 10),
-                                                )))
-                                            .toList()),
-                                ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Theme(
+                          data: theme.copyWith(iconTheme: IconThemeData(color: ink.withAlpha(190))),
+                          child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                            actionButtons(context, widget.isBacklog),
+                            ReorderableDragStartListener(
+                              index: widget.index,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                child: Icon(FontAwesomeIcons.gripLines, size: 16, color: ink.withAlpha(120)),
                               ),
                             ),
-                          ],
+                          ]),
                         ),
-                        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                          actionButtons(context, widget.isBacklog),
-                          ReorderableDragStartListener(
-                            index: widget.index,
-                            child: IconButton(
-                              icon: const Icon(FontAwesomeIcons.gripLines),
-                              onPressed: () => debugPrint("HERE"),
-                            ),
-                          ),
-                        ])
-                      ])))),
-      Center(
-        child: ConfettiWidget(
-          maximumSize: const Size(20, 10),
-          minimumSize: const Size(10, 5),
-          confettiController: confetti,
-          blastDirectionality: BlastDirectionality.explosive,
-          maxBlastForce: 50,
-          minBlastForce: 5,
-          emissionFrequency: 0.03,
-          numberOfParticles: 10,
-          gravity: .7,
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      Positioned.fill(
+        child: Center(
+          child: ConfettiWidget(
+            maximumSize: const Size(20, 10),
+            minimumSize: const Size(10, 5),
+            confettiController: _confetti,
+            blastDirectionality: BlastDirectionality.explosive,
+            maxBlastForce: 50,
+            minBlastForce: 5,
+            emissionFrequency: 0.03,
+            numberOfParticles: 10,
+            gravity: .7,
+          ),
         ),
       )
     ]);

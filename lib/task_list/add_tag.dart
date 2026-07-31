@@ -3,97 +3,79 @@ import 'package:provider/provider.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/tag.provider.dart';
 
-class AddTagScreen extends StatelessWidget {
+/// Add or edit a tag. Shown via `showDialog`; renders a themed [AlertDialog].
+class AddTagScreen extends StatefulWidget {
   final Tag? tag;
   const AddTagScreen({super.key, this.tag});
 
   @override
-  Widget build(BuildContext context) {
-    return Material(
-        color: Colors.transparent,
-        child: Center(
-            child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10.0),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: Column(children: [
-                    Text(tag == null ? "Add tag" : "Edit tag",
-                        style: const TextStyle(fontSize: 40, color: Colors.black)),
-                    SizedBox(
-                      height: 300,
-                      child: TagForm(tag: tag),
-                    ),
-                  ]),
-                ))));
-  }
+  State<AddTagScreen> createState() => _AddTagScreenState();
 }
 
-class TagForm extends StatefulWidget {
-  final Tag? tag;
-  const TagForm({super.key, this.tag});
+class _AddTagScreenState extends State<AddTagScreen> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _label;
+  bool _pending = false;
 
   @override
-  TagFormState createState() => TagFormState();
-}
+  void initState() {
+    super.initState();
+    _label = TextEditingController(text: widget.tag?.label ?? '');
+  }
 
-class TagFormState extends State<TagForm> {
-  final TextEditingController _label = TextEditingController();
-  bool apiPending = false;
-  bool archived = false;
+  @override
+  void dispose() {
+    _label.dispose();
+    super.dispose();
+  }
 
   Future<void> _submit() async {
-    setState(() => apiPending = true);
-    if (_label.text.isEmpty) {
-      return Future.error('Tag label missing');
-    }
-    var tagProvider = Provider.of<TagProvider>(context, listen: false);
-    if (widget.tag == null) {
-      await tagProvider.addTag(_label.text);
-    } else {
-      await tagProvider.updateTag(widget.tag!.id, _label.text);
-    }
-    setState(() => apiPending = false);
-
-    if (mounted) {
-      Navigator.of(context).pop();
+    if (!_formKey.currentState!.validate()) return;
+    final provider = context.read<TagProvider>();
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _pending = true);
+    try {
+      if (widget.tag == null) {
+        await provider.addTag(_label.text.trim());
+      } else {
+        await provider.updateTag(widget.tag!.id, _label.text.trim());
+      }
+      navigator.pop();
+    } catch (e) {
+      if (mounted) setState(() => _pending = false);
+      messenger.showSnackBar(SnackBar(content: Text('Could not save tag: $e')));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (widget.tag != null) {
-      _label.text = widget.tag!.label;
-    }
-
-    return Form(
-        child: Column(
-      children: [
-        TextFormField(
-          textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(labelText: 'Tag Name'),
+    final isEdit = widget.tag != null;
+    return AlertDialog(
+      title: Text(isEdit ? 'Edit tag' : 'Add tag'),
+      content: Form(
+        key: _formKey,
+        child: TextFormField(
           controller: _label,
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Please enter the tag name';
-            }
-            return null;
-          },
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(labelText: 'Tag name'),
+          onFieldSubmitted: (_) => _submit(),
+          validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter a tag name' : null,
         ),
-        if (widget.tag != null)
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            const Text('Archive'),
-            Checkbox(value: archived, onChanged: (value) => setState(() => archived = value!))
-          ]),
-        ElevatedButton(onPressed: apiPending ? null : () => _submit(), child: const Text('Save')),
-        ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-            child: const Text('Close'))
+      ),
+      actions: [
+        TextButton(
+          onPressed: _pending ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _pending ? null : _submit,
+          child: _pending
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+              : Text(isEdit ? 'Save' : 'Add'),
+        ),
       ],
-    ));
+    );
   }
 }

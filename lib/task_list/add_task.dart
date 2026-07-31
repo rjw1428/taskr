@@ -5,7 +5,7 @@ import 'package:rrule/rrule.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/services/tag.provider.dart';
-import 'package:taskr/shared/constants.dart';
+import 'package:taskr/shared/shared.dart';
 import 'package:multi_select_flutter/multi_select_flutter.dart';
 import 'package:taskr/task_list/recurring_task_form.dart';
 
@@ -33,6 +33,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   bool _isRecurring = false;
   bool _isMultiDay = false;
   bool _countdown = false;
+  bool _reminderEnabled = false;
   String? _multiDayEndDate;
   String? _multiDayStartDate;
   String? _reminderTime;
@@ -40,11 +41,6 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   // List<String> _subTasks = const [];
   DateTime? initialDueDate;
   bool apiPending = false;
-  List<DropdownMenuItem> colorOptions = dropdownColors.entries
-      .map((color) => DropdownMenuItem(
-          value: color.key,
-          child: Text(color.key.name, style: TextStyle(color: color.key == Effort.info ? Colors.white : color.value))))
-      .toList();
   late List<Tag> _allTags = [];
   late List<Tag> _selectedTags = [];
   final TaskService _taskService = TaskService();
@@ -188,7 +184,6 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
         tags: _selectedTags,
         pushCount: 0,
         countdown: _countdown,
-        subtasks: [],
       );
       await _taskService.addTask(firstTask);
 
@@ -240,7 +235,6 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
           tags: _selectedTags,
           pushCount: 0,
           countdown: _countdown,
-          subtasks: [],
           multiDayGroupId: groupId,
           multiDayPosition: position,
         );
@@ -297,7 +291,6 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
           added: DateTime.now().millisecondsSinceEpoch,
           tags: _selectedTags,
           pushCount: widget.task?.pushCount ?? 0,
-          subtasks: [],
           goalId: widget.task?.goalId,
           feedback: widget.task?.feedback,
           multiDayGroupId: widget.task?.multiDayGroupId,
@@ -366,7 +359,6 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
         added: DateTime.now().millisecondsSinceEpoch,
         tags: _selectedTags,
         pushCount: 0,
-        subtasks: [],
       );
       await _taskService.addTask(task);
     }
@@ -396,6 +388,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
       initialPriority = widget.task!.priority;
       _selectedTags = widget.task!.tags;
       _reminderTime = widget.task!.reminderTime;
+      _reminderEnabled = _reminderTime != null;
       _countdown = widget.task!.countdown;
       if (widget.task!.isMultiDay) {
         _isMultiDay = true;
@@ -437,26 +430,41 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final t = theme.appTokens;
     final keyboardSpace = MediaQuery.of(context).viewInsets.bottom;
     final title = widget.task == null ? "Add Task" : "Edit Task";
     final actionButtonText = widget.task == null ? "Save" : "Update";
     return SingleChildScrollView(
       child: Padding(
-          padding: EdgeInsets.fromLTRB(16, 16, 16, keyboardSpace + 16),
+          padding: EdgeInsets.fromLTRB(Insets.lg, Insets.md, Insets.lg, keyboardSpace + Insets.lg),
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: Insets.md),
+                  decoration: BoxDecoration(
+                    color: t.textFaint.withAlpha(90),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
               Text(
                 title,
-                style: Theme.of(context).textTheme.titleLarge,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.headlineSmall,
               ),
+              const SizedBox(height: Insets.lg),
               Form(
                   key: _formKey, // Assign the form key
                   child: Column(
                       mainAxisAlignment: MainAxisAlignment.start,
-                      crossAxisAlignment: CrossAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Text input fields and other form elements
                         TextFormField(
                           textCapitalization: TextCapitalization.words,
                           decoration: const InputDecoration(labelText: 'Title'),
@@ -467,250 +475,131 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                             }
                             return null;
                           },
-                          style: Theme.of(context).textTheme.titleSmall,
+                          style: theme.textTheme.titleMedium,
                         ),
+                        const SizedBox(height: Insets.md),
                         TextFormField(
                           decoration: const InputDecoration(labelText: 'Description'),
                           controller: _description,
                           maxLines: null,
                           minLines: 3,
                           keyboardType: TextInputType.multiline,
-                          style: Theme.of(context).textTheme.titleSmall,
+                          style: theme.textTheme.bodyLarge,
                         ),
-                        Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                ElevatedButton(
-                                  onPressed: () async {
-                                    final date = await _selectDate(context, initialDueDate!);
-                                    if (date == null) {
-                                      return;
-                                    }
-                                    setState(() => _dueDate = DateService().getString(date));
-                                  },
-                                  child: Text(
-                                    _dueDate == null ? 'Set a due date' : _dueDate!,
-                                    style: Theme.of(context).textTheme.titleSmall,
-                                  ),
-                                ),
-                                if (_dueDate != null)
-                                  IconButton(
-                                    onPressed: () => setState(() {
-                                      _dueDate = null;
-                                    }),
-                                    icon: const Icon(FontAwesomeIcons.xmark),
-                                  ),
-                              ],
-                            ),
-                            if (_dueDate != null)
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  ElevatedButton(
-                                    onPressed: () async {
-                                      final initial = _startTime == null
-                                          ? DateService().getRoundedTime(TimeOfDay.now())
-                                          : DateService().getTime(_startTime!);
-                                      final time = await _selectTime(context, initial);
-                                      if (time == null) {
-                                        return;
-                                      }
-                                      setState(() {
-                                        DateTime tempDateTime = DateTime(2024, 1, 1, time.hour, time.minute);
-                                        _startTime = DateService().getTimeStr(tempDateTime);
-                                      });
-                                    },
-                                    child: Text(
-                                      _startTime == null ? 'Set a start time' : DateService().displayTime(_startTime!),
-                                      style: Theme.of(context).textTheme.titleSmall,
-                                    ),
-                                  ),
-                                  if (_startTime != null)
-                                    IconButton(
-                                      onPressed: () => setState(() {
-                                        _startTime = null;
-                                        _endTime = null;
-                                      }),
-                                      icon: const Icon(FontAwesomeIcons.xmark),
-                                    ),
-                                ],
-                              ),
-                            if (_startTime != null)
-                              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                ElevatedButton(
-                                  onPressed: () async {
-                                    final initial = _endTime == null
-                                        ? DateService().getRoundedTime(DateService().getTime(_startTime!))
-                                        : DateService().getTime(_endTime!);
-                                    final time = await _selectTime(context, initial);
-                                    if (time == null) {
-                                      return;
-                                    }
-                                    // IF END TIME IS EARLIER THAN START TIME, ERROR?
-                                    setState(() {
-                                      DateTime tempDateTime = DateTime(2024, 1, 1, time.hour, time.minute);
-                                      _endTime = DateService().getTimeStr(tempDateTime);
-                                    });
-                                  },
-                                  child: Text(
-                                    _endTime == null ? 'Set an end time' : DateService().displayTime(_endTime!),
-                                    style: Theme.of(context).textTheme.titleSmall,
-                                  ),
-                                ),
-                                if (_endTime != null)
-                                  IconButton(
-                                    onPressed: () => setState(() {
-                                      _endTime = null;
-                                    }),
-                                    icon: const Icon(FontAwesomeIcons.xmark),
-                                  ),
-                              ]),
-                          ],
+                        const SizedBox(height: Insets.lg),
+                        _sectionLabel('Schedule'),
+                        _pickerField(
+                          icon: FontAwesomeIcons.calendarDay,
+                          label: 'Due date',
+                          value: _dueDate,
+                          placeholder: 'Set a due date',
+                          onTap: () async {
+                            final date = await _selectDate(context, initialDueDate!);
+                            if (date == null) return;
+                            setState(() => _dueDate = DateService().getString(date));
+                          },
+                          onClear: () => setState(() => _dueDate = null),
                         ),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: Text(
-                                "Effort Level:",
-                                style: Theme.of(context).textTheme.titleSmall,
-                              ),
-                            ),
-                            DropdownButton(
-                              items: colorOptions,
-                              onChanged: (value) => setState(() {
-                                _priority = value!;
-                              }),
-                              value: _priority,
-                            ),
-                          ],
-                        ),
-
+                        if (_dueDate != null)
+                          _pickerField(
+                            icon: FontAwesomeIcons.clock,
+                            label: 'Start time',
+                            value: _startTime == null ? null : DateService().displayTime(_startTime!),
+                            placeholder: 'Set a start time',
+                            onTap: () async {
+                              final initial = _startTime == null
+                                  ? DateService().getRoundedTime(TimeOfDay.now())
+                                  : DateService().getTime(_startTime!);
+                              final time = await _selectTime(context, initial);
+                              if (time == null) return;
+                              setState(() {
+                                DateTime tempDateTime = DateTime(2024, 1, 1, time.hour, time.minute);
+                                _startTime = DateService().getTimeStr(tempDateTime);
+                              });
+                            },
+                            onClear: () => setState(() {
+                              _startTime = null;
+                              _endTime = null;
+                            }),
+                          ),
+                        if (_startTime != null)
+                          _pickerField(
+                            icon: FontAwesomeIcons.clock,
+                            label: 'End time',
+                            value: _endTime == null ? null : DateService().displayTime(_endTime!),
+                            placeholder: 'Set an end time',
+                            onTap: () async {
+                              final initial = _endTime == null
+                                  ? DateService().getRoundedTime(DateService().getTime(_startTime!))
+                                  : DateService().getTime(_endTime!);
+                              final time = await _selectTime(context, initial);
+                              if (time == null) return;
+                              // IF END TIME IS EARLIER THAN START TIME, ERROR?
+                              setState(() {
+                                DateTime tempDateTime = DateTime(2024, 1, 1, time.hour, time.minute);
+                                _endTime = DateService().getTimeStr(tempDateTime);
+                              });
+                            },
+                            onClear: () => setState(() => _endTime = null),
+                          ),
+                        const SizedBox(height: Insets.md),
+                        _sectionLabel('Effort level'),
+                        _effortSelector(),
+                        const SizedBox(height: Insets.sm),
                         if (_dueDate == null && !widget.isBacklog)
-                          const Text('Item will be added to the backlog without a due date'),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+                            child: Text('No due date — this goes to your backlog.',
+                                style: theme.textTheme.bodySmall),
+                          ),
                         if (_dueDate != null && widget.isBacklog)
-                          const Text('Item will be scheduled on the selected date'),
-                        ExpansionTile(
-                            title: const Text('Advanced'),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+                            child: Text('This will be scheduled on the selected date.',
+                                style: theme.textTheme.bodySmall),
+                          ),
+                        Theme(
+                          data: theme.copyWith(dividerColor: Colors.transparent),
+                          child: ExpansionTile(
+                            tilePadding: EdgeInsets.zero,
+                            childrenPadding: const EdgeInsets.only(bottom: Insets.sm),
+                            title: Text('Advanced', style: theme.textTheme.titleSmall),
                             initiallyExpanded: _isRecurring || _isMultiDay || _reminderTime != null || _countdown,
                             children: [
-                              if (_dueDate != null && widget.task?.recurringTemplateId == null && !_isMultiDay)
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Checkbox(
-                                      value: _isRecurring,
-                                      onChanged: (bool? value) {
-                                        setState(() {
-                                          _isRecurring = value ?? false;
-                                        });
-                                      },
-                                    ),
-                                    const Text('Recurring'),
-                                  ],
-                                ),
                               if (_dueDate != null && (widget.task == null || widget.task!.isMultiDay) && !_isRecurring)
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Checkbox(
-                                      value: _isMultiDay,
-                                      onChanged: widget.task?.isMultiDay == true
-                                          ? null
-                                          : (bool? value) {
-                                              setState(() {
-                                                _isMultiDay = value ?? false;
-                                                if (!_isMultiDay) _multiDayEndDate = null;
-                                              });
-                                            },
-                                    ),
-                                    const Text('Multi-day'),
-                                  ],
+                                _toggleRow(
+                                  'Multi-day',
+                                  _isMultiDay,
+                                  widget.task?.isMultiDay == true
+                                      ? null
+                                      : (value) => setState(() {
+                                            _isMultiDay = value;
+                                            if (!_isMultiDay) _multiDayEndDate = null;
+                                          }),
                                 ),
                               if (_isMultiDay)
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    ElevatedButton(
-                                      onPressed: () async {
-                                        final startStr = _multiDayStartDate ?? _dueDate!;
-                                        final startDate = DateService().getDate(startStr);
-                                        final initial = _multiDayEndDate != null
-                                            ? DateService().getDate(_multiDayEndDate!)
-                                            : startDate.add(const Duration(days: 1));
-                                        final date = await _selectDate(context, initial);
-                                        if (date == null || !date.isAfter(startDate)) return;
-                                        setState(() => _multiDayEndDate = DateService().getString(date));
-                                      },
-                                      child: Text(
-                                        _multiDayEndDate ?? 'Set end date',
-                                        style: Theme.of(context).textTheme.titleSmall,
-                                      ),
-                                    ),
-                                    if (_multiDayEndDate != null && widget.task?.isMultiDay != true)
-                                      IconButton(
-                                        onPressed: () => setState(() => _multiDayEndDate = null),
-                                        icon: const Icon(FontAwesomeIcons.xmark),
-                                      ),
-                                  ],
+                                _pickerField(
+                                  icon: FontAwesomeIcons.calendarWeek,
+                                  label: 'End date',
+                                  value: _multiDayEndDate,
+                                  placeholder: 'Set end date',
+                                  onTap: () async {
+                                    final startStr = _multiDayStartDate ?? _dueDate!;
+                                    final startDate = DateService().getDate(startStr);
+                                    final initial = _multiDayEndDate != null
+                                        ? DateService().getDate(_multiDayEndDate!)
+                                        : startDate.add(const Duration(days: 1));
+                                    final date = await _selectDate(context, initial);
+                                    if (date == null || !date.isAfter(startDate)) return;
+                                    setState(() => _multiDayEndDate = DateService().getString(date));
+                                  },
+                                  onClear: widget.task?.isMultiDay == true
+                                      ? null
+                                      : () => setState(() => _multiDayEndDate = null),
                                 ),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  ElevatedButton(
-                                    onPressed: () async {
-                                      final defaultDate = _dueDate != null
-                                          ? DateService().getDate(_dueDate!)
-                                          : DateTime.now();
-                                      final date = await _selectDate(context, _reminderTime != null
-                                          ? DateTime.parse(_reminderTime!).toLocal()
-                                          : defaultDate);
-                                      if (date == null) return;
-                                      final time = await _selectTime(
-                                        context,
-                                        _reminderTime != null
-                                            ? TimeOfDay.fromDateTime(DateTime.parse(_reminderTime!).toLocal())
-                                            : DateService().getRoundedTime(TimeOfDay.now()),
-                                      );
-                                      if (time == null) return;
-                                      final dt = DateTime(date.year, date.month, date.day, time.hour, time.minute);
-                                      // Store as a UTC instant (with 'Z') so the backend resolves
-                                      // the same absolute moment regardless of server timezone.
-                                      setState(() => _reminderTime = dt.toUtc().toIso8601String());
-                                    },
-                                    child: Text(
-                                      _reminderTime != null
-                                          ? _formatReminder(_reminderTime!)
-                                          : 'Set reminder',
-                                      style: Theme.of(context).textTheme.titleSmall,
-                                    ),
-                                  ),
-                                  if (_reminderTime != null)
-                                    IconButton(
-                                      onPressed: () => setState(() => _reminderTime = null),
-                                      icon: const Icon(FontAwesomeIcons.xmark),
-                                    ),
-                                ],
-                              ),
-                              if (_dueDate != null)
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Checkbox(
-                                      value: _countdown,
-                                      onChanged: (bool? value) {
-                                        setState(() {
-                                          _countdown = value ?? false;
-                                        });
-                                      },
-                                    ),
-                                    const Text('Countdown'),
-                                  ],
-                                ),
+                              if (_dueDate != null && widget.task?.recurringTemplateId == null && !_isMultiDay)
+                                _toggleRow('Recurring', _isRecurring,
+                                    (value) => setState(() => _isRecurring = value)),
                               if (_isRecurring)
                                 RecurringTaskForm(
                                   key: _recurringTaskFormKey,
@@ -721,46 +610,212 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                                     });
                                   },
                                 ),
+                              _toggleRow(
+                                'Reminder',
+                                _reminderEnabled,
+                                (value) => setState(() {
+                                  _reminderEnabled = value;
+                                  if (!value) _reminderTime = null;
+                                }),
+                              ),
+                              if (_reminderEnabled)
+                                _pickerField(
+                                  icon: FontAwesomeIcons.bell,
+                                  label: 'Remind me at',
+                                  value: _reminderTime != null ? _formatReminder(_reminderTime!) : null,
+                                  placeholder: 'Set date & time',
+                                  onTap: () async {
+                                    final defaultDate =
+                                        _dueDate != null ? DateService().getDate(_dueDate!) : DateTime.now();
+                                    final date = await _selectDate(
+                                        context,
+                                        _reminderTime != null
+                                            ? DateTime.parse(_reminderTime!).toLocal()
+                                            : defaultDate);
+                                    if (date == null) return;
+                                    final time = await _selectTime(
+                                      context,
+                                      _reminderTime != null
+                                          ? TimeOfDay.fromDateTime(DateTime.parse(_reminderTime!).toLocal())
+                                          : DateService().getRoundedTime(TimeOfDay.now()),
+                                    );
+                                    if (time == null) return;
+                                    final dt = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+                                    // Store as a UTC instant (with 'Z') so the backend resolves
+                                    // the same absolute moment regardless of server timezone.
+                                    setState(() => _reminderTime = dt.toUtc().toIso8601String());
+                                  },
+                                  onClear: () => setState(() => _reminderTime = null),
+                                ),
+                              if (_dueDate != null)
+                                _toggleRow('Countdown', _countdown,
+                                    (value) => setState(() => _countdown = value)),
                             ],
                           ),
-                        if (_allTags.isNotEmpty)
+                        ),
+                        if (_allTags.isNotEmpty) ...[
+                          const SizedBox(height: Insets.md),
+                          _sectionLabel('Tags'),
                           MultiSelectDialogField(
                             isDismissible: true,
-                            itemsTextStyle: const TextStyle(color: Colors.white),
-                            selectedColor: Colors.red,
-                            selectedItemsTextStyle: const TextStyle(color: Colors.black),
-                            backgroundColor: Colors.black,
+                            itemsTextStyle: TextStyle(color: theme.colorScheme.onSurface),
+                            selectedColor: theme.colorScheme.primary,
+                            selectedItemsTextStyle: TextStyle(color: theme.colorScheme.onPrimary),
+                            backgroundColor: theme.colorScheme.surface,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(Corners.md),
+                              border: Border.all(color: t.hairline),
+                            ),
                             items: _allTags.map((tag) => MultiSelectItem(tag.id, tag.label)).toList(),
                             listType: MultiSelectListType.CHIP,
                             initialValue: _selectedTags.map((t) => t.id).toList(), // NEED TO BE ID's
                             onConfirm: (result) => setState(() => _selectedTags =
                                 result.map((id) => _allTags.firstWhere((tag) => id == tag.id)).toList()),
-                            buttonIcon: const Icon(
-                              FontAwesomeIcons.tag,
-                              color: Colors.white,
-                            ),
-                            buttonText: Text(
-                              "Tags",
-                              style: Theme.of(context).textTheme.titleSmall,
-                            ),
-                          )
+                            buttonIcon: Icon(FontAwesomeIcons.tag, size: 16, color: theme.colorScheme.primary),
+                            buttonText: Text('Add tags', style: theme.textTheme.bodyLarge),
+                          ),
+                        ],
                       ])),
+              const SizedBox(height: Insets.xl),
               Row(
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  ElevatedButton(
-                    onPressed: () => _submit(),
-                    child: Text(actionButtonText),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: apiPending ? null : () => _submit(),
+                      child: apiPending
+                          ? const SizedBox(
+                              width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                          : Text(actionButtonText),
+                    ),
                   ),
-                  ElevatedButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                      },
-                      child: const Text('Close'))
+                  const SizedBox(width: Insets.md),
+                  SecondaryButton('Cancel', onPressed: () => Navigator.of(context).pop()),
                 ],
-              )
+              ),
             ],
           )),
+    );
+  }
+
+  Widget _sectionLabel(String label) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: Insets.xs, bottom: Insets.sm),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          label.toUpperCase(),
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.appTokens.textMuted,
+            letterSpacing: 1.4,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _pickerField({
+    required IconData icon,
+    required String label,
+    String? value,
+    required String placeholder,
+    required VoidCallback onTap,
+    VoidCallback? onClear,
+  }) {
+    final theme = Theme.of(context);
+    final t = theme.appTokens;
+    final hasValue = value != null;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Insets.sm),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(Corners.md),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: Insets.lg, vertical: Insets.md),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(Corners.md),
+              border: Border.all(color: hasValue ? theme.colorScheme.primary.withAlpha(130) : t.hairline),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, size: 16, color: hasValue ? theme.colorScheme.primary : t.textFaint),
+                const SizedBox(width: Insets.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(label.toUpperCase(),
+                          style: theme.textTheme.labelSmall?.copyWith(color: t.textFaint, letterSpacing: 1)),
+                      const SizedBox(height: 1),
+                      Text(hasValue ? value : placeholder,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                              color: hasValue ? theme.colorScheme.onSurface : t.textMuted)),
+                    ],
+                  ),
+                ),
+                if (onClear != null && hasValue)
+                  InkWell(
+                    onTap: onClear,
+                    borderRadius: BorderRadius.circular(999),
+                    child: Padding(
+                      padding: const EdgeInsets.all(Insets.xs),
+                      child: Icon(FontAwesomeIcons.xmark, size: 14, color: t.textFaint),
+                    ),
+                  )
+                else
+                  Icon(FontAwesomeIcons.chevronRight, size: 12, color: t.textFaint),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _effortSelector() {
+    final theme = Theme.of(context);
+    final t = theme.appTokens;
+    String lbl(Effort e) => e.name[0].toUpperCase() + e.name.substring(1);
+    return Wrap(
+      spacing: Insets.sm,
+      runSpacing: Insets.sm,
+      children: Effort.values.map((e) {
+        final p = t.of(e);
+        final selected = _priority == e;
+        return ChoiceChip(
+          label: Text(lbl(e)),
+          selected: selected,
+          showCheckmark: false,
+          onSelected: (_) => setState(() => _priority = e),
+          backgroundColor: theme.colorScheme.surface,
+          selectedColor: p.fill,
+          avatar: Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(color: p.accent, shape: BoxShape.circle),
+          ),
+          side: BorderSide(color: selected ? p.accent : t.hairline, width: selected ? 1.5 : 1),
+          labelStyle: theme.textTheme.labelLarge?.copyWith(
+            color: selected ? p.ink : t.textMuted,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _toggleRow(String label, bool value, ValueChanged<bool>? onChanged) {
+    final theme = Theme.of(context);
+    return SwitchListTile.adaptive(
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      visualDensity: VisualDensity.compact,
+      title: Text(label, style: theme.textTheme.bodyLarge),
+      value: value,
+      onChanged: onChanged,
     );
   }
 }

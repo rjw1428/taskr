@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:taskr/shared/shared.dart';
 
 class AboutPage extends StatelessWidget {
   const AboutPage({super.key});
 
   static const appName = 'taskr';
   static const appVersion = '1.1.0+3';
-  static const appCommit = 'eaf9dff';
+  static const appCommit = 'daf80bc';
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final t = theme.appTokens;
     return Scaffold(
       appBar: AppBar(
         title: const Text('About'),
@@ -19,17 +22,17 @@ class AboutPage extends StatelessWidget {
           children: <Widget>[
             Text(
               appName,
-              style: Theme.of(context).textTheme.headlineMedium,
+              style: theme.textTheme.headlineMedium,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: Insets.sm),
             Text(
               'Version: $appVersion',
-              style: Theme.of(context).textTheme.titleMedium,
+              style: theme.textTheme.titleMedium?.copyWith(color: t.textMuted),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: Insets.sm),
             Text(
               'Commit: $appCommit',
-              style: Theme.of(context).textTheme.titleMedium,
+              style: theme.textTheme.titleMedium?.copyWith(color: t.textMuted),
             ),
           ],
         ),

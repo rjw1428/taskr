@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:taskr/shared/design/tokens.dart';
 
 class AnimatedProgressbar extends StatelessWidget {
   final double value;
@@ -8,6 +9,8 @@ class AnimatedProgressbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final t = theme.appTokens;
     return LayoutBuilder(
       // Unknown width
       builder: (BuildContext context, BoxConstraints box) {
@@ -19,7 +22,7 @@ class AnimatedProgressbar extends StatelessWidget {
               Container(
                 height: height,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor,
+                  color: t.surfaceRaised,
                   borderRadius: BorderRadius.all(
                     Radius.circular(height),
                   ),
@@ -31,7 +34,7 @@ class AnimatedProgressbar extends StatelessWidget {
                 height: height,
                 width: box.maxWidth * _floor(value),
                 decoration: BoxDecoration(
-                  color: _colorGen(value),
+                  color: theme.colorScheme.primary,
                   borderRadius: BorderRadius.all(
                     Radius.circular(height),
                   ),
@@ -47,11 +50,6 @@ class AnimatedProgressbar extends StatelessWidget {
   _floor(double value, [min = 0.0]) {
     return value.sign <= min ? min : value;
   }
-
-  _colorGen(double value) {
-    int rbg = (value * 255).toInt();
-    return Colors.deepOrange.withGreen(rbg).withRed(255 - rbg);
-  }
 }
 
 class DailyProgress extends StatelessWidget {
@@ -62,20 +60,34 @@ class DailyProgress extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
+    final theme = Theme.of(context);
+    final t = theme.appTokens;
+    final progress = _calculateProgress(numerator, denominator);
+    final percent = (progress * 100).round();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        AnimatedProgressbar(value: _calculateProgress(numerator, denominator), height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text("$numerator/$denominator",
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    shadows: [Shadow(color: Colors.black, offset: Offset(2, 2), blurRadius: 4.0)]))
-          ],
-        )
+        // Count and percent live above the bar so nothing overlaps the fill.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text("$numerator of $denominator",
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.onSurface,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  )),
+              Text("$percent%",
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: t.textMuted,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  )),
+            ],
+          ),
+        ),
+        AnimatedProgressbar(value: progress, height: 8),
       ],
     );
   }

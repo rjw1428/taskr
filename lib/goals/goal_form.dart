@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
+import 'package:taskr/shared/shared.dart';
 
 class GoalForm extends StatefulWidget {
   final Goal? goal;
@@ -207,11 +208,11 @@ class _GoalFormState extends State<GoalForm> {
                 ],
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: Insets.xl),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                ElevatedButton(
+                FilledButton(
                   onPressed: _apiPending ? null : _submit,
                   child: _apiPending
                       ? const SizedBox(
@@ -221,11 +222,8 @@ class _GoalFormState extends State<GoalForm> {
                         )
                       : Text(isEdit ? 'Update' : 'Create Goal'),
                 ),
-                const SizedBox(width: 12),
-                ElevatedButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Close'),
-                ),
+                const SizedBox(width: Insets.md),
+                SecondaryButton('Close', onPressed: () => Navigator.of(context).pop()),
               ],
             ),
           ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
+import 'package:taskr/shared/shared.dart';
 
 class JournalModal extends StatefulWidget {
   final String date;
@@ -64,7 +65,7 @@ class _JournalModalState extends State<JournalModal> {
             onPressed: _saving ? null : _save,
             child: _saving
                 ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('Save', style: TextStyle(color: Colors.orange)),
+                : Text('Save', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
           ),
         ],
       ),
@@ -90,8 +91,9 @@ class _JournalModalState extends State<JournalModal> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white70)),
-        const SizedBox(height: 8),
+        Text(label,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+        const SizedBox(height: Insets.sm),
         TextField(
           controller: controller,
           maxLines: 5,

@@ -78,7 +78,6 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       case 1:
         return FloatingActionButton(
-          backgroundColor: Colors.blue,
           child: const Icon(FontAwesomeIcons.plus, size: 20),
           onPressed: () => showModalBottomSheet(
             isScrollControlled: true,
@@ -89,7 +88,6 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       case 2:
         return FloatingActionButton(
-          backgroundColor: Colors.orange,
           child: const Icon(FontAwesomeIcons.plus, size: 20),
           onPressed: () => showModalBottomSheet(
             isScrollControlled: true,
@@ -102,7 +100,6 @@ class _HomeScreenState extends State<HomeScreen> {
         return GestureDetector(
           onLongPress: () => _showDividerDialog(true),
           child: FloatingActionButton(
-            backgroundColor: Colors.red,
             child: const Icon(FontAwesomeIcons.plus, size: 20),
             onPressed: () => showModalBottomSheet(
               isScrollControlled: true,
@@ -138,9 +135,12 @@ class _HomeScreenState extends State<HomeScreen> {
           return const LoginScreen();
         }
 
+        final currentLabel = routeConfig.values
+            .firstWhere((r) => r.index == _selectedIndex, orElse: () => routeConfig['/']!)
+            .label;
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Taskr'),
+            title: Text(currentLabel),
             actions: [
               PopupMenuButton<String>(
                 onSelected: (value) {
@@ -174,33 +174,33 @@ class _HomeScreenState extends State<HomeScreen> {
             key: innerNavigatorKey,
             initialRoute: '/',
             onGenerateRoute: (setting) {
-              Widget page;
-              if (setting.name == null) {
-                page = const LoadingScreen();
-              }
-              final route = setting.name!;
-              page = routeConfig[route]?.page ?? const Text('Unknown sub route');
-              return MaterialPageRoute(builder: (_) => page);
+              final route = setting.name;
+              final page = route == null
+                  ? const LoadingScreen()
+                  : (routeConfig[route]?.page ?? const Text('Unknown sub route'));
+              // Fade-through between tabs; degrades to instant under reduced motion.
+              return fadeThroughRoute((_) => page, settings: setting);
             },
           ),
-          bottomNavigationBar: BottomNavigationBar(
-            type: BottomNavigationBarType.fixed,
-            currentIndex: _selectedIndex,
-            selectedItemColor: Colors.white,
-            unselectedItemColor: Colors.grey,
-            showUnselectedLabels: true,
-            selectedLabelStyle: TextStyle(shadows: [
-              Shadow(blurRadius: 4.0, offset: const Offset(3.0, 3.0), color: Colors.grey.withAlpha(128)),
-            ]),
-            items: routeConfig.values.map((route) {
-              return BottomNavigationBarItem(
-                icon: Icon(route.icon, size: 20),
-                label: route.label,
-                tooltip: route.label,
-              );
-            }).toList(),
-            backgroundColor: Colors.black,
-            onTap: _onItemTapped,
+          bottomNavigationBar: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: Theme.of(context).appTokens.hairline)),
+            ),
+            child: BottomNavigationBar(
+              type: BottomNavigationBarType.fixed,
+              currentIndex: _selectedIndex,
+              items: routeConfig.values.map((route) {
+                return BottomNavigationBarItem(
+                  icon: Padding(
+                    padding: const EdgeInsets.only(bottom: 3),
+                    child: Icon(route.icon, size: 19),
+                  ),
+                  label: route.label,
+                  tooltip: route.label,
+                );
+              }).toList(),
+              onTap: _onItemTapped,
+            ),
           ),
           floatingActionButton: _buildFloatingActionButton(),
         );

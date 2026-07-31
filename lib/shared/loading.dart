@@ -8,6 +8,7 @@ class LoadingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
         title: Text(message),
@@ -16,6 +17,9 @@ class LoadingScreen extends StatelessWidget {
               onPressed: () => AuthService().signOut(),
               icon: const Icon(FontAwesomeIcons.userAstronaut))
         ],
+      ),
+      body: Center(
+        child: CircularProgressIndicator(color: theme.colorScheme.primary),
       ),
     );
   }

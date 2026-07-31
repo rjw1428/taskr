@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:taskr/services/accomplishment.provider.dart';
 import 'package:taskr/services/models.dart';
+import 'package:taskr/shared/shared.dart';
 
 class AccomplishmentForm extends StatefulWidget {
   final Accomplishment? accomplishment;
@@ -36,12 +37,13 @@ class _AccomplishmentFormState extends State<AccomplishmentForm> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
         title: Text(pageHeader),
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(Insets.lg),
         child: Form(
           key: _formKey,
           child: Column(
@@ -84,11 +86,11 @@ class _AccomplishmentFormState extends State<AccomplishmentForm> {
                   });
                 },
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: Insets.lg),
               Row(
                 children: [
-                  const Text('Difficulty Score: ', style: TextStyle(fontSize: 16)),
-                  Text('$_difficultyScore', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text('Difficulty Score: ', style: theme.textTheme.bodyLarge),
+                  Text('$_difficultyScore', style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
                 ],
               ),
               Slider(
@@ -103,8 +105,9 @@ class _AccomplishmentFormState extends State<AccomplishmentForm> {
                   });
                 },
               ),
-              const SizedBox(height: 20),
-              ElevatedButton(
+              const SizedBox(height: Insets.xl),
+              PrimaryButton(
+                actionButton,
                 onPressed: () {
                   if (_formKey.currentState!.validate()) {
                     _formKey.currentState!.save();
@@ -141,7 +144,6 @@ class _AccomplishmentFormState extends State<AccomplishmentForm> {
                     Navigator.pop(context);
                   }
                 },
-                child: Text(actionButton),
               ),
             ],
           ),

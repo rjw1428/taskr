@@ -226,7 +226,6 @@ class GoalService with ChangeNotifier {
         dueDate: DateService().getString(taskDate),
         goalId: goal.id,
         tags: [],
-        subtasks: [],
       );
 
       final taskId = await _taskService.addTask(task);

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:taskr/services/auth.service.dart';
+import 'package:taskr/shared/shared.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
@@ -13,7 +14,7 @@ class LoginScreen extends StatelessWidget {
       ),
       body: Center(
           child: Container(
-        padding: const EdgeInsets.all(30),
+        padding: const EdgeInsets.all(Insets.xl),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -52,12 +53,14 @@ class LoginButton extends StatelessWidget {
       child: ElevatedButton.icon(
         icon: Icon(
           icon,
+          // Icon sits on a brand-colored sign-in button; white for contrast.
           color: Colors.white,
           size: 20,
         ),
         style: TextButton.styleFrom(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(Insets.xl),
           backgroundColor: color,
+          foregroundColor: Colors.white,
         ),
         onPressed: () => loginMethod(),
         label: Text(text, textAlign: TextAlign.center),

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/people.provider.dart';
+import 'package:taskr/shared/shared.dart';
 
 class PersonFormPage extends StatefulWidget {
   final Person? person;
@@ -129,7 +130,7 @@ class _PersonFormPageState extends State<PersonFormPage> {
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(Insets.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -137,50 +138,50 @@ class _PersonFormPageState extends State<PersonFormPage> {
               controller: _nameController,
               decoration: InputDecoration(
                 labelText: 'Name *',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(Corners.sm)),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: Insets.lg),
             TextField(
               controller: _ageController,
               decoration: InputDecoration(
                 labelText: 'Age',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(Corners.sm)),
               ),
               keyboardType: TextInputType.number,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: Insets.lg),
             TextField(
               controller: _birthdayController,
               decoration: InputDecoration(
                 labelText: 'Birthday',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(Corners.sm)),
                 suffixIcon: const Icon(FontAwesomeIcons.calendar, size: 16),
               ),
               readOnly: true,
               onTap: _selectBirthday,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: Insets.lg),
             TextField(
               controller: _jobController,
               decoration: InputDecoration(
                 labelText: 'Job',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(Corners.sm)),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: Insets.lg),
             TextField(
               controller: _spouseController,
               decoration: InputDecoration(
                 labelText: 'Spouse',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(Corners.sm)),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: Insets.xl),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Kids', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                Text('Kids', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                 IconButton(
                   icon: const Icon(FontAwesomeIcons.plus, size: 16),
                   onPressed: _addKid,
@@ -188,7 +189,7 @@ class _PersonFormPageState extends State<PersonFormPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: Insets.sm),
             ..._kids.asMap().entries.map((entry) {
               final index = entry.key;
               final kid = entry.value;
@@ -201,14 +202,16 @@ class _PersonFormPageState extends State<PersonFormPage> {
   }
 
   Widget _buildKidForm(int index, KidForm kid) {
+    final theme = Theme.of(context);
+    final t = theme.appTokens;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: Insets.md),
       child: Container(
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey[300]!),
-          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: t.hairline),
+          borderRadius: BorderRadius.circular(Corners.sm),
         ),
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(Insets.md),
         child: Column(
           children: [
             Row(
@@ -218,23 +221,23 @@ class _PersonFormPageState extends State<PersonFormPage> {
                     initialValue: kid.name,
                     decoration: InputDecoration(
                       labelText: 'Name',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(Corners.sm)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: Insets.md, vertical: 10),
                     ),
                     onChanged: (value) {
                       kid.name = value;
                     },
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: Insets.sm),
                 IconButton(
-                  icon: const Icon(FontAwesomeIcons.trash, size: 16, color: Colors.red),
+                  icon: Icon(FontAwesomeIcons.trash, size: 16, color: theme.colorScheme.error),
                   onPressed: () => _removeKid(index),
                   tooltip: 'Remove kid',
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: Insets.sm),
             Row(
               children: [
                 Expanded(
@@ -243,8 +246,8 @@ class _PersonFormPageState extends State<PersonFormPage> {
                     initialValue: kid.age?.toString() ?? '',
                     decoration: InputDecoration(
                       labelText: 'Age',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(Corners.sm)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: Insets.md, vertical: 10),
                     ),
                     keyboardType: TextInputType.number,
                     onChanged: (value) {
@@ -252,7 +255,7 @@ class _PersonFormPageState extends State<PersonFormPage> {
                     },
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: Insets.sm),
                 Expanded(
                   flex: 1,
                   child: TextFormField(
@@ -261,8 +264,8 @@ class _PersonFormPageState extends State<PersonFormPage> {
                         : '',
                     decoration: InputDecoration(
                       labelText: 'Birthday',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(Corners.sm)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: Insets.md, vertical: 10),
                       suffixIcon: const Icon(FontAwesomeIcons.calendar, size: 14),
                     ),
                     readOnly: true,

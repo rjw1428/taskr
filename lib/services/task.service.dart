@@ -121,6 +121,30 @@ class TaskService {
         }).handleError((error) => debugPrint("SHIT: $error"));
   }
 
+  /// All of a user's subtasks (tasks with a parentId) across every date
+  /// partition, via a collection-group query. The backlog groups these by
+  /// parentId to nest children under their parent (including scheduled ones,
+  /// which live in other date partitions). Requires the (userId, parentId)
+  /// collection-group index and the matching security rule.
+  Stream<List<Task>> streamSubtasks(String userId, List<Tag> tags) {
+    final tagMap = tags.fold({}, (acc, cur) => {...acc, cur.id: cur.toJson()});
+    return _db
+        .collectionGroup('items')
+        .where('userId', isEqualTo: userId)
+        .where('parentId', isNotEqualTo: null)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map((doc) {
+              final data = {...doc.data(), 'id': doc.id};
+              final rawTags = (data['tags'] as List?) ?? [];
+              data['tags'] = rawTags
+                  .map((tag) => tag is String ? tagMap[tag] : tagMap[tag['id']])
+                  .where((t) => t != null)
+                  .toList();
+              return Task.fromJson(data);
+            }).toList())
+        .handleError((error) => debugPrint("SUBTASKS: $error"));
+  }
+
   Future<List<Map<String, dynamic>>> getTasks(String userId, String? date) async {
     var snapshot = await taskCollection(userId, date ?? defaultUnassignedDate).orderBy('added', descending: true).get();
     return snapshot.docs
@@ -153,7 +177,6 @@ class TaskService {
       'tags': <String>[],
       'priority': 'low',
       'pushCount': 0,
-      'subtasks': <String>[],
     };
     final id = await taskCollection(user.uid, dateKey).add(data).then((ref) => ref.id);
     final currentOrder = await getTaskOrder(user.uid, dateKey);
@@ -173,6 +196,9 @@ class TaskService {
     final completer = Completer<String>();
 
     final data = removeNulls(task.toDbTask());
+    // Stamp the owner so subtasks can be gathered via a collection-group query
+    // across date partitions (see add-subtasks design).
+    data['userId'] = user.uid;
     // Insert into DB
     var id = await taskCollection(user.uid, date).add(data).then((DocumentReference ref) => ref.id);
 
@@ -313,8 +339,10 @@ class TaskService {
     }
     final date = task.dueDate ?? defaultUnassignedDate;
 
-    // Re-create the document
-    await taskCollection(user.uid, date).doc(task.id!).set(removeNulls(task.toDbTask()));
+    // Re-create the document (stamp owner for collection-group subtask reads)
+    final restoreData = removeNulls(task.toDbTask());
+    restoreData['userId'] = user.uid;
+    await taskCollection(user.uid, date).doc(task.id!).set(restoreData);
 
     // Add the task ID back to the taskOrder array
     await _db.collection('todos').doc(user.uid).collection("tasks").doc(date).set({
@@ -412,7 +440,6 @@ class TaskService {
           added: DateTime.now().millisecondsSinceEpoch,
           tags: template.tags,
           pushCount: 0,
-          subtasks: [],
           multiDayGroupId: groupId,
           multiDayPosition: position,
         );
@@ -660,7 +687,6 @@ class TaskService {
           priority: _parseEffort(hit['priority'] as String?),
           added: 0,
           tags: [],
-          subtasks: [],
         );
       }).toList();
     } catch (e) {

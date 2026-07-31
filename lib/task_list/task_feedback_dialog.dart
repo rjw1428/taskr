@@ -66,7 +66,7 @@ class _TaskFeedbackDialogState extends State<TaskFeedbackDialog> {
               return ChoiceChip(
                 label: Text(option.$2),
                 selected: isSelected,
-                selectedColor: Colors.orange,
+                selectedColor: Theme.of(context).colorScheme.primary,
                 onSelected: (selected) {
                   setState(() {
                     _selected = selected ? option.$1 : null;

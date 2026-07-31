@@ -3,6 +3,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:taskr/goals/goal_detail_page.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
+import 'package:taskr/shared/shared.dart';
 
 class GoalListPage extends StatelessWidget {
   const GoalListPage({super.key});
@@ -22,59 +23,54 @@ class GoalListPage extends StatelessWidget {
         final pausedGoals = goals.where((g) => g.status == GoalStatus.paused).toList();
         final completedGoals = goals.where((g) => g.status == GoalStatus.completed).toList();
 
+        final theme = Theme.of(context);
+        final t = theme.appTokens;
+
         if (activeGoals.isEmpty && pausedGoals.isEmpty && completedGoals.isEmpty) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(FontAwesomeIcons.bullseye, size: 48, color: Colors.orange),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No goals yet',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Tap + to set your first goal and start building towards something great.',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey),
-                  ),
-                ],
-              ),
-            ),
+          return const EmptyState(
+            icon: FontAwesomeIcons.bullseye,
+            title: 'No goals yet',
+            message: 'Tap + to set your first goal and start building towards something great.',
           );
         }
 
         return ListView(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(Insets.sm),
           children: [
             if (activeGoals.isNotEmpty) ...[
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: Insets.sm, vertical: Insets.xs),
                 child: Text('Active Goals',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.orange)),
+                    style: theme.textTheme.titleMedium?.copyWith(color: t.goal)),
               ),
-              ...activeGoals.map((goal) => _GoalCard(goal: goal)),
+              ...activeGoals.asMap().entries.map((e) => AppReveal(
+                    delay: staggerDelay(e.key),
+                    child: _GoalCard(goal: e.value),
+                  )),
             ],
             if (pausedGoals.isNotEmpty) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: Insets.lg),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: Insets.sm, vertical: Insets.xs),
                 child: Text('Paused',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.blueGrey)),
+                    style: theme.textTheme.titleMedium?.copyWith(color: t.textMuted)),
               ),
-              ...pausedGoals.map((goal) => _GoalCard(goal: goal)),
+              ...pausedGoals.asMap().entries.map((e) => AppReveal(
+                    delay: staggerDelay(e.key),
+                    child: _GoalCard(goal: e.value),
+                  )),
             ],
             if (completedGoals.isNotEmpty) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: Insets.lg),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: Insets.sm, vertical: Insets.xs),
                 child: Text('Completed',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.grey)),
+                    style: theme.textTheme.titleMedium?.copyWith(color: t.textFaint)),
               ),
-              ...completedGoals.map((goal) => _GoalCard(goal: goal)),
+              ...completedGoals.asMap().entries.map((e) => AppReveal(
+                    delay: staggerDelay(e.key),
+                    child: _GoalCard(goal: e.value),
+                  )),
             ],
           ],
         );
@@ -100,11 +96,13 @@ class _GoalCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final t = theme.appTokens;
     final isCompleted = goal.status == GoalStatus.completed;
     final isPaused = goal.status == GoalStatus.paused;
     return Card(
-      color: isCompleted ? Colors.grey.shade900 : Colors.black87,
-      margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      color: theme.colorScheme.surface,
+      margin: const EdgeInsets.symmetric(horizontal: Insets.xs, vertical: Insets.xs),
       child: ListTile(
         leading: Icon(
           isCompleted
@@ -113,15 +111,15 @@ class _GoalCard extends StatelessWidget {
                   ? FontAwesomeIcons.pause
                   : FontAwesomeIcons.bullseye,
           color: isCompleted
-              ? Colors.green
+              ? t.of(Effort.low).accent
               : isPaused
-                  ? Colors.blueGrey
-                  : Colors.orange,
+                  ? t.of(Effort.info).accent
+                  : t.goal,
         ),
         title: Text(
           goal.title,
-          style: TextStyle(
-            color: Colors.white,
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: theme.colorScheme.onSurface,
             decoration: isCompleted ? TextDecoration.lineThrough : null,
           ),
         ),
@@ -129,9 +127,9 @@ class _GoalCard extends StatelessWidget {
           isPaused
               ? '${goal.frequencyLabel} · Paused'
               : '${goal.frequencyLabel} · ${_timeRemaining()}',
-          style: const TextStyle(color: Colors.grey),
+          style: theme.textTheme.bodySmall?.copyWith(color: t.textMuted),
         ),
-        trailing: const Icon(FontAwesomeIcons.chevronRight, size: 14, color: Colors.grey),
+        trailing: Icon(FontAwesomeIcons.chevronRight, size: 14, color: t.textFaint),
         onTap: () {
           Navigator.push(
             context,

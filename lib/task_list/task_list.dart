@@ -135,14 +135,21 @@ class TaskListState extends State<TaskListScreen> {
           for (int i = 0; i < _tasks!.length; i++) {
             final task = _tasks![i];
             if (task.isDivider) {
-              children.add(DividerItem(
+              children.add(AppReveal(
                 key: ValueKey(task.id!),
-                divider: task,
-                index: i,
-                onDelete: deleteTaskWithUndo,
+                delay: staggerDelay(i),
+                child: DividerItem(
+                  divider: task,
+                  index: i,
+                  onDelete: deleteTaskWithUndo,
+                ),
               ));
             } else {
-              children.add(displayTask(task, i, onComplete, widget.isBacklog, _taskService, deleteTaskWithUndo));
+              children.add(AppReveal(
+                key: ValueKey(task.id!),
+                delay: staggerDelay(i),
+                child: displayTask(task, i, onComplete, widget.isBacklog, _taskService, deleteTaskWithUndo),
+              ));
             }
           }
 
@@ -155,30 +162,30 @@ class TaskListState extends State<TaskListScreen> {
                 child: Center(child: CircularProgressIndicator()),
               ));
             } else if (_searchResults != null && _searchResults!.isEmpty) {
-              children.add(const Padding(
-                key: ValueKey('search-empty'),
-                padding: EdgeInsets.only(top: 80.0),
+              children.add(Padding(
+                key: const ValueKey('search-empty'),
+                padding: const EdgeInsets.only(top: 80.0),
                 child: Text(
                   "No results found",
-                  style: TextStyle(color: Colors.white70),
+                  style: TextStyle(color: Theme.of(context).appTokens.textMuted),
                   textAlign: TextAlign.center,
                 ),
               ));
             } else if (_searchResults != null) {
               for (int i = 0; i < _searchResults!.length; i++) {
                 final task = _searchResults![i];
-                children.add(_buildSearchResult(task, i));
+                children.add(_buildSearchResult(context, task, i));
               }
             }
           }
 
           if (children.isEmpty && !_isSearching) {
-            children.add(const Padding(
-              key: ValueKey(0),
-              padding: EdgeInsets.only(top: 80.0),
+            children.add(Padding(
+              key: const ValueKey(0),
+              padding: const EdgeInsets.only(top: 80.0),
               child: Text(
                 "You have nothing scheduled 🎉",
-                style: TextStyle(color: Colors.white70),
+                style: TextStyle(color: Theme.of(context).appTokens.textMuted),
                 textAlign: TextAlign.center,
               ),
             ));
@@ -232,8 +239,8 @@ class TaskListState extends State<TaskListScreen> {
                                               child: Container(
                                                 width: 8,
                                                 height: 8,
-                                                decoration: const BoxDecoration(
-                                                  color: Colors.orange,
+                                                decoration: BoxDecoration(
+                                                  color: Theme.of(context).colorScheme.primary,
                                                   shape: BoxShape.circle,
                                                 ),
                                               ),
@@ -242,8 +249,8 @@ class TaskListState extends State<TaskListScreen> {
                                       ),
                                       label: const Text('Journal'),
                                       style: OutlinedButton.styleFrom(
-                                        foregroundColor: Colors.white70,
-                                        side: const BorderSide(color: Colors.white24),
+                                        foregroundColor: Theme.of(context).colorScheme.onSurface,
+                                        side: BorderSide(color: Theme.of(context).appTokens.hairline),
                                       ),
                                     ),
                                   ),
@@ -268,8 +275,8 @@ class TaskListState extends State<TaskListScreen> {
                                             icon: const Icon(FontAwesomeIcons.heartPulse, size: 16),
                                             label: const Text('Health'),
                                             style: OutlinedButton.styleFrom(
-                                              foregroundColor: Colors.white70,
-                                              side: const BorderSide(color: Colors.white24),
+                                              foregroundColor: Theme.of(context).colorScheme.onSurface,
+                                              side: BorderSide(color: Theme.of(context).appTokens.hairline),
                                             ),
                                           ),
                                         ),
@@ -347,10 +354,10 @@ class TaskListState extends State<TaskListScreen> {
                             child: TextField(
                               controller: _searchController,
                               autofocus: true,
-                              style: const TextStyle(color: Colors.white),
-                              decoration: const InputDecoration(
+                              style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+                              decoration: InputDecoration(
                                 hintText: 'Search tasks...',
-                                hintStyle: TextStyle(color: Colors.white54),
+                                hintStyle: TextStyle(color: Theme.of(context).appTokens.textFaint),
                                 border: InputBorder.none,
                               ),
                               onChanged: _onSearchChanged,
@@ -428,7 +435,11 @@ class TaskListState extends State<TaskListScreen> {
         });
   }
 
-  Widget _buildSearchResult(Task task, int index) {
+  Widget _buildSearchResult(BuildContext context, Task task, int index) {
+    final theme = Theme.of(context);
+    final t = theme.appTokens;
+    final pc = t.of(task.priority);
+    final ink = task.completed ? pc.ink.withAlpha(160) : pc.ink;
     return GestureDetector(
       key: ValueKey('search-$index'),
       onTap: () {
@@ -443,46 +454,58 @@ class TaskListState extends State<TaskListScreen> {
       },
       child: Container(
         decoration: BoxDecoration(
-          color: priorityColors[task.priority]!.withAlpha(task.completed ? 128 : 255),
-          border: Border.all(color: Colors.black45),
-          borderRadius: BorderRadius.circular(10),
-          boxShadow: const [BoxShadow(color: Colors.black45, offset: Offset(2.0, 4.0), blurRadius: 5.0)],
+          color: pc.fill.withAlpha(task.completed ? 128 : 255),
+          border: Border.all(color: pc.border),
+          borderRadius: BorderRadius.circular(Corners.md),
+          boxShadow: t.raisedShadow,
         ),
-        margin: const EdgeInsets.all(4),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        margin: const EdgeInsets.all(Insets.xs),
+        padding: const EdgeInsets.symmetric(horizontal: Insets.md, vertical: Insets.sm),
         child: Row(
           children: [
             if (task.completed)
-              const Padding(
-                padding: EdgeInsets.only(right: 8),
-                child: Icon(FontAwesomeIcons.check, size: 14, color: Colors.white70),
+              Padding(
+                padding: const EdgeInsets.only(right: Insets.sm),
+                child: Icon(FontAwesomeIcons.check, size: 14, color: ink),
               ),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(task.title, style: const TextStyle(fontSize: 16, color: Colors.white)),
+                  Text(task.title, style: theme.textTheme.titleSmall?.copyWith(color: ink)),
                   if (task.dueDate != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
-                      child: Text(task.dueDate!, style: const TextStyle(fontSize: 12, color: Colors.white70)),
+                      child: Text(task.dueDate!,
+                          style: theme.textTheme.bodySmall?.copyWith(color: ink.withAlpha(180))),
                     ),
                 ],
               ),
             ),
-            const Icon(FontAwesomeIcons.arrowRight, size: 14, color: Colors.white54),
+            Icon(FontAwesomeIcons.arrowRight, size: 14, color: ink.withAlpha(160)),
           ],
         ),
       ),
     );
   }
 
-  void deleteTaskWithUndo(Task task) {
+  void deleteTaskWithUndo(Task task) async {
+    final messenger = ScaffoldMessenger.of(context);
     if (task.reminderTaskName != null) {
       ReminderService().cancelReminder(task);
     }
-    _taskService.deleteTask(task);
-    final messenger = ScaffoldMessenger.of(context);
+    // Await the delete so we only report success when it actually happened.
+    // Previously this was fire-and-forget, so a failed delete still showed a
+    // "removed" snackbar while the task stayed on the list.
+    try {
+      await _taskService.deleteTask(task);
+    } catch (e, st) {
+      debugPrint('DELETE FAILED: $e\n$st');
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not remove task: $e')),
+      );
+      return;
+    }
     messenger.showSnackBar(
       SnackBar(
         duration: const Duration(days: 365),

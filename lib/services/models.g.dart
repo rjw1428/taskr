@@ -210,10 +210,11 @@ Task _$TaskFromJson(Map<String, dynamic> json) => Task(
       reminderTaskName: json['reminderTaskName'] as String?,
       pushCount: (json['pushCount'] as num?)?.toInt() ?? 0,
       countdown: json['countdown'] as bool? ?? false,
-      subtasks: (json['subtasks'] as List<dynamic>?)
-              ?.map((e) => e as String)
-              .toList() ??
-          const [],
+      parentId: json['parentId'] as String?,
+      parentTitle: json['parentTitle'] as String?,
+      userId: json['userId'] as String?,
+      childCount: (json['childCount'] as num?)?.toInt() ?? 0,
+      childCompletedCount: (json['childCompletedCount'] as num?)?.toInt() ?? 0,
     )..completedTime = json['completedTime'] as String?;
 
 Map<String, dynamic> _$TaskToJson(Task instance) => <String, dynamic>{
@@ -237,7 +238,11 @@ Map<String, dynamic> _$TaskToJson(Task instance) => <String, dynamic>{
       'multiDayPosition': instance.multiDayPosition,
       'reminderTime': instance.reminderTime,
       'reminderTaskName': instance.reminderTaskName,
-      'subtasks': instance.subtasks,
+      'parentId': instance.parentId,
+      'parentTitle': instance.parentTitle,
+      'userId': instance.userId,
+      'childCount': instance.childCount,
+      'childCompletedCount': instance.childCompletedCount,
       'priority': _$EffortEnumMap[instance.priority]!,
       'pushCount': instance.pushCount,
       'countdown': instance.countdown,

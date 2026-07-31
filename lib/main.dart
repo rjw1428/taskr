@@ -17,6 +17,7 @@ import 'package:taskr/services/goal.service.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/people.provider.dart';
 import 'package:taskr/services/tag.provider.dart';
+import 'package:taskr/services/theme.provider.dart';
 import 'package:taskr/about/about.dart';
 import 'package:taskr/settings/settings.dart';
 import 'package:taskr/shared/shared.dart';
@@ -150,7 +151,7 @@ class _MyAppState extends State<MyApp> {
                       pushCount: 0,
                       added: DateTime.now().millisecondsSinceEpoch,
                       tags: [],
-                      subtasks: []);
+                      );
                   await TaskService().addTask(task);
                 }
               },
@@ -299,25 +300,32 @@ class _MyAppState extends State<MyApp> {
         ChangeNotifierProvider<PeopleProvider>(
           create: (_) => PeopleProvider(),
         ),
+        ChangeNotifierProvider<ThemeProvider>(
+          create: (_) => ThemeProvider(),
+        ),
       ],
-      child: MaterialApp(
-        navigatorKey: navigatorKey, // Set the navigator key
-        debugShowCheckedModeBanner: false,
-        theme: appTheme,
-        title: 'Taskr: To-Do App',
-        initialRoute: '/',
-        onGenerateRoute: (settings) {
-          switch (settings.name) {
-            case '/':
-              return MaterialPageRoute(builder: (_) => const HomeScreen());
-            case '/settings':
-              return MaterialPageRoute(builder: (_) => const SettingsPage());
-            case '/about':
-              return MaterialPageRoute(builder: (_) => const AboutPage());
-            default:
-              return MaterialPageRoute(builder: (_) => const Text("Unknown main route"));
-          }
-        },
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, _) => MaterialApp(
+          navigatorKey: navigatorKey, // Set the navigator key
+          debugShowCheckedModeBanner: false,
+          theme: lightTheme,
+          darkTheme: darkTheme,
+          themeMode: themeProvider.mode,
+          title: 'Taskr: To-Do App',
+          initialRoute: '/',
+          onGenerateRoute: (settings) {
+            switch (settings.name) {
+              case '/':
+                return MaterialPageRoute(builder: (_) => const HomeScreen());
+              case '/settings':
+                return MaterialPageRoute(builder: (_) => const SettingsPage());
+              case '/about':
+                return MaterialPageRoute(builder: (_) => const AboutPage());
+              default:
+                return MaterialPageRoute(builder: (_) => const Text("Unknown main route"));
+            }
+          },
+        ),
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
+import 'package:taskr/shared/shared.dart';
 import 'package:taskr/task_list/recurring_task_form.dart';
 
 class ViewSeries extends StatefulWidget {
@@ -103,9 +104,12 @@ class _ViewSeriesState extends State<ViewSeries> {
             'are still showing up.',
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: Insets.xl),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
             onPressed: () async {
               await _taskService.deleteTask(widget.task);
               if (context.mounted) {
@@ -167,7 +171,8 @@ class _ViewSeriesState extends State<ViewSeries> {
                         ElevatedButton(
                           onPressed: _delete,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
+                            backgroundColor: Theme.of(context).colorScheme.error,
+                            foregroundColor: Theme.of(context).colorScheme.onError,
                           ),
                           child: const Text('Delete Series'),
                         ),

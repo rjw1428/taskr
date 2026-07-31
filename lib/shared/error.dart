@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:taskr/shared/design/tokens.dart';
 
 class ErrorMessage extends StatelessWidget {
   final String message;
@@ -6,12 +7,16 @@ class ErrorMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.all(16.0),
-      color: Colors.redAccent.withAlpha(25),
+      padding: const EdgeInsets.all(Insets.lg),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.error.withAlpha(25),
+        borderRadius: BorderRadius.circular(Corners.md),
+      ),
       child: Text(
         message,
-        style: const TextStyle(color: Colors.red, fontSize: 16.0),
+        style: theme.textTheme.bodyLarge?.copyWith(color: theme.colorScheme.error),
       ),
     );
   }
