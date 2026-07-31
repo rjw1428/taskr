@@ -276,17 +276,26 @@ class _SubtaskGroupCardState extends State<SubtaskGroupCard> {
 
   Future<void> _confirmDeleteParent() async {
     final messenger = ScaffoldMessenger.of(context);
+    final count = widget.childTasks.length;
     final choice = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Delete "${widget.parent.title}"?'),
-        content: const Text('Delete its steps too, or keep them as standalone tasks?'),
+        content: Text(count == 0
+            ? 'This will be removed.'
+            : 'This has $count ${count == 1 ? 'step' : 'steps'}. Keep them as standalone tasks, '
+                'or delete everything?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, 'keep'), child: const Text('Keep steps')),
+          if (count > 0)
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'keep'),
+              child: const Text('Keep steps'),
+            ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, 'delete'),
-            child: Text('Delete steps', style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
+            child: Text(count > 0 ? 'Delete all' : 'Delete',
+                style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
           ),
         ],
       ),
