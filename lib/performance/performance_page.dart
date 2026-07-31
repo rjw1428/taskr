@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:taskr/services/accomplishment.provider.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/accomplishments/accomplishment_detail_page.dart';
+import 'package:taskr/accomplishments/accomplishment_color.dart';
 
 class PerformancePage extends StatelessWidget {
   const PerformancePage({super.key});
@@ -316,16 +317,18 @@ class _AccomplishmentsSummary extends StatelessWidget {
             child: ListView.builder(
               itemCount: latestAccomplishments.length,
               itemBuilder: (context, index) {
-                final t = Theme.of(context).appTokens;
+                final theme = Theme.of(context);
+                final t = theme.appTokens;
                 var accomplishment = latestAccomplishments[index];
-                // Format the date to MM/dd
                 final DateTime date = DateTime.parse(accomplishment.date);
                 final String formattedDate =
                     '${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}';
+                final scoreColor = accomplishmentScoreColor(theme, accomplishment.difficultyScore);
 
                 return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+                  margin: const EdgeInsets.only(bottom: Insets.sm),
                   child: InkWell(
+                    borderRadius: BorderRadius.circular(Corners.md),
                     onTap: () {
                       Navigator.push(
                         context,
@@ -335,24 +338,33 @@ class _AccomplishmentsSummary extends StatelessWidget {
                       );
                     },
                     child: Padding(
-                      padding: const EdgeInsets.all(8.0),
+                      padding: const EdgeInsets.symmetric(horizontal: Insets.md, vertical: Insets.sm),
                       child: Row(
-                        // Use Row to place title on left and date on right
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
+                          // Score badge, colored by difficulty (1-10).
+                          Container(
+                            width: 30,
+                            height: 30,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: scoreColor.withAlpha(38),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: scoreColor.withAlpha(120)),
+                            ),
+                            child: Text('${accomplishment.difficultyScore}',
+                                style: theme.textTheme.labelLarge
+                                    ?.copyWith(color: scoreColor, fontWeight: FontWeight.w800)),
+                          ),
+                          const SizedBox(width: Insets.md),
                           Expanded(
-                            // Allow title to take remaining space
                             child: Text(
                               accomplishment.title,
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                              style: theme.textTheme.titleSmall,
                               overflow: TextOverflow.ellipsis,
                               maxLines: 1,
                             ),
                           ),
-                          Text(
-                            formattedDate, // Display formatted date
-                            style: TextStyle(fontSize: 14, color: t.textMuted),
-                          ),
+                          Text(formattedDate, style: theme.textTheme.bodySmall?.copyWith(color: t.textMuted)),
                         ],
                       ),
                     ),

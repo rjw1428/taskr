@@ -1,4 +1,5 @@
 import 'package:taskr/accomplishments/accomplishment_form.dart';
+import 'package:taskr/accomplishments/accomplishment_color.dart';
 import 'package:flutter/material.dart';
 import 'package:taskr/services/models.dart';
 import 'package:provider/provider.dart';
@@ -74,14 +75,23 @@ class _AccomplishmentDetailView extends StatelessWidget {
               style: theme.textTheme.bodyMedium?.copyWith(color: t.textMuted),
             ),
             const SizedBox(height: Insets.md),
-            Text(
-              'Difficulty: ${accomplishment.difficulty.toString().split('.').last}',
-              style: theme.textTheme.bodyMedium?.copyWith(color: t.textMuted),
-            ),
-            const SizedBox(height: Insets.md),
-            Text(
-              'Difficulty Score: ${accomplishment.difficultyScore}/10',
-              style: theme.textTheme.bodyMedium?.copyWith(color: t.textMuted),
+            Row(
+              children: [
+                Text('Difficulty: ', style: theme.textTheme.bodyMedium?.copyWith(color: t.textMuted)),
+                Container(
+                  width: 10,
+                  height: 10,
+                  margin: const EdgeInsets.only(right: 6),
+                  decoration: BoxDecoration(
+                    color: accomplishmentScoreColor(theme, accomplishment.difficultyScore),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                Text('${accomplishment.difficultyScore} / 10',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: accomplishmentScoreColor(theme, accomplishment.difficultyScore))),
+              ],
             ),
             const SizedBox(height: Insets.xl),
             Text(

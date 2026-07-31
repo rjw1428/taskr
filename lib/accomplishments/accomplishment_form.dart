@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:taskr/accomplishments/accomplishment_color.dart';
 import 'package:taskr/services/accomplishment.provider.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/shared/shared.dart';
@@ -17,7 +18,6 @@ class _AccomplishmentFormState extends State<AccomplishmentForm> {
   final _formKey = GlobalKey<FormState>();
   String? _title;
   String? _description;
-  Difficulty _difficulty = Difficulty.low;
   int _difficultyScore = 1;
   String pageHeader = 'Add Accomplishment';
   String actionButton = 'Add';
@@ -28,7 +28,6 @@ class _AccomplishmentFormState extends State<AccomplishmentForm> {
     if (widget.accomplishment != null) {
       _title = widget.accomplishment!.title;
       _description = widget.accomplishment!.description ?? '';
-      _difficulty = widget.accomplishment!.difficulty;
       _difficultyScore = widget.accomplishment!.difficultyScore;
       pageHeader = 'Edit Accomplishment';
       actionButton = 'Update';
@@ -71,26 +70,14 @@ class _AccomplishmentFormState extends State<AccomplishmentForm> {
                   _description = value!;
                 },
               ),
-              DropdownButtonFormField<Difficulty>(
-                initialValue: _difficulty,
-                decoration: const InputDecoration(labelText: 'Difficulty'),
-                items: Difficulty.values.map((Difficulty difficulty) {
-                  return DropdownMenuItem<Difficulty>(
-                    value: difficulty,
-                    child: Text(difficulty.toString().split('.').last),
-                  );
-                }).toList(),
-                onChanged: (Difficulty? newValue) {
-                  setState(() {
-                    _difficulty = newValue!;
-                  });
-                },
-              ),
               const SizedBox(height: Insets.lg),
               Row(
                 children: [
-                  Text('Difficulty Score: ', style: theme.textTheme.bodyLarge),
-                  Text('$_difficultyScore', style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
+                  Text('Difficulty: ', style: theme.textTheme.bodyLarge),
+                  Text('$_difficultyScore / 10',
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: accomplishmentScoreColor(theme, _difficultyScore))),
                 ],
               ),
               Slider(
@@ -125,7 +112,6 @@ class _AccomplishmentFormState extends State<AccomplishmentForm> {
                         title: _title!,
                         description: _description,
                         date: widget.accomplishment!.date,
-                        difficulty: _difficulty,
                         difficultyScore: _difficultyScore,
                       );
                       Provider.of<AccomplishmentProvider>(context, listen: false)
@@ -135,7 +121,6 @@ class _AccomplishmentFormState extends State<AccomplishmentForm> {
                         title: _title!,
                         description: _description,
                         date: DateTime.now().toIso8601String(),
-                        difficulty: _difficulty,
                         difficultyScore: _difficultyScore,
                       );
                       Provider.of<AccomplishmentProvider>(context, listen: false).addAccomplishment(newAccomplishment);

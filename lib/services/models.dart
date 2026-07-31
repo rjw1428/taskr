@@ -2,12 +2,6 @@ import 'package:json_annotation/json_annotation.dart';
 import 'package:taskr/shared/constants.dart';
 part 'models.g.dart';
 
-enum Difficulty {
-  low,
-  medium,
-  high,
-}
-
 @JsonSerializable()
 class JournalEntry {
   String? id;
@@ -248,7 +242,6 @@ class Accomplishment {
   String title;
   String? description;
   String date;
-  Difficulty difficulty;
   int difficultyScore;
 
   Accomplishment({
@@ -256,7 +249,6 @@ class Accomplishment {
     required this.title,
     this.description,
     required this.date,
-    this.difficulty = Difficulty.low,
     this.difficultyScore = 1,
   });
 
@@ -289,6 +281,7 @@ class Task {
   String? parentId;
   String? parentTitle;
   String? userId;
+  String? habitId;
   int childCount;
   int childCompletedCount;
   Effort priority;
@@ -329,6 +322,7 @@ class Task {
       this.parentId,
       this.parentTitle,
       this.userId,
+      this.habitId,
       this.childCount = 0,
       this.childCompletedCount = 0});
 
@@ -357,6 +351,7 @@ class Task {
     String? parentId,
     String? parentTitle,
     String? userId,
+    String? habitId,
     int? childCount,
     int? childCompletedCount,
     Effort? priority,
@@ -384,6 +379,7 @@ class Task {
         startTime: startTime ?? this.startTime,
         endTime: endTime ?? this.endTime,
         parentId: parentId ?? this.parentId,
+        habitId: habitId ?? this.habitId,
         parentTitle: parentTitle ?? this.parentTitle,
         userId: userId ?? this.userId,
         childCount: childCount ?? this.childCount,
@@ -534,4 +530,72 @@ class Person {
 
   factory Person.fromJson(Map<String, dynamic> json) => _$PersonFromJson(json);
   Map<String, dynamic> toJson() => _$PersonToJson(this);
+}
+
+@JsonSerializable()
+class Habit {
+  String? id;
+  String title;
+  Effort effort;
+  // Reuse the recurring-task cadence vocabulary: 'Daily' | 'Weekly' | 'Monthly'.
+  String recurrenceType;
+  int frequency;
+  Map<String, bool>? daysOfWeek; // weekly: 'Su'..'Sa' -> selected
+  int? dayOfMonth; // monthly
+  String startDate; // yyyy-MM-dd
+  String? reminderTime; // HH:mm
+  String status; // 'active' | 'paused'
+  // Denormalized streak state (maintained; recomputed authoritatively).
+  int currentStreak;
+  int longestStreak;
+  String? lastCompletedDate; // scheduled date string of most recent completed occurrence
+  String? lastMaterializedDate; // rolling top-up bookkeeping
+  int? createdAt;
+  int? modifiedAt;
+
+  Habit({
+    this.id,
+    required this.title,
+    this.effort = Effort.low,
+    this.recurrenceType = 'Daily',
+    this.frequency = 1,
+    this.daysOfWeek,
+    this.dayOfMonth,
+    required this.startDate,
+    this.reminderTime,
+    this.status = 'active',
+    this.currentStreak = 0,
+    this.longestStreak = 0,
+    this.lastCompletedDate,
+    this.lastMaterializedDate,
+    this.createdAt,
+    this.modifiedAt,
+  });
+
+  factory Habit.fromJson(Map<String, dynamic> json) => _$HabitFromJson(json);
+  Map<String, dynamic> toJson() => _$HabitToJson(this);
+}
+
+@JsonSerializable()
+class AppNotification {
+  String? id;
+  String title;
+  String body;
+  Map<String, dynamic> data;
+  String? type;
+  int sentAt; // epoch ms
+  bool read;
+
+  AppNotification({
+    this.id,
+    required this.title,
+    required this.body,
+    this.data = const {},
+    this.type,
+    required this.sentAt,
+    this.read = false,
+  });
+
+  factory AppNotification.fromJson(Map<String, dynamic> json) => _$AppNotificationFromJson(json);
+  Map<String, dynamic> toJson() => _$AppNotificationToJson(this);
 }

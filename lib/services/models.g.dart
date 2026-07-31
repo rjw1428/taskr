@@ -161,9 +161,6 @@ Accomplishment _$AccomplishmentFromJson(Map<String, dynamic> json) =>
       title: json['title'] as String,
       description: json['description'] as String?,
       date: json['date'] as String,
-      difficulty:
-          $enumDecodeNullable(_$DifficultyEnumMap, json['difficulty']) ??
-              Difficulty.low,
       difficultyScore: (json['difficultyScore'] as num?)?.toInt() ?? 1,
     );
 
@@ -173,15 +170,8 @@ Map<String, dynamic> _$AccomplishmentToJson(Accomplishment instance) =>
       'title': instance.title,
       'description': instance.description,
       'date': instance.date,
-      'difficulty': _$DifficultyEnumMap[instance.difficulty]!,
       'difficultyScore': instance.difficultyScore,
     };
-
-const _$DifficultyEnumMap = {
-  Difficulty.low: 'low',
-  Difficulty.medium: 'medium',
-  Difficulty.high: 'high',
-};
 
 Task _$TaskFromJson(Map<String, dynamic> json) => Task(
       id: json['id'] as String?,
@@ -213,6 +203,7 @@ Task _$TaskFromJson(Map<String, dynamic> json) => Task(
       parentId: json['parentId'] as String?,
       parentTitle: json['parentTitle'] as String?,
       userId: json['userId'] as String?,
+      habitId: json['habitId'] as String?,
       childCount: (json['childCount'] as num?)?.toInt() ?? 0,
       childCompletedCount: (json['childCompletedCount'] as num?)?.toInt() ?? 0,
     )..completedTime = json['completedTime'] as String?;
@@ -241,6 +232,7 @@ Map<String, dynamic> _$TaskToJson(Task instance) => <String, dynamic>{
       'parentId': instance.parentId,
       'parentTitle': instance.parentTitle,
       'userId': instance.userId,
+      'habitId': instance.habitId,
       'childCount': instance.childCount,
       'childCompletedCount': instance.childCompletedCount,
       'priority': _$EffortEnumMap[instance.priority]!,
@@ -358,4 +350,67 @@ Map<String, dynamic> _$PersonToJson(Person instance) => <String, dynamic>{
       'logs': instance.logs.map((e) => e.toJson()).toList(),
       'createdAt': instance.createdAt,
       'lastUpdated': instance.lastUpdated,
+    };
+
+Habit _$HabitFromJson(Map<String, dynamic> json) => Habit(
+      id: json['id'] as String?,
+      title: json['title'] as String,
+      effort:
+          $enumDecodeNullable(_$EffortEnumMap, json['effort']) ?? Effort.low,
+      recurrenceType: json['recurrenceType'] as String? ?? 'Daily',
+      frequency: (json['frequency'] as num?)?.toInt() ?? 1,
+      daysOfWeek: (json['daysOfWeek'] as Map<String, dynamic>?)?.map(
+        (k, e) => MapEntry(k, e as bool),
+      ),
+      dayOfMonth: (json['dayOfMonth'] as num?)?.toInt(),
+      startDate: json['startDate'] as String,
+      reminderTime: json['reminderTime'] as String?,
+      status: json['status'] as String? ?? 'active',
+      currentStreak: (json['currentStreak'] as num?)?.toInt() ?? 0,
+      longestStreak: (json['longestStreak'] as num?)?.toInt() ?? 0,
+      lastCompletedDate: json['lastCompletedDate'] as String?,
+      lastMaterializedDate: json['lastMaterializedDate'] as String?,
+      createdAt: (json['createdAt'] as num?)?.toInt(),
+      modifiedAt: (json['modifiedAt'] as num?)?.toInt(),
+    );
+
+Map<String, dynamic> _$HabitToJson(Habit instance) => <String, dynamic>{
+      'id': instance.id,
+      'title': instance.title,
+      'effort': _$EffortEnumMap[instance.effort]!,
+      'recurrenceType': instance.recurrenceType,
+      'frequency': instance.frequency,
+      'daysOfWeek': instance.daysOfWeek,
+      'dayOfMonth': instance.dayOfMonth,
+      'startDate': instance.startDate,
+      'reminderTime': instance.reminderTime,
+      'status': instance.status,
+      'currentStreak': instance.currentStreak,
+      'longestStreak': instance.longestStreak,
+      'lastCompletedDate': instance.lastCompletedDate,
+      'lastMaterializedDate': instance.lastMaterializedDate,
+      'createdAt': instance.createdAt,
+      'modifiedAt': instance.modifiedAt,
+    };
+
+AppNotification _$AppNotificationFromJson(Map<String, dynamic> json) =>
+    AppNotification(
+      id: json['id'] as String?,
+      title: json['title'] as String,
+      body: json['body'] as String,
+      data: json['data'] as Map<String, dynamic>? ?? const {},
+      type: json['type'] as String?,
+      sentAt: (json['sentAt'] as num).toInt(),
+      read: json['read'] as bool? ?? false,
+    );
+
+Map<String, dynamic> _$AppNotificationToJson(AppNotification instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'title': instance.title,
+      'body': instance.body,
+      'data': instance.data,
+      'type': instance.type,
+      'sentAt': instance.sentAt,
+      'read': instance.read,
     };
