@@ -132,4 +132,15 @@ class DateService {
     final parsedDate = DateFormat(stringFmt).parse(date);
     return parsedDate.year == today.year && parsedDate.month == today.month && parsedDate.day == today.day;
   }
+
+  /// Compact "time ago" label for an epoch-ms timestamp (notification center).
+  String relativeTime(int epochMs) {
+    final d = DateTime.fromMillisecondsSinceEpoch(epochMs);
+    final diff = DateTime.now().difference(d);
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return getString(d);
+  }
 }

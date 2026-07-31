@@ -18,6 +18,7 @@ import 'package:taskr/services/people.provider.dart';
 import 'package:taskr/services/tag.provider.dart';
 import 'package:taskr/services/theme.provider.dart';
 import 'package:taskr/about/about.dart';
+import 'package:taskr/notifications/notification_center.dart';
 import 'package:taskr/settings/settings.dart';
 import 'package:taskr/shared/shared.dart';
 import 'package:taskr/theme.dart';
@@ -283,6 +284,8 @@ class _MyAppState extends State<MyApp> {
                 return MaterialPageRoute(builder: (_) => const SettingsPage());
               case '/about':
                 return MaterialPageRoute(builder: (_) => const AboutPage());
+              case '/notifications':
+                return MaterialPageRoute(builder: (_) => const NotificationCenterPage());
               default:
                 return MaterialPageRoute(builder: (_) => const Text("Unknown main route"));
             }

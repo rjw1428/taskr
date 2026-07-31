@@ -176,7 +176,9 @@ class _HomeScreenState extends State<HomeScreen> {
             actions: [
               PopupMenuButton<String>(
                 onSelected: (value) {
-                  if (value == 'settings') {
+                  if (value == 'notifications') {
+                    Navigator.pushNamed(context, '/notifications');
+                  } else if (value == 'settings') {
                     Navigator.pushNamed(context, '/settings');
                   } else if (value == 'about') {
                     Navigator.pushNamed(context, '/about');
@@ -185,6 +187,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   }
                 },
                 itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                  const PopupMenuItem<String>(
+                    value: 'notifications',
+                    child: Text('Notifications'),
+                  ),
                   const PopupMenuItem<String>(
                     value: 'settings',
                     child: Text('Settings'),
@@ -198,7 +204,17 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Text('Logout'),
                   ),
                 ],
-                icon: const Icon(FontAwesomeIcons.bars),
+                icon: StreamBuilder<int>(
+                  stream: NotificationService().unreadCount(),
+                  builder: (context, snap) {
+                    final count = snap.data ?? 0;
+                    return Badge(
+                      isLabelVisible: count > 0,
+                      label: Text('$count'),
+                      child: const Icon(FontAwesomeIcons.bars),
+                    );
+                  },
+                ),
               ),
             ],
           ),

@@ -28,16 +28,16 @@
 
 ## 4. Notification Center (app)
 
-- [ ] 4.1 `NotificationService` (+ barrel export): `streamNotifications` (orderBy sentAt desc, limit 100), `unreadCount` (where read==false), `markRead`, `markAllRead`, `delete`, `clearAll`
-- [ ] 4.2 `notification_center.dart` — list (title/body/relative time/read state), Dismissible delete, mark-all-read + clear-all actions, `EmptyState`
-- [ ] 4.3 Add relative-time helper to `DateService` ("5m ago" etc.)
-- [ ] 4.4 Register `/notifications` route in `main.dart`
-- [ ] 4.5 `home.dart` overflow menu: add "Notifications" item + navigate; wrap the menu icon in a `Badge` driven by `unreadCount`
+- [x] 4.1 `NotificationService` (+ barrel export): `streamNotifications` (orderBy sentAt desc, limit 100), `unreadCount` (where read==false), `markRead`, `markAllRead`, `delete`, `clearAll`
+- [x] 4.2 `notification_center.dart` — list (title/body/relative time/read state), Dismissible delete, mark-all-read + clear-all actions, `EmptyState`
+- [x] 4.3 Add relative-time helper to `DateService` ("5m ago" etc.)
+- [x] 4.4 Register `/notifications` route in `main.dart`
+- [x] 4.5 `home.dart` overflow menu: add "Notifications" item + navigate; wrap the menu icon in a `Badge` driven by `unreadCount`
 
 ## 5. Notification Capture (backend — requires deploy)
 
-- [ ] 5.1 Add `recordNotification(uid, {title, body, data, type})` helper in `functions/src/index.ts` (try/catch; writes `todos/{uid}/notifications` with sentAt epoch-ms, read:false)
-- [ ] 5.2 Call it after each FCM send: `executeTrainNotification`, `sendMessage`, `sendGoalReminder`, `generateWeeklyTasksForGoal`, `deliverReminder`
+- [x] 5.1 Add `recordNotification(uid, {title, body, data, type})` helper in `functions/src/index.ts` (try/catch; writes `todos/{uid}/notifications` with sentAt epoch-ms, read:false)
+- [x] 5.2 Call it after each FCM send: `executeTrainNotification`, `sendMessage`, `sendGoalReminder`, `generateWeeklyTasksForGoal`, `deliverReminder`
 - [ ] 5.3 User deploys: `firebase deploy --only functions`
 
 ## 6. Performance Records Card

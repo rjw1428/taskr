@@ -155,6 +155,12 @@ async function executeTrainNotification(userId: string) {
     };
 
     await admin.messaging().send(message);
+    await recordNotification(userId, {
+      title: message.notification?.title ?? "Train Update",
+      body: message.notification?.body ?? "",
+      data,
+      type: "train",
+    });
     logger.info(`Notification sent to ${doc.id} regarding train ${train.orig_train}`);
     return data;
   } catch (e) {
@@ -197,6 +203,12 @@ export const sendMessage = onRequest(async (request, response) => {
     };
 
     await admin.messaging().send(message);
+    await recordNotification(userId, {
+      title: payload.title,
+      body: payload.body,
+      data: payload.data,
+      type: payload.data?.type,
+    });
     response.status(200).send("Message sent successfully");
   } catch (error) {
     console.error("Error sending message:", error);
@@ -211,6 +223,29 @@ async function getUserFcmToken(userId: string): Promise<string> {
     throw Error("user does not exist")
   }
   return data.fcmToken;
+}
+
+// Persist a record of every FCM message we send so the app's Notification
+// Center can review/clear them. Best-effort: never let a logging failure break
+// the actual push send.
+async function recordNotification(
+  userId: string,
+  n: {title: string; body: string; data?: Record<string, unknown>; type?: string}
+): Promise<void> {
+  try {
+    await admin.firestore()
+      .collection("todos").doc(userId)
+      .collection("notifications").add({
+        title: n.title,
+        body: n.body,
+        data: n.data ?? {},
+        type: n.type ?? (n.data ? (n.data as {type?: string}).type ?? null : null),
+        sentAt: Date.now(),
+        read: false,
+      });
+  } catch (e) {
+    logger.warn(`recordNotification failed for ${userId}:`, e);
+  }
 }
 
 // --- Goal Reminder Functions ---
@@ -271,6 +306,11 @@ async function sendGoalReminder(userId: string, messagePrefix: string): Promise<
     };
 
     await admin.messaging().send(message);
+    await recordNotification(userId, {
+      title: message.notification?.title ?? "Goal Reminder",
+      body: message.notification?.body ?? "",
+      type: "goal_reminder",
+    });
     logger.info(`Goal reminder sent to user ${userId}: ${taskCount} tasks`);
   } catch (e) {
     logger.error(`Error sending goal reminder to ${userId}:`, e);
@@ -638,6 +678,11 @@ async function generateWeeklyTasksForGoal(
             body: `${taskIds.length} new task${taskIds.length > 1 ? "s" : ""} for "${goalData.title}" have been added for the week of ${weekStart}`,
           },
           data: {type: "goal_tasks_generated"},
+        });
+        await recordNotification(userId, {
+          title: "New Goal Tasks Created",
+          body: `${taskIds.length} new task${taskIds.length > 1 ? "s" : ""} for "${goalData.title}" have been added for the week of ${weekStart}`,
+          type: "goal_tasks_generated",
         });
       }
     } catch (notifyErr) {
@@ -1062,6 +1107,12 @@ export const deliverReminder = onRequest(async (req, res) => {
     };
 
     await admin.messaging().send(message);
+    await recordNotification(uid, {
+      title: "Reminder",
+      body: title,
+      data: {type: "task_reminder", taskId, taskDate, title},
+      type: "task_reminder",
+    });
     logger.info(`Reminder delivered for task ${taskId} to user ${uid}`);
     res.status(200).send("Reminder sent");
   } catch (e) {
