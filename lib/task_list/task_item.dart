@@ -446,6 +446,7 @@ class TaskItemState extends State<TaskItem> {
               // Subtasks: only tasks that aren't already a subtask, recurring, or
               // multi-day can take subtasks (one level; guarded in the service too).
               if (!widget.task.isSubtask &&
+                  widget.task.habitId == null &&
                   widget.task.recurringTemplateId == null &&
                   !widget.task.isMultiDay)
                 const PopupMenuItem(
@@ -456,7 +457,8 @@ class TaskItemState extends State<TaskItem> {
                         Padding(padding: EdgeInsets.only(left: 8), child: Text('Add subtask'))
                       ],
                     )),
-              if (!isBacklog && !widget.task.completed)
+              // Habits are complete-or-not — they can't be pushed to another day.
+              if (!isBacklog && !widget.task.completed && widget.task.habitId == null)
                 const PopupMenuItem(
                     value: "PUSH",
                     child: Row(
