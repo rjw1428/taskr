@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/services/models.dart';
+import 'package:taskr/services/task_ordering.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:taskr/shared/shared.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -13,8 +14,13 @@ import 'package:rrule/rrule.dart';
 import 'package:intl/intl.dart';
 
 class TaskService {
-  final _db = FirebaseFirestore.instance;
+  // `late` so a test can inject a fake via [db] before the real instance is
+  // touched (Firebase isn't initialized under `flutter test`).
+  late FirebaseFirestore _db = FirebaseFirestore.instance;
   static const defaultUnassignedDate = "unassigned";
+
+  @visibleForTesting
+  set db(FirebaseFirestore db) => _db = db;
 
   CollectionReference<Map<String, dynamic>> taskCollection(String userId, String? date) {
     return _db
@@ -366,7 +372,11 @@ class TaskService {
     return id;
   }
 
-  Future<String> addTask(Task task) async {
+  /// Adds [task]. Pass [existingId] to write the doc under a known id instead of
+  /// generating a new one — used by [pushTask] to move a task to another day
+  /// while preserving its document id, so links keyed off the id (e.g. a goal
+  /// generation's `taskIds`) survive the push.
+  Future<String> addTask(Task task, {String? existingId}) async {
     var user = AuthService().user;
     if (user == null) {
       throw "No user logged in when adding task";
@@ -379,7 +389,13 @@ class TaskService {
     // across date partitions (see add-subtasks design).
     data['userId'] = user.uid;
     // Insert into DB
-    var id = await taskCollection(user.uid, date).add(data).then((DocumentReference ref) => ref.id);
+    final String id;
+    if (existingId != null) {
+      id = existingId;
+      await taskCollection(user.uid, date).doc(id).set(data);
+    } else {
+      id = await taskCollection(user.uid, date).add(data).then((DocumentReference ref) => ref.id);
+    }
 
     // -- Smart Ordering --
     // If backloged, add to end
@@ -395,42 +411,16 @@ class TaskService {
 
     List<Map<String, dynamic>> tasks = await getTasksInOrder(user.uid, task.dueDate!);
 
-    // Find the slot for the new task, preserving the existing order of everything
-    // else. Three rules drive the search:
-    //   1. An untimed Info task always goes to the very top of the list.
-    //   2. New tasks always sit ahead of completed ones, so stop at the first
-    //      completed task.
-    //   3. A timed task (start or end time) slots chronologically among the other
-    //      timed tasks, so stop at the first incomplete timed task scheduled later
-    //      than it. Untimed tasks don't stop the scan — the new timed task flows
-    //      past them into its time slot.
-    // An untimed (non-Info) task has no time key, so it only stops at completed
-    // tasks — landing at the end of the incomplete run, right before the completed
-    // ones. An Info task with a time follows the normal timed placement.
-    final order = tasks.map((t) => t['id'] as String).toList();
-    final newTime = task.startTime ?? task.endTime;
-
-    final isTopPinnedInfo = task.priority == Effort.info && newTime == null;
-    var insertAt = isTopPinnedInfo ? 0 : order.length;
-    if (!isTopPinnedInfo) {
-      for (int i = 0; i < tasks.length; i++) {
-        final t = tasks[i];
-        if (t['completed'] == true) {
-          insertAt = i;
-          break;
-        }
-        if (newTime != null) {
-          final tTime = (t['startTime'] ?? t['endTime']) as String?;
-          if (tTime != null &&
-              DateService().isTimeLessThan(DateService().getTime(newTime), DateService().getTime(tTime))) {
-            insertAt = i;
-            break;
-          }
-        }
-      }
-    }
-
-    final newOrder = [...order.sublist(0, insertAt), id, ...order.sublist(insertAt)];
+    // Slot the new task in, preserving the order of everything else. See
+    // TaskOrdering for the placement rules (Info-pin, before-completed,
+    // timed-chronological).
+    final newOrder = TaskOrdering.insertInto(
+      tasks,
+      id,
+      priority: task.priority,
+      startTime: task.startTime,
+      endTime: task.endTime,
+    );
     await _db.collection('todos').doc(user.uid).collection("tasks").doc(date).set({"taskOrder": newOrder});
 
     completer.complete(id);
@@ -532,7 +522,9 @@ class TaskService {
     task.pushCount += 1;
     task.reminderTime = null;
     task.reminderTaskName = null;
-    await addTask(task);
+    // Preserve the document id across the move so id-keyed links (e.g. a goal
+    // generation's taskIds) stay connected after a push.
+    await addTask(task, existingId: task.id);
     // Record the effort points pushed off the from-date (any day, not just today).
     await PerformanceService().recordPush(user.uid, task, fromDate);
     if (decrementScore) {

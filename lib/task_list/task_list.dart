@@ -295,7 +295,7 @@ class TaskListState extends State<TaskListScreen> {
                 }
               },
               child: ReorderableListView(
-                  footer: !widget.isBacklog
+                  footer: !widget.isBacklog && AuthService().isOwner
                       ? StreamBuilder<JournalEntry?>(
                           stream: JournalService().streamEntry(selectedDate),
                           builder: (context, journalSnapshot) {

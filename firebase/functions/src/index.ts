@@ -630,6 +630,9 @@ async function generateWeeklyTasksForGoal(
         completed: false,
         dueDate: dateStr,
         goalId: goalId,
+        // Denormalized owner so goal progress can be counted via a collection-group
+        // query on (userId, goalId) across date partitions.
+        userId: userId,
         added: Date.now(),
         modified: "",
         tags: [],

@@ -6,12 +6,17 @@ import 'package:taskr/shared/constants.dart';
 
 class PerformanceService {
   PerformanceService._internal();
-  final _db = FirebaseFirestore.instance;
+  // `late` so a test can inject a fake via [db] before the real instance is
+  // touched (Firebase isn't initialized under `flutter test`).
+  late FirebaseFirestore _db = FirebaseFirestore.instance;
   static final _instance = PerformanceService._internal();
 
   factory PerformanceService() {
     return _instance;
   }
+
+  @visibleForTesting
+  set db(FirebaseFirestore db) => _db = db;
 
   DocumentReference<Map<String, dynamic>> score(String userId) {
     return _db.collection('todos').doc(userId);
@@ -50,7 +55,10 @@ class PerformanceService {
   Future<void> updatePerfomanceStats(String userId, Task task, bool shouldAdd) async {
     final date = task.dueDate ?? DateService().getString(DateTime.now());
     final currentRef = await score(userId).collection('performance').doc(date).get();
-    final completed = currentRef.exists ? currentRef.data()!['completed'] : {};
+    // A perf doc can exist with only a `pushed`/`date` field (see recordPush) and
+    // no `completed` map — guard against null so Map.from() doesn't throw, which
+    // would otherwise abort the caller before the task is marked complete.
+    final completed = (currentRef.exists && currentRef.data()!['completed'] != null) ? currentRef.data()!['completed'] : {};
     final points = getScore(task.priority);
     var update = Map.from(completed);
     if (update.containsKey('ALL')) {

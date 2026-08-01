@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+/// Owner account. Features backed by the owner's personal integrations
+/// (Garmin health sync, journaling) are gated to this email.
+const ownerEmail = 'rjw1428@gmail.com';
+
 enum Effort { high, medium, low, info }
 
 Map<Effort, Color> priorityColors = {

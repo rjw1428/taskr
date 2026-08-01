@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:rxdart/rxdart.dart';
+import 'package:taskr/shared/constants.dart';
 
 // ignore: non_constant_identifier_names
 final WEB_CLIENT_ID = dotenv.env['WEB_CLIENT_ID'];
@@ -15,8 +16,16 @@ const _calendarScope = 'https://www.googleapis.com/auth/calendar';
 class AuthService {
   AuthService._internal();
   static final _instance = AuthService._internal();
-  final userStream = FirebaseAuth.instance.authStateChanges().shareReplay(maxSize: 1);
-  User? user = FirebaseAuth.instance.currentUser;
+  // `late` so tests can inject fakes (via [user]/[db] setters) before these
+  // initializers run — reading them otherwise touches real Firebase, which
+  // isn't initialized under `flutter test`.
+  late final userStream = FirebaseAuth.instance.authStateChanges().shareReplay(maxSize: 1);
+  late User? user = FirebaseAuth.instance.currentUser;
+
+  late FirebaseFirestore _db = FirebaseFirestore.instance;
+
+  @visibleForTesting
+  set db(FirebaseFirestore db) => _db = db;
 
   GoogleSignIn? _calendarSignIn;
   GoogleSignIn _getCalendarSignIn() {
@@ -74,24 +83,58 @@ class AuthService {
         await FirebaseAuth.instance.signInWithCredential(credential);
       }
       user = FirebaseAuth.instance.currentUser;
+      await ensureUserDoc();
     } catch (e) {
       debugPrint('Google sign-in error: $e');
     }
   }
 
+  /// Whether the signed-in user is the app owner. Features backed by the
+  /// owner's personal integrations (Garmin health sync, journaling) are
+  /// gated to this account.
+  bool get isOwner => user?.email == ownerEmail;
+
+  /// Provision a first-time user's root document. New accounts have no
+  /// `todos/{uid}` doc, which breaks score updates (`.update()` throws
+  /// `not-found`) and FCM-token storage. Create it once, without touching an
+  /// existing user's data.
+  Future<void> ensureUserDoc() async {
+    final uid = user?.uid;
+    if (uid == null) return;
+    final ref = _db.collection('todos').doc(uid);
+    final snap = await ref.get();
+    if (snap.exists) return;
+    await ref.set({
+      'currentScore': 0,
+      'email': user?.email,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   Future<Map<String, dynamic>?> getUserProfile(userId) async {
-    final docRef = FirebaseFirestore.instance.collection('todos').doc(userId);
+    final docRef = _db.collection('todos').doc(userId);
     final doc = await docRef.get();
     return doc.data();
   }
 
   Future<void> updateFcmToken(String userId, String fcmToken) async {
-    final userDoc = FirebaseFirestore.instance.collection('todos').doc(userId);
+    final userDoc = _db.collection('todos').doc(userId);
     await userDoc.update({'fcmToken': fcmToken});
     debugPrint('FCM token updated for user $userId');
   }
 
   Future<void> signOut() async {
+    // Clear the cached Google session too, otherwise the next login silently
+    // reuses the same account instead of showing the account picker.
+    if (!kIsWeb) {
+      try {
+        await GoogleSignIn(serverClientId: WEB_CLIENT_ID).disconnect();
+      } catch (_) {
+        try {
+          await GoogleSignIn(serverClientId: WEB_CLIENT_ID).signOut();
+        } catch (_) {}
+      }
+    }
     await FirebaseAuth.instance.signOut();
   }
 

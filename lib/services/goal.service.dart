@@ -9,8 +9,13 @@ import 'package:taskr/services/services.dart';
 import 'package:taskr/shared/shared.dart';
 
 class GoalService with ChangeNotifier {
-  final _db = FirebaseFirestore.instance;
+  // `late` so a test can inject a fake via [db] before the real instance is
+  // touched (Firebase isn't initialized under `flutter test`).
+  late FirebaseFirestore _db = FirebaseFirestore.instance;
   final _taskService = TaskService();
+
+  @visibleForTesting
+  set db(FirebaseFirestore db) => _db = db;
 
   // If fewer than this many days remain in the current week (including today),
   // generate tasks for next week instead. Otherwise a goal created late in the
@@ -248,8 +253,37 @@ class GoalService with ChangeNotifier {
 
   // --- Goal Task Queries ---
 
+  /// Progress for a goal, counted from the tasks actually tagged to it rather
+  /// than from a generation's derived `completedTaskIds` list. The old tally
+  /// silently undercounted whenever a task's id changed (e.g. a push) or a
+  /// completion happened outside the checkbox backfill. `weeksActive` still
+  /// comes from the number of generations.
+  ///
+  /// The live count uses a collection-group query on `(userId, goalId)`; if that
+  /// index is still building (or a task predates the `userId` stamp), it throws
+  /// and we fall back to the generation-based tally so the page still renders.
   Future<Map<String, int>> getGoalStats(String goalId) async {
+    final user = AuthService().user;
     final generations = await getGenerations(goalId);
+    if (user != null) {
+      try {
+        final snap = await _db
+            .collectionGroup('items')
+            .where('userId', isEqualTo: user.uid)
+            .where('goalId', isEqualTo: goalId)
+            .get();
+        final total = snap.size;
+        final completed = snap.docs.where((d) => d.data()['completed'] == true).length;
+        return {
+          'totalTasks': total,
+          'completedTasks': completed,
+          'weeksActive': generations.length,
+        };
+      } catch (e) {
+        debugPrint('getGoalStats live count failed, falling back to generations: $e');
+      }
+    }
+
     int totalTasks = 0;
     int completedTasks = 0;
     for (final gen in generations) {
