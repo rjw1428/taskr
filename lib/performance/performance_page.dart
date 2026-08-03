@@ -64,7 +64,11 @@ class CurrentScoreState extends State<CurrentScore> {
       );
     }
 
-    final chartData = performance.map((days) => days['completed'] as Map<String, dynamic>).toList();
+    // A perf doc can exist with only a `pushed`/`date` field (see
+    // PerformanceService.recordPush) and no `completed` map — default to an
+    // empty map so a non-null cast doesn't throw and blank the whole page.
+    final chartData =
+        performance.map((days) => (days['completed'] as Map<String, dynamic>?) ?? const <String, dynamic>{}).toList();
 
     // Y-axis max reflects the series actually shown: the total ('ALL') in Total
     // mode, or the largest per-effort value in Breakdown mode. Previously the max
