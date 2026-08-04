@@ -15,9 +15,18 @@ import 'package:taskr/shared/shared.dart';
 /// task flow, while the streak is tracked separately here and never affects the
 /// score.
 class HabitService {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  // `late` so a test can inject a fake via [db] before the real instance is
+  // touched (Firebase isn't initialized under `flutter test`).
+  late FirebaseFirestore _db = FirebaseFirestore.instance;
   final TaskService _taskService = TaskService();
   final DateService _dates = DateService();
+
+  @visibleForTesting
+  set db(FirebaseFirestore db) {
+    _db = db;
+    // ignore: invalid_use_of_visible_for_testing_member
+    _taskService.db = db; // keep the wrapped TaskService on the same fake
+  }
 
   // Guards against concurrent top-ups within the app (e.g. Habits list + List
   // tab both calling ensureInstances at once) creating duplicate instances.
@@ -65,9 +74,10 @@ class HabitService {
     return ref.id;
   }
 
-  /// Rolling top-up: materialize only the missing scheduled dates from
-  /// (lastMaterialized+1 or today) through today+horizon. Idempotent via the
-  /// lastMaterializedDate bookkeeping + an in-memory guard.
+  /// Rolling top-up: materialize the scheduled dates from (lastMaterialized+1 or
+  /// today) through today+horizon. Idempotent: it skips any date that already
+  /// has an instance, so a null/stale lastMaterializedDate (e.g. after an edit)
+  /// can never produce duplicates. The in-memory guard prevents concurrent runs.
   Future<void> ensureInstances(Habit h, {int horizonDays = 60}) async {
     if (h.status != 'active' || h.id == null) return;
     if (_materializing.contains(h.id)) return;
@@ -84,11 +94,21 @@ class HabitService {
       final until = today.add(Duration(days: horizonDays));
       if (windowStart.isAfter(until)) return;
 
+      // Dates that already have an instance for this habit — the authoritative
+      // dedupe. (Collection-group query on (userId, habitId); returns empty if
+      // the index isn't ready, in which case we fall back to the lastMaterialized
+      // window alone.)
+      final existingDates = (await _habitInstances(h.id!)).map((t) => t.dueDate).whereType<String>().toSet();
+
       final template = _toRecurringTask(h, start: windowStart, until: until);
       final instances = _taskService.generateInstancesInWindow(template, windowStart);
       String? lastDate = h.lastMaterializedDate;
       for (final inst in instances) {
         final dateStr = _dates.getString(inst);
+        if (existingDates.contains(dateStr)) {
+          lastDate = dateStr;
+          continue;
+        }
         await _taskService.addTask(Task(
           added: DateTime.now().millisecondsSinceEpoch,
           title: h.title,
