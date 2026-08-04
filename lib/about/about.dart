@@ -6,7 +6,7 @@ class AboutPage extends StatelessWidget {
 
   static const appName = 'taskr';
   static const appVersion = '1.2.0+4';
-  static const appCommit = 'f983ab6';
+  static const appCommit = '28b75bc';
 
   @override
   Widget build(BuildContext context) {
