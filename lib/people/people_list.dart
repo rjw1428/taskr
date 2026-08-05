@@ -1,8 +1,10 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:taskr/people/person_detail.dart';
 import 'package:taskr/people/person_form.dart';
+import 'package:taskr/services/auth.service.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/people.provider.dart';
 import 'package:taskr/people/person_avatar.dart';
@@ -18,6 +20,42 @@ class PeopleListPage extends StatefulWidget {
 class _PeopleListPageState extends State<PeopleListPage> {
   String _sortBy = 'name';
   String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSortPref();
+  }
+
+  // Sort choice persists per-user in the shared preferences doc
+  // (todos/{uid}/settings/preferences), the same place the theme is stored, so
+  // it survives leaving and reopening the list.
+  DocumentReference<Map<String, dynamic>>? _prefsRef() {
+    final uid = AuthService().user?.uid;
+    if (uid == null) return null;
+    return FirebaseFirestore.instance.collection('todos').doc(uid).collection('settings').doc('preferences');
+  }
+
+  Future<void> _loadSortPref() async {
+    try {
+      final snap = await _prefsRef()?.get();
+      final stored = snap?.data()?['peopleSortBy'] as String?;
+      if (stored != null && stored != _sortBy && mounted) {
+        setState(() => _sortBy = stored);
+      }
+    } catch (_) {
+      // Keep the default sort on read error.
+    }
+  }
+
+  Future<void> _setSort(String sortBy) async {
+    setState(() => _sortBy = sortBy);
+    try {
+      await _prefsRef()?.set({'peopleSortBy': sortBy}, SetOptions(merge: true));
+    } catch (_) {
+      // In-memory choice still applies; it'll re-sync on the next write.
+    }
+  }
 
   List<Person> _getSortedAndFiltered(List<Person> people) {
     var filtered = people
@@ -75,9 +113,7 @@ class _PeopleListPageState extends State<PeopleListPage> {
                           ],
                           selected: {_sortBy},
                           onSelectionChanged: (Set<String> newSelection) {
-                            setState(() {
-                              _sortBy = newSelection.first;
-                            });
+                            _setSort(newSelection.first);
                           },
                         ),
                       ],
