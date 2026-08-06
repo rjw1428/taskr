@@ -55,6 +55,7 @@ class TaskListState extends State<TaskListScreen> {
   bool _searchLoading = false;
   final TextEditingController _searchController = TextEditingController();
   Timer? _debounce;
+  StreamSubscription<String>? _tokenRefreshSub;
 
   @override
   void initState() {
@@ -67,6 +68,7 @@ class TaskListState extends State<TaskListScreen> {
   void dispose() {
     _searchController.dispose();
     _debounce?.cancel();
+    _tokenRefreshSub?.cancel();
     super.dispose();
   }
 
@@ -116,6 +118,15 @@ class TaskListState extends State<TaskListScreen> {
     } else {
       debugPrint('[Update FCM] No update required');
     }
+
+    // FCM rotates tokens on its own (reinstalls, restores, periodic rotation).
+    // Persist any rotation that happens while the app is running so the token
+    // in Firestore stays current and server-sent reminders keep reaching us.
+    _tokenRefreshSub ??=
+        FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+      debugPrint('[Update FCM] token refreshed; persisting');
+      AuthService().updateFcmToken(userId, newToken);
+    });
   }
 
   @override

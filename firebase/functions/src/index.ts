@@ -1101,6 +1101,16 @@ export const deliverReminder = onRequest(async (req, res) => {
         title: "Reminder",
         body: title,
       },
+      android: {
+        // Time-sensitive: high priority survives Doze/idle when the app is
+        // closed; channelId routes to the high-importance channel the app
+        // creates at runtime (otherwise Android falls back to a low-importance
+        // channel with no sound/heads-up).
+        priority: "high",
+        notification: {
+          channelId: "fcm_default_channel",
+        },
+      },
       data: {
         type: "task_reminder",
         taskId,
@@ -1109,7 +1119,21 @@ export const deliverReminder = onRequest(async (req, res) => {
       },
     };
 
-    await admin.messaging().send(message);
+    try {
+      await admin.messaging().send(message);
+    } catch (err) {
+      // A rotated/uninstalled token can never receive again. Clear it and stop
+      // retrying (return 200) instead of letting Cloud Tasks retry a dead send.
+      if ((err as {code?: string})?.code ===
+          "messaging/registration-token-not-registered") {
+        logger.warn(`Dead FCM token for user ${uid}; clearing`);
+        await admin.firestore().collection("todos").doc(uid)
+          .update({fcmToken: admin.firestore.FieldValue.delete()});
+        res.status(200).send("Dead token cleared");
+        return;
+      }
+      throw err;
+    }
     await recordNotification(uid, {
       title: "Reminder",
       body: title,
