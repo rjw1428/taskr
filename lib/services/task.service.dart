@@ -254,7 +254,9 @@ class TaskService {
     final parentRef = taskCollection(user.uid, defaultUnassignedDate).doc(child.parentId!);
     const completeTimeFormat = "${DateService.stringFmt} ${DateService.dbTimeFormat}";
 
-    await _db.runTransaction((transaction) async {
+    // A transaction needs a server round trip — the offline queue can't hold it,
+    // so `queueable: false`: a timeout here means the change really was lost.
+    await ackWrite(_db.runTransaction((transaction) async {
       final parentSnap = await transaction.get(parentRef);
       transaction.update(childRef, {
         'completed': completed,
@@ -270,7 +272,7 @@ class TaskService {
           'completed': count > 0 && done >= count,
         });
       }
-    });
+    }), action: "Couldn't update subtask", queueable: false);
   }
 
   /// Delete a parent, either removing its children too or orphaning them into
@@ -340,10 +342,22 @@ class TaskService {
         .toList();
   }
 
+  /// The date's tasks in `taskOrder` sequence.
+  ///
+  /// An id listed in `taskOrder` with no matching document is skipped, the same
+  /// way [streamTasks] filters the list the user actually sees. It used to
+  /// `firstWhere` without an `orElse` and threw `Bad state: No element` — which
+  /// aborted the whole save. That happens for real: a doc deleted on another
+  /// device, or simply a partially-populated local cache while offline.
   Future<List<Map<String, dynamic>>> getTasksInOrder(String userId, String? date) async {
     final order = await getTaskOrder(userId, date ?? defaultUnassignedDate);
     final tasks = await getTasks(userId, date ?? defaultUnassignedDate);
-    return order.map((id) => tasks.firstWhere((t) => t['id'] == id)).toList();
+    final byId = {for (final t in tasks) t['id'] as String: t};
+    final missing = order.where((id) => !byId.containsKey(id)).toList();
+    if (missing.isNotEmpty) {
+      debugPrint('taskOrder for ${date ?? defaultUnassignedDate} lists ${missing.length} unknown id(s): $missing');
+    }
+    return order.map((id) => byId[id]).whereType<Map<String, dynamic>>().toList();
   }
 
   Future<String> addDivider(String label, String? date) async {
@@ -376,56 +390,57 @@ class TaskService {
   /// generating a new one — used by [pushTask] to move a task to another day
   /// while preserving its document id, so links keyed off the id (e.g. a goal
   /// generation's `taskIds`) survive the push.
+  /// Every write here is *issued* before anything is awaited, then all of them
+  /// are ack-waited together. Awaiting one write before issuing the next would
+  /// strand the rest when the device is offline: Firestore leaves an
+  /// unacknowledged write's future pending forever, so the task document would
+  /// land in the local cache while its taskOrder entry never got written — and
+  /// the task would be invisible until the app came back online.
   Future<String> addTask(Task task, {String? existingId}) async {
     var user = AuthService().user;
     if (user == null) {
       throw "No user logged in when adding task";
     }
     final date = task.dueDate ?? defaultUnassignedDate;
-    final completer = Completer<String>();
 
     final data = removeNulls(task.toDbTask());
     // Stamp the owner so subtasks can be gathered via a collection-group query
     // across date partitions (see add-subtasks design).
     data['userId'] = user.uid;
-    // Insert into DB
-    final String id;
-    if (existingId != null) {
-      id = existingId;
-      await taskCollection(user.uid, date).doc(id).set(data);
-    } else {
-      id = await taskCollection(user.uid, date).add(data).then((DocumentReference ref) => ref.id);
-    }
+    // doc() mints the id client-side, so the caller still gets one when the
+    // write is only queued locally (add() would have to wait for the server).
+    final ref =
+        existingId != null ? taskCollection(user.uid, date).doc(existingId) : taskCollection(user.uid, date).doc();
+    final id = ref.id;
+    final orderDoc = _db.collection('todos').doc(user.uid).collection("tasks").doc(date);
+
+    final writes = <Future<void>>[ref.set(data)];
 
     // -- Smart Ordering --
-    // If backloged, add to end
     if (task.dueDate == null) {
-      await _db.collection('todos').doc(user.uid).collection("tasks").doc(date).set({
+      // If backloged, add to end
+      writes.add(orderDoc.set({
         "taskOrder": FieldValue.arrayUnion([id])
-      }, SetOptions(merge: true));
-
-      completer.complete(id);
-      await _syncCountdownIndex(user.uid, task.copyWith(id: id));
-      return completer.future;
+      }, SetOptions(merge: true)));
+    } else {
+      // A read, not a write: served from the local cache while offline.
+      final tasks = await getTasksInOrder(user.uid, task.dueDate!);
+      // Slot the new task in, preserving the order of everything else. See
+      // TaskOrdering for the placement rules (Info-pin, before-completed,
+      // timed-chronological).
+      final newOrder = TaskOrdering.insertInto(
+        tasks,
+        id,
+        priority: task.priority,
+        startTime: task.startTime,
+        endTime: task.endTime,
+      );
+      writes.add(orderDoc.set({"taskOrder": newOrder}));
     }
 
-    List<Map<String, dynamic>> tasks = await getTasksInOrder(user.uid, task.dueDate!);
-
-    // Slot the new task in, preserving the order of everything else. See
-    // TaskOrdering for the placement rules (Info-pin, before-completed,
-    // timed-chronological).
-    final newOrder = TaskOrdering.insertInto(
-      tasks,
-      id,
-      priority: task.priority,
-      startTime: task.startTime,
-      endTime: task.endTime,
-    );
-    await _db.collection('todos').doc(user.uid).collection("tasks").doc(date).set({"taskOrder": newOrder});
-
-    completer.complete(id);
-    await _syncCountdownIndex(user.uid, task.copyWith(id: id));
-    return completer.future;
+    writes.add(_syncCountdownIndex(user.uid, task.copyWith(id: id)));
+    await ackWrite(Future.wait(writes), action: "Couldn't save task");
+    return id;
   }
 
   Future<void> updateTask(String id, Task newTask, Task oldTask) async {
@@ -434,14 +449,23 @@ class TaskService {
       throw "No user logged in when adding task";
     }
     final date = newTask.dueDate ?? defaultUnassignedDate;
-    if (oldTask.completed && newTask.priority != oldTask.priority) {
-      await PerformanceService().updatePerfomanceStats(user.uid, oldTask, false);
-      await PerformanceService().updatePerfomanceStats(user.uid, newTask, true);
-    }
     final data = removeNulls(newTask.toDbTask());
     data['userId'] = user.uid; // keep owner stamp so collection-group subtask reads still match
-    await taskCollection(user.uid, date).doc(id).set(data);
-    await _syncCountdownIndex(user.uid, newTask.copyWith(id: id));
+
+    // Issued together, ack-waited once — see addTask.
+    final writes = <Future<void>>[
+      taskCollection(user.uid, date).doc(id).set(data),
+      _syncCountdownIndex(user.uid, newTask.copyWith(id: id)),
+    ];
+    if (oldTask.completed && newTask.priority != oldTask.priority) {
+      // Both read-modify-write the same perf doc, so they stay sequential with
+      // respect to each other — just not ahead of the task write.
+      writes.add(Future(() async {
+        await PerformanceService().updatePerfomanceStats(user.uid, oldTask, false);
+        await PerformanceService().updatePerfomanceStats(user.uid, newTask, true);
+      }));
+    }
+    await ackWrite(Future.wait(writes), action: "Couldn't save task");
   }
 
   Future<void> updateTaskByKey(Map<String, dynamic> update, Task task) async {
@@ -451,13 +475,15 @@ class TaskService {
     if (user == null) {
       throw "No user logged in when completing task";
     } else {
+      // Issued together, ack-waited once — see addTask.
+      final writes = <Future<void>>[taskCollection(user.uid, date).doc(taskId).update(update)];
       if (update.containsKey('completed')) {
-        await PerformanceService().updatePerfomanceStats(user.uid, task, !!update['completed']);
+        writes.add(PerformanceService().updatePerfomanceStats(user.uid, task, !!update['completed']));
         if (update['completed'] == true && task.countdown) {
-          await countdownCollection(user.uid).doc(taskId).delete().catchError((_) {});
+          writes.add(countdownCollection(user.uid).doc(taskId).delete().catchError((_) {}));
         }
       }
-      return await taskCollection(user.uid, date).doc(taskId).update(update);
+      await ackWrite(Future.wait(writes), action: "Couldn't update task");
     }
   }
 
@@ -469,18 +495,26 @@ class TaskService {
       throw "No user logged in when deleting task";
     } else {
       if (task.reminderTaskName != null) {
-        await ReminderService().cancelReminder(task);
+        // A callable function, not a queueable write: it can't be deferred, but
+        // it must not block the delete either.
+        unawaited(ReminderService()
+            .cancelReminder(task)
+            .catchError((Object e, StackTrace s) => reportError(e, s, "Couldn't cancel the task's reminder")));
       }
-      await _db.collection('todos').doc(user.uid).collection("tasks").doc(date).set({
-        "taskOrder": FieldValue.arrayRemove([taskId])
-      }, SetOptions(merge: true));
+      // Issued together, ack-waited once — see addTask.
+      final writes = <Future<void>>[
+        taskCollection(user.uid, date).doc(taskId).delete(),
+        _db.collection('todos').doc(user.uid).collection("tasks").doc(date).set({
+          "taskOrder": FieldValue.arrayRemove([taskId])
+        }, SetOptions(merge: true)),
+      ];
       if (task.completed && !task.isDivider) {
-        await PerformanceService().updatePerfomanceStats(user.uid, task, false);
+        writes.add(PerformanceService().updatePerfomanceStats(user.uid, task, false));
       }
       if (task.countdown) {
-        await countdownCollection(user.uid).doc(taskId).delete().catchError((_) {});
+        writes.add(countdownCollection(user.uid).doc(taskId).delete().catchError((_) {}));
       }
-      return await taskCollection(user.uid, date).doc(taskId).delete();
+      await ackWrite(Future.wait(writes), action: "Couldn't delete task");
     }
   }
 
@@ -616,10 +650,10 @@ class TaskService {
       final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable(name);
       final result = await callable.call(payload);
       debugPrint('trainScheduleTest result: ${result.data}');
-    } on FirebaseFunctionsException catch (e) {
-      debugPrint('Firebase Functions Exception: ${e.code} - ${e.message}');
-    } catch (e) {
-      debugPrint('Generic Exception: $e');
+    } on FirebaseFunctionsException catch (e, s) {
+      reportError(e, s, 'Server call "$name" failed');
+    } catch (e, s) {
+      reportError(e, s, 'Server call "$name" failed');
     }
   }
 
@@ -629,8 +663,8 @@ class TaskService {
       final resp = await recurringTempateCollection(user.uid).add(template.toJson());
       final templateId = resp.id;
       return templateId;
-    } catch (e) {
-      debugPrint('$e');
+    } catch (e, s) {
+      reportError(e, s, "Couldn't save recurring task");
       return null;
     }
   }
@@ -803,8 +837,8 @@ class TaskService {
     try {
       await _deleteRecurringInstances(task.recurringTemplateId!, template);
       await recurringTempateCollection(user.uid).doc(task.recurringTemplateId).delete();
-    } catch (e) {
-      debugPrint('$e');
+    } catch (e, s) {
+      reportError(e, s, "Couldn't delete the recurring series");
     }
   }
 

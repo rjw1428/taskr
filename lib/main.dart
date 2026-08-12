@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -45,7 +46,23 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 void main() async {
+  // Everything runs inside a guarded zone so a write that fails without a local
+  // try/catch (most `await service.x()` calls in button handlers) surfaces as an
+  // error snackbar instead of dying silently in the console.
+  runZonedGuarded(_bootstrap, (error, stack) => reportError(error, stack));
+}
+
+Future<void> _bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    debugPrint('Flutter error: ${details.exception}');
+  };
+  // Errors from platform callbacks that never reach the zone handler.
+  PlatformDispatcher.instance.onError = (error, stack) {
+    reportError(error, stack);
+    return true;
+  };
   await dotenv.load(fileName: ".env");
   try {
     await Firebase.initializeApp(
@@ -270,6 +287,7 @@ class _MyAppState extends State<MyApp> {
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) => MaterialApp(
           navigatorKey: navigatorKey, // Set the navigator key
+          scaffoldMessengerKey: scaffoldMessengerKey, // lets services surface write errors
           debugShowCheckedModeBanner: false,
           theme: lightTheme,
           darkTheme: darkTheme,

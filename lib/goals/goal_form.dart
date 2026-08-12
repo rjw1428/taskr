@@ -79,8 +79,8 @@ class _GoalFormState extends State<GoalForm> {
 
         try {
           await goalService.generateTasksForGoal(goal);
-        } catch (e) {
-          debugPrint('Task generation failed: $e');
+        } catch (e, s) {
+          reportError(e, s, "Couldn't generate tasks for the goal");
         }
       } else {
         final endDate = Goal.computeEndDate(widget.goal!.startDate, _timeframe);

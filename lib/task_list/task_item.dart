@@ -358,8 +358,8 @@ class TaskItemState extends State<TaskItem> {
           break;
         }
       }
-    } catch (e) {
-      debugPrint('Error backfilling goal generation: $e');
+    } catch (e, s) {
+      reportError(e, s, "Couldn't update the goal's progress");
     }
   }
 

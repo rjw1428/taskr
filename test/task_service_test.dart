@@ -43,6 +43,22 @@ void main() {
     expect(await order('2026-08-01'), [a, b]);
   });
 
+  // Regression: taskOrder listing an id with no document (deleted on another
+  // device, or a partially-populated offline cache) threw `Bad state: No
+  // element` out of getTasksInOrder and aborted the whole save.
+  test('a stale id in taskOrder is skipped instead of failing the save', () async {
+    final a = await service.addTask(t('a', date: '2026-08-01'));
+    await fake.collection('todos').doc(uid).collection('tasks').doc('2026-08-01').set({
+      'taskOrder': [a, 'ghost-id']
+    });
+
+    expect(await service.getTasksInOrder(uid, '2026-08-01'), hasLength(1));
+
+    final b = await service.addTask(t('b', date: '2026-08-01'));
+    expect(await order('2026-08-01'), contains(b));
+    expect((await item('2026-08-01', b))!['title'], 'b');
+  });
+
   // Regression: push used to delete + re-add with a NEW id, breaking id-keyed
   // links (e.g. a goal generation's taskIds). It now moves the doc, same id.
   test('pushTask moves the task to the next day keeping the same document id', () async {
