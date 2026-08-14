@@ -42,7 +42,7 @@ class FirebaseMessageService {
     // only from an actual tap, so arrival does nothing but draw the prompt —
     // acting on the declared actions here would pay for parking unprompted.
     if (message.data['type'] == parkingPromptType) {
-      await showParkingPrompt();
+      await showParkingPrompt(message.data);
       return;
     }
 
@@ -94,9 +94,11 @@ class FirebaseMessageService {
       handleMessage(message);
     });
 
-    FirebaseMessaging.onBackgroundMessage((message) async {
-      handleMessage(message);
-    });
+    // No onBackgroundMessage registration here. It is registered once in
+    // main.dart with a top-level `@pragma('vm:entry-point')` function, which is
+    // what the background isolate requires — a closure like the one that used to
+    // live here cannot be resolved across the isolate boundary, and registering
+    // it second silently replaced the working handler.
 
     init = true;
   }

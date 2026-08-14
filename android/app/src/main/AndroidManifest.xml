@@ -26,6 +26,13 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Receives taps on notification action buttons (the parking prompt's
+             Yes/No). flutter_local_notifications does not declare this in its
+             own manifest, so without it a tap has no receiver and silently does
+             nothing — the notification renders its buttons either way. -->
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver"
+            android:exported="false" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

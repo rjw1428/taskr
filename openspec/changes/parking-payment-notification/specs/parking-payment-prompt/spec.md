@@ -149,6 +149,13 @@ delivered at high priority on the high-importance Android channel so it surfaces
 while the device is idle, and SHALL be displayed whether the app is in the
 foreground, backgrounded, or not running.
 
+#### Scenario: Exactly one notification results from one push
+
+- **WHEN** a single parking prompt push is delivered while the app is not in the
+  foreground
+- **THEN** exactly one notification is displayed, drawn by the client and
+  carrying both actions, with no second system-drawn copy
+
 #### Scenario: Prompt is displayed with both actions
 
 - **WHEN** the client receives a message identifying itself as a parking prompt
@@ -165,6 +172,36 @@ foreground, backgrounded, or not running.
 - **WHEN** the user selects the No action
 - **THEN** the notification is dismissed, no network request is made, and no
   state is written
+
+### Requirement: The prompt remains answerable inside the app
+
+The notification's action buttons SHALL NOT be the only way to answer the
+prompt. Opening the app from the prompt, or reaching the prompt in the in-app
+notification centre, SHALL present the same yes/no question, because the
+notification's buttons are unavailable once it has been dismissed or its body
+tapped.
+
+#### Scenario: User taps the notification body
+
+- **WHEN** the user taps the body of the prompt rather than one of its actions
+- **THEN** the app opens and presents the same yes/no question
+
+#### Scenario: User taps the body while the app is not running
+
+- **WHEN** the tap launches the app from a terminated state
+- **THEN** the question is presented once the app is ready
+
+#### Scenario: User opens an already-dismissed prompt from the notification centre
+
+- **WHEN** the user selects a recorded parking prompt in the in-app notification
+  centre
+- **THEN** the same yes/no question is presented
+
+#### Scenario: In-app answer reports its outcome inline
+
+- **WHEN** the user answers yes from inside the app
+- **THEN** the outcome is reported within the app rather than as another
+  notification, and still does not claim that parking has been paid for
 
 ### Requirement: Yes triggers an authenticated parking request
 

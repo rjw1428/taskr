@@ -108,7 +108,16 @@ class _NotificationTile extends StatelessWidget {
                 style: theme.textTheme.labelSmall?.copyWith(color: t.textFaint)),
           ],
         ),
-        onTap: unread ? () => service.markRead(notification.id!) : null,
+        // A parking prompt stays answerable from here after its notification is
+        // gone from the shade — that is the only remaining way to act on it.
+        onTap: () {
+          if (unread && notification.id != null) {
+            service.markRead(notification.id!);
+          }
+          if (notification.type == parkingPromptType) {
+            showParkingPromptDialog(context);
+          }
+        },
       ),
     );
   }

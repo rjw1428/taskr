@@ -1,6 +1,8 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+import 'package:taskr/shared/error_reporting.dart';
 
 import 'parking.service.dart';
 
@@ -12,6 +14,12 @@ const String parkingResultType = 'septapark';
 
 const String payParkingAction = 'pay-parking';
 const String dismissParkingAction = 'dismiss-parking';
+
+/// Marks a notification as the parking prompt so a tap on its *body* — which
+/// carries no action id and merely opens the app — can be recognised and
+/// answered with the in-app dialog instead of dropping the user somewhere with
+/// no way to act.
+const String parkingPromptPayload = 'parking-prompt';
 
 const int _parkingPromptId = 90001;
 const int _parkingResultId = 90002;
@@ -40,7 +48,10 @@ Future<void> _ensureEnvLoaded() async {
 }
 
 /// Displays the parking prompt, unless parking is already covered.
-Future<void> showParkingPrompt() async {
+///
+/// The push is data-only — a `notification` block would make Android draw its
+/// own buttonless copy alongside this one — so nothing appears unless this runs.
+Future<void> showParkingPrompt([Map<String, dynamic>? data]) async {
   await _ensureEnvLoaded();
 
   // Skip a prompt that could not do anything useful. This fails open: only an
@@ -53,8 +64,8 @@ Future<void> showParkingPrompt() async {
 
   await _plugin.show(
     _parkingPromptId,
-    'Pay for parking?',
-    'Your train is leaving. Want to pay for parking?',
+    data?['title'] as String? ?? 'Pay for parking?',
+    data?['body'] as String? ?? 'Your train is leaving. Want to pay for parking?',
     NotificationDetails(
       android: AndroidNotificationDetails(
         _parkingChannel.id,
@@ -80,7 +91,41 @@ Future<void> showParkingPrompt() async {
         ],
       ),
     ),
+    payload: parkingPromptPayload,
   );
+}
+
+/// Asks in-app whether to pay for parking.
+///
+/// The notification's buttons are the fast path, but they are gone once it is
+/// dismissed or tapped on the body — and a tap that opens the app with no way
+/// to answer is a dead end. This is the same question, reachable from inside.
+Future<void> showParkingPromptDialog(BuildContext context) async {
+  final pay = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Pay for parking?'),
+      content: const Text('Buy a parking session for today?'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('No'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Yes'),
+        ),
+      ],
+    ),
+  );
+
+  if (pay != true) return;
+
+  final result = await ParkingService().triggerParking();
+  // The app is open, so report inline rather than as another notification.
+  scaffoldMessengerKey.currentState
+    ?..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(result.message)));
 }
 
 /// Runs the action the user selected on a notification.

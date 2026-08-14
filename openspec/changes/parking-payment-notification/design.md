@@ -155,6 +155,52 @@ data-carrying message and displayed by the client through
   currently a debug print, to actually display the notification for this message
   type when the app is backgrounded.
 
+### The prompt push is data-only
+
+The prompt carries no `notification` block; its title and body ride inside
+`data`. Android's FCM SDK auto-displays any message that has a `notification`
+block whenever the app is not in the foreground, and that system-drawn copy has
+no action buttons and merely opens the app on tap. It also arrives *alongside*
+the one the client draws — so a single push produced two notifications, the
+useless one first.
+
+This is the one arrangement that cannot be worked around client-side: the
+auto-display happens before any Dart code runs. Data-only is what makes the
+client the sole author of the notification.
+
+*Consequence.* Nothing is displayed unless the client draws it, so the
+background handler must initialize `WidgetsFlutterBinding` before touching the
+plugin or reading the `.env` asset — a cold isolate has no platform channels.
+A force-stopped app also receives no data messages at all, which is accepted.
+
+### Declare ActionBroadcastReceiver in the app manifest
+
+`flutter_local_notifications` 18.0.1 ships a manifest containing only
+permissions — no receivers. An app using notification actions has to declare
+`com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver` itself.
+Without it the buttons still render and still carry pending intents, but those
+intents target a component that does not exist, so a tap does nothing at all.
+Taskr had never needed this, because nothing used action buttons before.
+
+### The notification is not the only way to answer
+
+Action buttons are the fast path, but they vanish the moment the notification is
+dismissed or its body is tapped — and a body tap merely opens the app, which
+strands the user with the question and no way to answer it. So the same yes/no
+is reachable in-app: on a body tap (live or via launch details after a cold
+start) and from the notification centre entry, which outlives the shade.
+
+Answering in-app reports its outcome as a snackbar rather than another
+notification, since the app is by definition in front of the user there. The
+"accepted, not paid" wording is the same in both paths.
+
+### Register exactly one background message handler
+
+`FirebaseMessaging.onBackgroundMessage` must be given a top-level function
+annotated `@pragma('vm:entry-point')`; a closure cannot be resolved across the
+isolate boundary. Registering a second handler silently replaces the first, so
+there is exactly one registration, in `main.dart`.
+
 ### Generalize the client's action dispatch
 
 `handleMessage`'s `actions[0]['action']` is replaced by dispatch on the action

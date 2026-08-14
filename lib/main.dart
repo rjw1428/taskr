@@ -43,28 +43,80 @@ const local_notifications.AndroidNotificationChannel _fcmChannel =
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // This isolate starts cold — main() has not run in it. Without a binding
+  // there are no platform channels, and without a Firebase app the handler
+  // throws before reaching any of our code, silently drawing nothing.
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  } catch (e) {
+    debugPrint('Firebase already initialized in background isolate: $e');
+  }
+
   debugPrint('Handling a background message: ${message.data}');
 
   // The prompt has to be drawn locally even with the app terminated, because
-  // FCM cannot render the Yes/No action buttons itself.
+  // FCM cannot render the Yes/No action buttons itself. The push is data-only,
+  // so if this does not draw it, nothing does.
   if (message.data['type'] == parkingPromptType) {
-    await _initLocalNotifications();
-    await showParkingPrompt();
+    try {
+      await _initLocalNotifications();
+      await showParkingPrompt(message.data);
+    } catch (e, s) {
+      // A throw here is invisible in release, and the symptom is simply no
+      // notification — the hardest possible thing to diagnose from a phone.
+      debugPrint('Failed to draw parking prompt: $e\n$s');
+    }
   }
 }
 
 /// Runs when the user taps a notification action while the app is not running.
+///
 /// Must be a top-level entry point: a closure or instance method would not
-/// survive the isolate boundary.
+/// survive the isolate boundary. Like the FCM background handler, this isolate
+/// starts cold — it needs a binding before any platform channel works, and the
+/// returned future must be awaited by the caller or the isolate can be torn
+/// down before the network call it starts has finished.
 @pragma('vm:entry-point')
-void notificationBackgroundResponseHandler(
+Future<void> notificationBackgroundResponseHandler(
   local_notifications.NotificationResponse response,
-) {
-  handleParkingAction(response.actionId);
+) async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  } catch (e) {
+    debugPrint('Firebase already initialized in action isolate: $e');
+  }
+  // The plugin has never been initialized in this isolate, and the handler
+  // reports its outcome by showing a notification.
+  await _initLocalNotifications();
+  debugPrint('Notification action (background): ${response.actionId}');
+  await handleParkingAction(response.actionId);
 }
 
-void _onNotificationResponse(local_notifications.NotificationResponse response) {
-  handleParkingAction(response.actionId);
+Future<void> _onNotificationResponse(
+  local_notifications.NotificationResponse response,
+) async {
+  debugPrint('Notification action (foreground): ${response.actionId}');
+  if (await handleParkingAction(response.actionId)) return;
+
+  // No action id means the body was tapped, which only opens the app. Ask the
+  // question again in-app rather than stranding the user with no way to answer.
+  if (response.payload == parkingPromptPayload) {
+    _promptForParkingInApp();
+  }
+}
+
+/// Shows the parking dialog once a route is available to host it.
+void _promptForParkingInApp() {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    final context = navigatorKey.currentContext;
+    if (context == null) {
+      debugPrint('Cannot show parking dialog without a context');
+      return;
+    }
+    showParkingPromptDialog(context);
+  });
 }
 
 /// Initializes the local notifications plugin and its channel. Safe to call
@@ -267,7 +319,7 @@ class _MyAppState extends State<MyApp> {
       } else if (message.data['type'] == parkingPromptType) {
         // Checked before the generic `actions` branch below: the parking prompt
         // also carries an `actions` payload, but it is not a wind task.
-        showParkingPrompt();
+        showParkingPrompt(message.data);
       } else if (message.data['type'] == parkingResultType) {
         showParkingResult(message.data);
       } else if (message.data.containsKey('actions')) {
@@ -296,6 +348,18 @@ class _MyAppState extends State<MyApp> {
       if (message.data['type'] == parkingPromptType) return;
       if (message.data.containsKey('actions')) {
         _showWindTaskDialog(message);
+      }
+    });
+
+    // Cold start: the app was launched by tapping the prompt itself, so the tap
+    // arrives as launch details rather than a live callback. An actionId here
+    // means a button was used and the background handler already ran it.
+    flutterLocalNotificationsPlugin.getNotificationAppLaunchDetails().then((d) {
+      final response = d?.notificationResponse;
+      if (d?.didNotificationLaunchApp == true &&
+          response?.payload == parkingPromptPayload &&
+          response?.actionId == null) {
+        _promptForParkingInApp();
       }
     });
   }

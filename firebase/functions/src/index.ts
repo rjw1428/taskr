@@ -1279,18 +1279,26 @@ export const deliverParkingPrompt = onRequest(async (req, res) => {
     const title = "Pay for parking?";
     const body = "Your train is leaving. Want to pay for parking?";
 
-    // The actions are declared in the data payload; FCM cannot render action
-    // buttons itself, so the client draws the notification from this.
+    // The client draws this notification itself, because FCM cannot render
+    // action buttons. Title and body ride in `data` so they are still available
+    // to the client and to the notification centre record.
     const data = {
       type: "parking_prompt",
       taskId,
       taskDate,
+      title,
+      body,
       actions: JSON.stringify([
         {action: "pay-parking", title: "Yes"},
         {action: "dismiss-parking", title: "No"},
       ]),
     };
 
+    // Data-only, deliberately: a message carrying a `notification` block is
+    // auto-displayed by the Android FCM SDK whenever the app is not in the
+    // foreground. That system-drawn copy has no action buttons and merely opens
+    // the app, and it arrives *alongside* the one the client draws — two
+    // notifications from one push, the useless one first.
     const message: Message = {
       // Non-null: decision.send is only true when a token is present.
       token: fcmToken!,
@@ -1298,11 +1306,7 @@ export const deliverParkingPrompt = onRequest(async (req, res) => {
         // High priority so it survives Doze — this lands at departure time and
         // is useless if it is held until the phone is next unlocked.
         priority: "high",
-        notification: {
-          channelId: "fcm_default_channel",
-        },
       },
-      notification: {title, body},
       data,
     };
 
