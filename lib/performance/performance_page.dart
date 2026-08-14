@@ -105,7 +105,8 @@ class CurrentScoreState extends State<CurrentScore> {
       pushedByDate[DateService().getString(ts.toDate())] = (pushed?['ALL'] as int?) ?? 0;
     }
     final pushedDays = List.generate(7, (i) => DateTime.now().subtract(Duration(days: 6 - i)));
-    final pushedValues = pushedDays.map((d) => pushedByDate[DateService().getString(d)] ?? 0).toList();
+    final pushedDayKeys = pushedDays.map((d) => DateService().getString(d)).toList();
+    final pushedValues = pushedDayKeys.map((k) => pushedByDate[k] ?? 0).toList();
     final pushedLabels = pushedDays.map((d) => DateFormat('E').format(d)).toList();
 
     return SingleChildScrollView(
@@ -207,7 +208,14 @@ class CurrentScoreState extends State<CurrentScore> {
           const SizedBox(height: Insets.lg),
           AppCard(child: PerformanceHeatmap(userId: widget.userId)),
           const SizedBox(height: Insets.lg),
-          _PushedChartCard(values: pushedValues, labels: pushedLabels),
+          _PushedChartCard(
+            values: pushedValues,
+            labels: pushedLabels,
+            // The last entry is today; a day's leftovers aren't "missed" until
+            // it's over, so today contributes no missed points.
+            dayKeys: pushedDayKeys.sublist(0, pushedDayKeys.length - 1),
+            userId: widget.userId,
+          ),
           const SizedBox(height: Insets.lg),
           Padding(
             padding: const EdgeInsets.only(left: Insets.xs, bottom: Insets.sm),
@@ -392,11 +400,22 @@ class _LegendDot extends StatelessWidget {
   }
 }
 
-/// Bar chart of effort points pushed (deferred) off each of the last 7 days.
+/// Stacked bar chart of effort points lost off each of the last 7 days: points
+/// pushed (deferred to another day) plus points missed (left incomplete and
+/// never pushed). Today has no missed segment — the day isn't over yet.
 class _PushedChartCard extends StatelessWidget {
-  final List<int> values; // oldest -> today
+  final List<int> values; // pushed, oldest -> today
   final List<String> labels;
-  const _PushedChartCard({required this.values, required this.labels});
+  /// Day strings for the past days only (i.e. `labels` minus today), used to
+  /// look up missed points; index i lines up with bar i.
+  final List<String> dayKeys;
+  final String userId;
+  const _PushedChartCard({
+    required this.values,
+    required this.labels,
+    required this.dayKeys,
+    required this.userId,
+  });
 
   double _leftInterval(int maxV) {
     if (maxV <= 4) return 1;
@@ -406,27 +425,51 @@ class _PushedChartCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return StreamBuilder<Map<String, int>>(
+      stream: TaskService().streamMissedPoints(userId, dayKeys),
+      builder: (context, snap) {
+        // Until the missed tally arrives, render pushed-only rather than a
+        // spinner — the chart is already meaningful without it.
+        final missedByDate = snap.data ?? const <String, int>{};
+        final missed = List.generate(
+          values.length,
+          (i) => i < dayKeys.length ? (missedByDate[dayKeys[i]] ?? 0) : 0,
+        );
+        return _buildCard(context, missed);
+      },
+    );
+  }
+
+  Widget _buildCard(BuildContext context, List<int> missed) {
     final theme = Theme.of(context);
     final t = theme.appTokens;
-    final total = values.fold<int>(0, (a, b) => a + b);
-    final maxV = values.fold<int>(0, (a, b) => a > b ? a : b);
+    final pushedColor = theme.colorScheme.error;
+    final missedColor = t.of(Effort.medium).accent;
+    final totalPushed = values.fold<int>(0, (a, b) => a + b);
+    final totalMissed = missed.fold<int>(0, (a, b) => a + b);
+    final total = totalPushed + totalMissed;
+    var maxV = 0;
+    for (int i = 0; i < values.length; i++) {
+      final stack = values[i] + missed[i];
+      if (stack > maxV) maxV = stack;
+    }
 
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Points pushed', style: theme.textTheme.titleMedium),
+          Text('Points lost', style: theme.textTheme.titleMedium),
           const SizedBox(height: 2),
-          Text('$total ${total == 1 ? 'point' : 'points'} deferred · last 7 days',
+          Text('$totalPushed deferred · $totalMissed missed · last 7 days',
               style: theme.textTheme.bodySmall?.copyWith(color: t.textFaint)),
           const SizedBox(height: Insets.md),
           if (total == 0)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: Insets.lg),
-              child: Text('Nothing pushed — nice.',
+              child: Text('Nothing pushed or missed — nice.',
                   style: theme.textTheme.bodySmall?.copyWith(color: t.textMuted)),
             )
-          else
+          else ...[
             SizedBox(
               height: 150,
               child: BarChart(BarChartData(
@@ -469,25 +512,48 @@ class _PushedChartCard extends StatelessWidget {
                 barTouchData: BarTouchData(
                   touchTooltipData: BarTouchTooltipData(
                     getTooltipColor: (_) => t.surfaceRaised,
-                    getTooltipItem: (group, gi, rod, ri) => BarTooltipItem(
-                      '${rod.toY.toInt()} pts',
-                      TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.w600),
-                    ),
+                    getTooltipItem: (group, gi, rod, ri) {
+                      final i = group.x;
+                      final parts = <String>[
+                        if (values[i] > 0) '${values[i]} pushed',
+                        if (missed[i] > 0) '${missed[i]} missed',
+                      ];
+                      return BarTooltipItem(
+                        parts.join('\n'),
+                        TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.w600),
+                      );
+                    },
                   ),
                 ),
                 barGroups: [
                   for (int i = 0; i < values.length; i++)
                     BarChartGroupData(x: i, barRods: [
                       BarChartRodData(
-                        toY: values[i].toDouble(),
-                        color: theme.colorScheme.error,
+                        toY: (values[i] + missed[i]).toDouble(),
+                        color: pushedColor,
                         width: 14,
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                        // Pushed sits on the baseline, missed stacks above it.
+                        rodStackItems: [
+                          BarChartRodStackItem(0, values[i].toDouble(), pushedColor),
+                          BarChartRodStackItem(
+                              values[i].toDouble(), (values[i] + missed[i]).toDouble(), missedColor),
+                        ],
                       ),
                     ]),
                 ],
               )),
             ),
+            const SizedBox(height: Insets.md),
+            Wrap(
+              spacing: Insets.lg,
+              runSpacing: Insets.sm,
+              children: [
+                _LegendDot(color: pushedColor, label: 'Pushed'),
+                _LegendDot(color: missedColor, label: 'Missed'),
+              ],
+            ),
+          ],
         ],
       ),
     );
