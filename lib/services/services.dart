@@ -12,3 +12,5 @@ export 'calendar.service.dart';
 export 'journal.service.dart';
 export 'health.service.dart';
 export 'reminder.service.dart';
+export 'parking.service.dart';
+export 'parking_notifications.dart';

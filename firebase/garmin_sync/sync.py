@@ -84,6 +84,40 @@ def fetch_day(garmin: Garmin, day: date) -> dict | None:
     return doc
 
 
+def notify_failure(summary: str) -> None:
+    """Best-effort FCM alert to the taskr user when a sync run fails.
+
+    Scheduled-function failures surface nowhere the user would notice, which is
+    how a dead token went unseen for weeks. This pushes a high-priority
+    notification so a broken sync is caught the next morning, not the next month.
+    Never raises: alerting must not mask or replace the original error.
+    """
+    try:
+        from firebase_admin import messaging
+
+        db = firestore.client()
+        uid = resolve_uid()
+        token = (db.collection("todos").document(uid).get().to_dict() or {}).get("fcmToken")
+        if not token:
+            print("notify_failure: no fcmToken on user; skipping alert", flush=True)
+            return
+        messaging.send(messaging.Message(
+            token=token,
+            notification=messaging.Notification(
+                title="Garmin sync failed",
+                body=summary,
+            ),
+            android=messaging.AndroidConfig(
+                priority="high",
+                notification=messaging.AndroidNotification(channel_id="fcm_default_channel"),
+            ),
+            data={"type": "garmin_sync_error"},
+        ))
+        print("notify_failure: alert sent", flush=True)
+    except Exception as e:  # noqa: BLE001 - alerting is best-effort
+        print(f"notify_failure: could not send alert: {e}", flush=True)
+
+
 def run_sync(days: int) -> None:
     """Sync the last `days` days. Assumes firebase_admin is initialized and
     GARMINTOKENS is set in the environment."""

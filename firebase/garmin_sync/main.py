@@ -11,7 +11,7 @@ from firebase_functions import scheduler_fn
 from firebase_functions.options import MemoryOption
 from firebase_functions.params import SecretParam
 
-from sync import run_sync
+from sync import run_sync, notify_failure
 
 initialize_app()
 
@@ -27,4 +27,8 @@ GARMINTOKENS = SecretParam("GARMINTOKENS")
     secrets=[GARMINTOKENS],
 )
 def garminsync(event: scheduler_fn.ScheduledEvent) -> None:
-    run_sync(int(os.environ.get("SYNC_DAYS", "7")))
+    try:
+        run_sync(int(os.environ.get("SYNC_DAYS", "7")))
+    except Exception as e:  # noqa: BLE001 - alert then re-raise so Cloud marks it failed
+        notify_failure(f"{type(e).__name__}: {e}"[:180])
+        raise

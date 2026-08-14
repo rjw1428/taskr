@@ -161,6 +161,34 @@ class TaskService {
     );
   }
 
+  /// Effort points "missed" on each of [dates]: tasks still sitting incomplete
+  /// in that day's partition. A pushed task moves to the next day's partition
+  /// (and is tallied under `pushed`), so what remains here was never completed
+  /// and never deferred. Dividers carry no points and are ignored.
+  ///
+  /// Only pass past dates — today's leftovers aren't missed yet. Emits a map of
+  /// date string -> points, updating live as each day's partition changes.
+  Stream<Map<String, int>> streamMissedPoints(String userId, List<String> dates) {
+    if (dates.isEmpty) return Stream.value(const {});
+    final streams = dates.map((date) => taskCollection(userId, date).snapshots().map((snap) {
+          var points = 0;
+          for (final doc in snap.docs) {
+            final data = doc.data();
+            if (data['completed'] == true) continue;
+            if (data['type'] == 'divider') continue;
+            // Matches Task.fromJson's fallback for an absent/unknown priority.
+            final priority = Effort.values.firstWhere(
+              (e) => e.name == data['priority'],
+              orElse: () => Effort.low,
+            );
+            points += PerformanceService().getScore(priority);
+          }
+          return points;
+        }).handleError((error) => debugPrint("MISSED POINTS ($date): $error")));
+    return CombineLatestStream.list(streams)
+        .map((values) => {for (int i = 0; i < dates.length; i++) dates[i]: values[i]});
+  }
+
   // ─── Subtasks ──────────────────────────────────────────────────────────
 
   /// One-time fetch of a parent's children (used for delete + counter recompute).

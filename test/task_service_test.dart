@@ -77,4 +77,38 @@ void main() {
     expect(moved, isNotNull);
     expect(moved!['pushCount'], 1);
   });
+
+  group('streamMissedPoints', () {
+    test('sums effort points of tasks left incomplete on a day', () async {
+      await service.addTask(t('high', date: '2020-01-01', priority: Effort.high));
+      await service.addTask(t('low', date: '2020-01-01', priority: Effort.low));
+      await service.addTask(t('other day', date: '2020-01-02', priority: Effort.high));
+
+      final missed = await service.streamMissedPoints(uid, ['2020-01-01', '2020-01-02']).first;
+      expect(missed, {'2020-01-01': 4, '2020-01-02': 3});
+    });
+
+    test('completed tasks and dividers carry no missed points', () async {
+      final done = await service.addTask(t('done', date: '2020-01-01', priority: Effort.high));
+      await fake
+          .collection('todos')
+          .doc(uid)
+          .collection('tasks')
+          .doc('2020-01-01')
+          .collection('items')
+          .doc(done)
+          .update({'completed': true});
+      await service.addTask(
+          Task(added: 1, title: 'sep', dueDate: '2020-01-01', priority: Effort.high, type: 'divider'));
+      await service.addTask(t('real', date: '2020-01-01', priority: Effort.medium));
+
+      final missed = await service.streamMissedPoints(uid, ['2020-01-01']).first;
+      expect(missed, {'2020-01-01': 2});
+    });
+
+    test('a day with no tasks reports zero rather than dropping out', () async {
+      final missed = await service.streamMissedPoints(uid, ['2020-01-01']).first;
+      expect(missed, {'2020-01-01': 0});
+    });
+  });
 }

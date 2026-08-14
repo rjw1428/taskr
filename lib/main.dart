@@ -15,6 +15,7 @@ import 'package:taskr/services/accomplishment.provider.dart';
 import 'package:taskr/services/auth.service.dart';
 import 'package:taskr/services/goal.service.dart';
 import 'package:taskr/services/models.dart';
+import 'package:taskr/services/parking_notifications.dart';
 import 'package:taskr/services/people.provider.dart';
 import 'package:taskr/services/tag.provider.dart';
 import 'package:taskr/services/theme.provider.dart';
@@ -43,6 +44,44 @@ const local_notifications.AndroidNotificationChannel _fcmChannel =
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   debugPrint('Handling a background message: ${message.data}');
+
+  // The prompt has to be drawn locally even with the app terminated, because
+  // FCM cannot render the Yes/No action buttons itself.
+  if (message.data['type'] == parkingPromptType) {
+    await _initLocalNotifications();
+    await showParkingPrompt();
+  }
+}
+
+/// Runs when the user taps a notification action while the app is not running.
+/// Must be a top-level entry point: a closure or instance method would not
+/// survive the isolate boundary.
+@pragma('vm:entry-point')
+void notificationBackgroundResponseHandler(
+  local_notifications.NotificationResponse response,
+) {
+  handleParkingAction(response.actionId);
+}
+
+void _onNotificationResponse(local_notifications.NotificationResponse response) {
+  handleParkingAction(response.actionId);
+}
+
+/// Initializes the local notifications plugin and its channel. Safe to call
+/// from a background isolate, where `main()` has not run.
+Future<void> _initLocalNotifications() async {
+  const androidSettings =
+      local_notifications.AndroidInitializationSettings('@mipmap/ic_launcher');
+  await flutterLocalNotificationsPlugin.initialize(
+    const local_notifications.InitializationSettings(android: androidSettings),
+    onDidReceiveNotificationResponse: _onNotificationResponse,
+    onDidReceiveBackgroundNotificationResponse:
+        notificationBackgroundResponseHandler,
+  );
+  await flutterLocalNotificationsPlugin
+      .resolvePlatformSpecificImplementation<
+          local_notifications.AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(_fcmChannel);
 }
 
 void main() async {
@@ -87,15 +126,7 @@ Future<void> _bootstrap() async {
 
   // Initialize local notifications for foreground display
   if (!kIsWeb) {
-    const androidSettings =
-        local_notifications.AndroidInitializationSettings('@mipmap/ic_launcher');
-    await flutterLocalNotificationsPlugin.initialize(
-      const local_notifications.InitializationSettings(android: androidSettings),
-    );
-    await flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<
-            local_notifications.AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(_fcmChannel);
+    await _initLocalNotifications();
   }
 
   runApp(const MyApp());
@@ -233,6 +264,12 @@ class _MyAppState extends State<MyApp> {
 
       if (message.data['type'] == 'task_reminder') {
         _showReminderDialog(message);
+      } else if (message.data['type'] == parkingPromptType) {
+        // Checked before the generic `actions` branch below: the parking prompt
+        // also carries an `actions` payload, but it is not a wind task.
+        showParkingPrompt();
+      } else if (message.data['type'] == parkingResultType) {
+        showParkingResult(message.data);
       } else if (message.data.containsKey('actions')) {
         _showWindTaskDialog(message);
       } else {
@@ -246,7 +283,9 @@ class _MyAppState extends State<MyApp> {
 
     // Handle when the app is opened from a terminated state via a notification
     FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
-      if (message != null && message.data.containsKey('actions')) {
+      if (message == null) return;
+      if (message.data['type'] == parkingPromptType) return;
+      if (message.data.containsKey('actions')) {
         _showWindTaskDialog(message);
       }
     });
@@ -254,6 +293,7 @@ class _MyAppState extends State<MyApp> {
     // Handle when the app is opened from background by tapping on a notification
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       debugPrint('A new onMessageOpenedApp event was published!');
+      if (message.data['type'] == parkingPromptType) return;
       if (message.data.containsKey('actions')) {
         _showWindTaskDialog(message);
       }

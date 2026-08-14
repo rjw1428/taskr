@@ -6,6 +6,12 @@ import { Message } from "firebase-admin/lib/messaging/messaging-api";
 import {defineSecret} from "firebase-functions/params";
 import {google} from "googleapis";
 import {CloudTasksClient} from "@google-cloud/tasks";
+import {
+  COMMUTE_TIMEZONE,
+  localDateIn,
+  localTimeToEpochSeconds,
+  parkingPromptDecision,
+} from "./parking.logic";
 
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 const oauthClientSecret = defineSecret("GOOGLE_OAUTH_CLIENT_SECRET");
@@ -13,20 +19,32 @@ const oauthWebClientId = defineSecret("GOOGLE_OAUTH_WEB_CLIENT_ID");
 
 admin.initializeApp();
 
+// The two opt-ins are independent: a user can take the train without paying for
+// parking, or park without wanting the SEPTA status push.
+async function runTrainFanout() {
+  const todosSnap = await admin.firestore().collection("todos").get();
+  logger.info(`checking for ${todosSnap.size} users`);
+  const notifyPromises: Promise<any>[] = [];
+
+  todosSnap.forEach((doc) => {
+    const data = doc.data() as any;
+    if (!data) return;
+    if (data.trainAlert === true) {
+      logger.info(`Scheduling train notification for user ${doc.id}`);
+      notifyPromises.push(executeTrainNotification(doc.id));
+    }
+    if (data.parkingAlert === true) {
+      logger.info(`Scheduling parking prompt for user ${doc.id}`);
+      notifyPromises.push(scheduleParkingPrompt(doc.id));
+    }
+  });
+
+  return Promise.all(notifyPromises);
+}
+
 export const trainSchedule = onSchedule("every day 11:00", async () => {
   try {
-    const todosSnap = await admin.firestore().collection("todos").get();
-    const notifyPromises: Promise<any>[] = [];
-
-    todosSnap.forEach((doc) => {
-      const data = doc.data() as any;
-      if (data && data.trainAlert === true) {
-        logger.info(`Scheduling train notification for user ${doc.id}`);
-        notifyPromises.push(executeTrainNotification(doc.id));
-      }
-    });
-
-    await Promise.all(notifyPromises);
+    await runTrainFanout();
   } catch (e) {
     logger.error(e)
   }
@@ -34,19 +52,7 @@ export const trainSchedule = onSchedule("every day 11:00", async () => {
 
 export const trainScheduleTest = onRequest({cors: false}, async (req, res) => {
   try {
-    const todosSnap = await admin.firestore().collection("todos").get();
-    const notifyPromises: Promise<any>[] = [];
-    logger.info(`checking for ${todosSnap.size} users`)
-    todosSnap.forEach((doc) => {
-      logger.info(`chec for ${doc.id}`)
-      const data = doc.data() as any;
-      if (data && data.trainAlert === true) {
-        logger.info(`Scheduling train notification for user ${doc.id}`);
-        notifyPromises.push(executeTrainNotification(doc.id));
-      }
-    });
-
-    const result = await Promise.all(notifyPromises);
+    const result = await runTrainFanout();
     res.status(200).send(result);
   } catch (e) {
     res.status(500).send(e)
@@ -54,24 +60,38 @@ export const trainScheduleTest = onRequest({cors: false}, async (req, res) => {
 });
 
 
+const WORK_TRAIN_TITLE = "Work Train";
+
+/**
+ * Finds today's "Work Train" task for a user. Returns null when there is no such
+ * task, so both the train status push and the parking prompt share one lookup
+ * instead of duplicating the query.
+ */
+async function findWorkTrainTask(userId: string, date: string) {
+  const querySnapshot = await admin.firestore().collection("todos")
+    .doc(userId)
+    .collection("tasks")
+    .doc(date)
+    .collection("items")
+    .where("title", "==", WORK_TRAIN_TITLE)
+    .get();
+
+  if (querySnapshot.empty) return null;
+  return querySnapshot.docs[0];
+}
+
 async function executeTrainNotification(userId: string) {
-  const date = new Date().toISOString().split("T")[0];
+  // Commute-local, not UTC: the task partitions are keyed by local date.
+  const date = localDateIn(COMMUTE_TIMEZONE);
 
   try {
-    const querySnapshot = await admin.firestore().collection("todos")
-      .doc(userId)
-      .collection("tasks")
-      .doc(date)
-      .collection("items")
-      .where("title", "==", "Work Train")
-      .get();
+    const doc = await findWorkTrainTask(userId, date);
 
-    if (querySnapshot.empty) {
+    if (!doc) {
       logger.info(`No 'work train' todos found on ${date}.`);
       return { error: `No 'work train' todos found on ${date}.` };
     }
 
-    const doc = querySnapshot.docs[0];
     const todo = doc.data();
     if (!todo.startTime) {
       logger.info(`Document ${doc.id} did not have a start time`);
@@ -1045,6 +1065,84 @@ export const scheduleReminder = onCall(async (request) => {
   return {reminderTaskName: taskName};
 });
 
+// --- Parking Prompt Functions ---
+
+/**
+ * Enqueues the "pay for parking?" prompt for the user's Work Train departure.
+ *
+ * Delivery uses a Cloud Task with an explicit schedule time rather than a cron,
+ * because the prompt has to land at the task's own startTime, which varies daily.
+ */
+async function scheduleParkingPrompt(userId: string) {
+  // Commute-local, not UTC: the task partitions are keyed by local date.
+  const date = localDateIn(COMMUTE_TIMEZONE);
+
+  try {
+    const doc = await findWorkTrainTask(userId, date);
+    if (!doc) {
+      logger.info(`No 'work train' todos found on ${date}; no parking prompt.`);
+      return {error: `No 'work train' todos found on ${date}.`};
+    }
+
+    const todo = doc.data();
+    if (!todo.startTime) {
+      logger.info(`Document ${doc.id} has no start time; no parking prompt.`);
+      return {error: `Document ${doc.id} did not have a start time`};
+    }
+
+    const scheduleSeconds = localTimeToEpochSeconds(
+      date, todo.startTime, COMMUTE_TIMEZONE
+    );
+
+    const queuePath = tasksClient.queuePath(
+      CLOUD_TASKS_PROJECT,
+      CLOUD_TASKS_LOCATION,
+      CLOUD_TASKS_QUEUE
+    );
+
+    const deliverUrl = `https://${CLOUD_TASKS_LOCATION}-${CLOUD_TASKS_PROJECT}.cloudfunctions.net/deliverParkingPrompt`;
+    const payload = JSON.stringify({uid: userId, taskId: doc.id, taskDate: date});
+
+    // A deterministic name is what makes this idempotent: a second scheduling
+    // run on the same day collides here instead of enqueuing a second prompt.
+    // Two prompts would mean two chances to tap Yes.
+    const taskName = `${queuePath}/tasks/parking-${userId}-${date.replace(/-/g, "")}`;
+
+    try {
+      await tasksClient.createTask({
+        parent: queuePath,
+        task: {
+          name: taskName,
+          httpRequest: {
+            httpMethod: "POST",
+            url: deliverUrl,
+            headers: {"Content-Type": "application/json"},
+            body: Buffer.from(payload).toString("base64"),
+          },
+          // A startTime earlier than this run is not an error — Cloud Tasks
+          // dispatches a past schedule time promptly rather than rejecting it.
+          scheduleTime: {seconds: scheduleSeconds},
+        },
+      });
+    } catch (e: any) {
+      // 6 = ALREADY_EXISTS. The prompt is already scheduled; nothing to do.
+      if (e.code === 6) {
+        logger.info(`Parking prompt already scheduled for ${userId} on ${date}`);
+        return {skipped: "already scheduled"};
+      }
+      throw e;
+    }
+
+    logger.info(
+      `Scheduled parking prompt for ${userId} at ${todo.startTime} ${COMMUTE_TIMEZONE}`
+    );
+    return {scheduled: scheduleSeconds, taskId: doc.id};
+  } catch (e) {
+    logger.error("Error scheduling parking prompt", e);
+    return {error: String(e)};
+  }
+}
+
 export const cancelReminder = onCall(async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "Must be logged in");
@@ -1145,6 +1243,96 @@ export const deliverReminder = onRequest(async (req, res) => {
   } catch (e) {
     logger.error("Error delivering reminder:", e);
     res.status(500).send("Error delivering reminder");
+  }
+});
+
+export const deliverParkingPrompt = onRequest(async (req, res) => {
+  try {
+    const {uid, taskId, taskDate} = req.body;
+    if (!uid || !taskId || !taskDate) {
+      res.status(400).send("Missing required fields");
+      return;
+    }
+
+    // Re-check state that may have changed between scheduling this morning and
+    // delivering it now.
+    const taskDoc = await admin.firestore()
+      .collection("todos").doc(uid)
+      .collection("tasks").doc(taskDate)
+      .collection("items").doc(taskId)
+      .get();
+    const userDoc = await admin.firestore().collection("todos").doc(uid).get();
+    const fcmToken = taskDoc.exists ? await getUserFcmToken(uid) : null;
+
+    const decision = parkingPromptDecision({
+      taskExists: taskDoc.exists,
+      parkingAlert: userDoc.data()?.parkingAlert,
+      fcmToken,
+    });
+
+    if (!decision.send) {
+      logger.info(`Parking prompt for ${uid}: ${decision.reason}`);
+      res.status(200).send(decision.reason);
+      return;
+    }
+
+    const title = "Pay for parking?";
+    const body = "Your train is leaving. Want to pay for parking?";
+
+    // The actions are declared in the data payload; FCM cannot render action
+    // buttons itself, so the client draws the notification from this.
+    const data = {
+      type: "parking_prompt",
+      taskId,
+      taskDate,
+      actions: JSON.stringify([
+        {action: "pay-parking", title: "Yes"},
+        {action: "dismiss-parking", title: "No"},
+      ]),
+    };
+
+    const message: Message = {
+      // Non-null: decision.send is only true when a token is present.
+      token: fcmToken!,
+      android: {
+        // High priority so it survives Doze — this lands at departure time and
+        // is useless if it is held until the phone is next unlocked.
+        priority: "high",
+        notification: {
+          channelId: "fcm_default_channel",
+        },
+      },
+      notification: {title, body},
+      data,
+    };
+
+    try {
+      await admin.messaging().send(message);
+    } catch (err) {
+      // A rotated/uninstalled token can never receive again. Clear it and stop
+      // retrying (return 200) instead of letting Cloud Tasks retry a dead send.
+      if ((err as {code?: string})?.code ===
+          "messaging/registration-token-not-registered") {
+        logger.warn(`Dead FCM token for user ${uid}; clearing`);
+        await admin.firestore().collection("todos").doc(uid)
+          .update({fcmToken: admin.firestore.FieldValue.delete()});
+        res.status(200).send("Dead token cleared");
+        return;
+      }
+      throw err;
+    }
+
+    await recordNotification(uid, {
+      title,
+      body,
+      data,
+      type: "parking_prompt",
+    });
+    logger.info(`Parking prompt delivered to user ${uid}`);
+    res.status(200).send("Parking prompt sent");
+  } catch (e) {
+    logger.error("Error delivering parking prompt:", e);
+    res.status(500).send("Error delivering parking prompt");
   }
 });
 
