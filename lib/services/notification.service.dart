@@ -30,6 +30,37 @@ class NotificationService {
     return _col(user.uid).where('read', isEqualTo: false).snapshots().map((snap) => snap.size);
   }
 
+  /// Records a notification the client drew itself.
+  ///
+  /// Cloud Functions record the ones they send, but notifications raised on the
+  /// device — parking outcomes, and the parking service's own pushes, which
+  /// bypass our backend entirely — would otherwise never reach this inbox.
+  /// Best-effort: an inbox write must never break the notification itself, and
+  /// this also runs in background isolates.
+  Future<void> record({
+    required String title,
+    required String body,
+    String? type,
+    Map<String, dynamic> data = const {},
+  }) async {
+    try {
+      final user = _auth.user;
+      if (user == null) return;
+      await _col(user.uid).add({
+        'title': title,
+        'body': body,
+        'type': type,
+        'data': data,
+        'sentAt': DateTime.now().millisecondsSinceEpoch,
+        'read': false,
+      });
+    } catch (e) {
+      // Swallowed deliberately; the user still gets the notification.
+      // ignore: avoid_print
+      print('NotificationService.record failed: $e');
+    }
+  }
+
   Future<void> markRead(String id) => _col(_auth.user!.uid).doc(id).update({'read': true});
 
   Future<void> markAllRead() async {

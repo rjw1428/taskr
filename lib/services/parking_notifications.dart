@@ -4,6 +4,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'package:taskr/shared/error_reporting.dart';
 
+import 'notification.service.dart';
 import 'parking.service.dart';
 
 /// FCM `data.type` identifying the actionable "pay for parking?" prompt.
@@ -122,7 +123,14 @@ Future<void> showParkingPromptDialog(BuildContext context) async {
   if (pay != true) return;
 
   final result = await ParkingService().triggerParking();
-  // The app is open, so report inline rather than as another notification.
+  final accepted = result.outcome == ParkingTriggerOutcome.accepted;
+  await NotificationService().record(
+    title: accepted ? 'Parking requested' : 'Parking NOT paid',
+    body: result.message,
+    type: 'parking_result',
+  );
+  // The app is open, so report inline rather than as another notification —
+  // but it is still recorded above, so a dismissed snackbar leaves a trace.
   scaffoldMessengerKey.currentState
     ?..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(content: Text(result.message)));
@@ -154,11 +162,15 @@ Future<void> _payForParking() async {
 
   // The app may well be closed, so the only way to report back is a
   // notification. Note this reports whether the *request* went out — the
-  // service pushes the actual payment outcome separately.
+  // service pushes the actual payment outcome separately, and that push is
+  // best-effort, so a failure we already know about is reported here rather
+  // than being left to a message that may never arrive.
   await _showParkingInfo(
-    result.outcome == ParkingTriggerOutcome.accepted
-        ? 'Parking requested'
-        : 'Parking not requested',
+    switch (result.outcome) {
+      ParkingTriggerOutcome.accepted => 'Parking requested',
+      ParkingTriggerOutcome.needsAuth => 'Parking needs sign-in',
+      _ => 'Parking NOT paid',
+    },
     result.message,
   );
 }
@@ -166,6 +178,8 @@ Future<void> _payForParking() async {
 /// Surfaces the parking service's own asynchronous result push.
 Future<void> showParkingResult(Map<String, dynamic> data) async {
   final status = data['status'] as String?;
+  // These arrive straight from the parking service to FCM, never touching our
+  // backend, so this is the only opportunity to record them.
 
   switch (status) {
     case 'paid':
@@ -202,7 +216,16 @@ Future<void> showParkingResult(Map<String, dynamic> data) async {
   }
 }
 
-Future<void> _showParkingInfo(String title, String body) async {
+Future<void> _showParkingInfo(
+  String title,
+  String body, {
+  String type = 'parking_result',
+}) async {
+  // Mirror it into the in-app inbox. These are drawn on the device, so unlike
+  // notifications sent by Cloud Functions nothing else records them, and a
+  // missed or swiped notification would otherwise leave no trace at all.
+  await NotificationService().record(title: title, body: body, type: type);
+
   await _plugin.show(
     _parkingResultId,
     title,

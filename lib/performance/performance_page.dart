@@ -10,6 +10,7 @@ import 'package:taskr/services/models.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:taskr/accomplishments/accomplishment_detail_page.dart';
+import 'package:taskr/accomplishments/accomplishment_list.dart';
 import 'package:taskr/accomplishments/accomplishment_color.dart';
 import 'package:taskr/services/tag.provider.dart';
 
@@ -219,7 +220,19 @@ class CurrentScoreState extends State<CurrentScore> {
           const SizedBox(height: Insets.lg),
           Padding(
             padding: const EdgeInsets.only(left: Insets.xs, bottom: Insets.sm),
-            child: Text('Latest accomplishments', style: theme.textTheme.titleMedium),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Latest accomplishments', style: theme.textTheme.titleMedium),
+                TextButton(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const AccomplishmentListPage()),
+                  ),
+                  child: const Text('See all'),
+                ),
+              ],
+            ),
           ),
           const _AccomplishmentsSummary(),
           const SizedBox(height: Insets.lg),
@@ -563,21 +576,25 @@ class _PushedChartCard extends StatelessWidget {
 class _AccomplishmentsSummary extends StatelessWidget {
   const _AccomplishmentsSummary();
 
+  /// How many accomplishments the summary shows. Fetched, not truncated —
+  /// the full history lives on [AccomplishmentListPage].
+  static const int _summaryCount = 5;
+
   @override
   Widget build(BuildContext context) {
     var accomplishmentProvider = Provider.of<AccomplishmentProvider>(context);
 
     return StreamBuilder<List<Accomplishment>>(
-      stream: accomplishmentProvider.getAccomplishments(),
+      stream: accomplishmentProvider.getAccomplishments(limit: _summaryCount),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const LoadingScreen();
         } else if (snapshot.hasError) {
           return Center(child: ErrorMessage(message: snapshot.error.toString()));
         } else if (snapshot.hasData) {
-          var accomplishments = snapshot.data!;
-          // Take only the latest 5 accomplishments
-          var latestAccomplishments = accomplishments.take(5).toList();
+          // The query is already bounded to `_summaryCount`, so there is
+          // nothing to truncate here.
+          var latestAccomplishments = snapshot.data!;
 
           if (latestAccomplishments.isEmpty) {
             return const Center(

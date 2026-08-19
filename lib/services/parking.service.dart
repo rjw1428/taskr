@@ -31,6 +31,10 @@ enum ParkingTriggerOutcome {
 
   /// The request never made it, or came back an error. Nothing was bought.
   failed,
+
+  /// The service's own upstream session has expired, so it cannot buy anything
+  /// until a person completes an SMS verification. Retrying is futile.
+  needsAuth,
 }
 
 class ParkingTriggerResult {
@@ -59,6 +63,28 @@ class ParkingService {
 
   bool get isConfigured => _token.isNotEmpty;
 
+  /// Whether the service still has a working upstream session.
+  ///
+  /// Returns null when that cannot be determined, so callers can carry on
+  /// rather than block a purchase that might have succeeded.
+  Future<bool?> hasUpstreamSession() async {
+    try {
+      // /health needs no auth and reports the upstream session directly.
+      final response = await HttpClient()
+          .getUrl(Uri.parse('$baseUrl/health'))
+          .then((request) => request.close())
+          .timeout(_parkingTimeout);
+      final body = await response.transform(utf8.decoder).join();
+      if (response.statusCode != 200) return null;
+      final health = jsonDecode(body) as Map<String, dynamic>;
+      final session = health['hasSession'];
+      return session is bool ? session : null;
+    } catch (e) {
+      debugPrint('ParkingService.hasUpstreamSession error: $e');
+      return null;
+    }
+  }
+
   /// Asks the service to buy a parking session.
   ///
   /// The endpoint is idempotent in practice — if a session is already active for
@@ -69,6 +95,17 @@ class ParkingService {
       return const ParkingTriggerResult(
         ParkingTriggerOutcome.unconfigured,
         'Parking is not set up on this device.',
+      );
+    }
+
+    // The service reports a dead upstream session before we spend a request on
+    // it. Its own result push is best-effort, so catching this here is the
+    // difference between a certain notification and a silent non-payment.
+    if (await hasUpstreamSession() == false) {
+      return const ParkingTriggerResult(
+        ParkingTriggerOutcome.needsAuth,
+        'Parking could not be paid: the parking account needs to be signed in '
+        'again. Nothing was charged.',
       );
     }
 

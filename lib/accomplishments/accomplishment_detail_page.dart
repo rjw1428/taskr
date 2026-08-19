@@ -13,34 +13,32 @@ class AccomplishmentDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<Accomplishment>>(
-      stream: context.read<AccomplishmentProvider>().getAccomplishments(),
+    final id = accomplishment.id;
+    if (id == null) {
+      return _AccomplishmentDetailView(accomplishment: accomplishment);
+    }
+    return StreamBuilder<Accomplishment?>(
+      stream: context.read<AccomplishmentProvider>().getAccomplishment(id),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const LoadingScreen();
         } else if (snapshot.hasError) {
           return Center(child: ErrorMessage(message: snapshot.error.toString()));
-        } else if (snapshot.hasData) {
-          final accomplishments = snapshot.data!;
-          final accomplishmentIndex = accomplishments.indexWhere((acc) => acc.id == accomplishment.id);
-
-          if (accomplishmentIndex == -1) {
-            // Accomplishment was deleted, pop the page.
-            // We need to schedule the pop for after the build is complete.
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (Navigator.canPop(context)) {
-                Navigator.pop(context);
-              }
-            });
-            return const Scaffold(body: SizedBox.shrink()); // Return an empty scaffold while popping
-          }
-
-          final updatedAccomplishment = accomplishments[accomplishmentIndex];
-
-          return _AccomplishmentDetailView(accomplishment: updatedAccomplishment);
-        } else {
-          return const Center(child: Text('Accomplishment not found.'));
         }
+
+        final updatedAccomplishment = snapshot.data;
+        if (updatedAccomplishment == null) {
+          // Accomplishment was deleted, pop the page.
+          // We need to schedule the pop for after the build is complete.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (Navigator.canPop(context)) {
+              Navigator.pop(context);
+            }
+          });
+          return const Scaffold(body: SizedBox.shrink()); // Return an empty scaffold while popping
+        }
+
+        return _AccomplishmentDetailView(accomplishment: updatedAccomplishment);
       },
     );
   }

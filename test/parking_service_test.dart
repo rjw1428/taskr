@@ -14,12 +14,23 @@ class _StubServer {
 
   int status = 200;
   String body = '{"success": true, "requestId": "abc123"}';
+  /// What /health reports for `hasSession`. null omits the field entirely.
+  Object? hasSession = true;
 
   Future<String> start() async {
     _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     unawaited(_server.forEach((request) {
       authHeaders.add(request.headers.value(HttpHeaders.authorizationHeader));
       paths.add(request.uri.toString());
+      if (request.uri.path == '/health') {
+        request.response.statusCode = 200;
+        request.response.write(jsonEncode({
+          'ok': true,
+          if (hasSession != null) 'hasSession': hasSession,
+        }));
+        request.response.close();
+        return;
+      }
       request.response.statusCode = status;
       request.response.write(body);
       request.response.close();
@@ -44,13 +55,50 @@ void main() {
 
   tearDown(() async => stub.stop());
 
+  group('triggerParking pre-flight', () {
+    test('refuses and reports when the upstream session is dead', () async {
+      // Exactly the live failure: the service is up but locked out of SEPTA, so
+      // /park could only ever report needs-auth.
+      stub.hasSession = false;
+
+      final result = await service.triggerParking();
+
+      expect(result.outcome, ParkingTriggerOutcome.needsAuth);
+      expect(result.message.toLowerCase(), contains('signed in'));
+      expect(result.message.toLowerCase(), contains('nothing was charged'));
+      // No point spending a request on a purchase that cannot succeed.
+      expect(stub.paths, isNot(contains('/park')));
+    });
+
+    test('proceeds when the upstream session is alive', () async {
+      stub.hasSession = true;
+
+      final result = await service.triggerParking();
+
+      expect(result.outcome, ParkingTriggerOutcome.accepted);
+      expect(stub.paths, contains('/park'));
+    });
+
+    test('proceeds when health cannot be determined', () async {
+      // Unknown is not the same as dead: blocking here would turn a service
+      // hiccup into unpaid parking.
+      stub.hasSession = null;
+
+      final result = await service.triggerParking();
+
+      expect(result.outcome, ParkingTriggerOutcome.accepted);
+      expect(stub.paths, contains('/park'));
+    });
+  });
+
   group('triggerParking', () {
     test('sends the token as a bearer header, never in the query string', () async {
       await service.triggerParking();
 
-      expect(stub.authHeaders.single, 'Bearer test-token');
-      expect(stub.paths.single, '/park');
-      expect(stub.paths.single, isNot(contains('test-token')));
+      // /health first (unauthenticated), then the authenticated /park.
+      expect(stub.paths, ['/health', '/park']);
+      expect(stub.authHeaders.last, 'Bearer test-token');
+      expect(stub.paths.last, isNot(contains('test-token')));
     });
 
     test('a 200 is reported as sent, never as paid', () async {
@@ -79,7 +127,8 @@ void main() {
       final result = await service.triggerParking();
 
       expect(result.outcome, ParkingTriggerOutcome.unauthorized);
-      expect(stub.paths.length, 1);
+      // One attempt only — a rejected token is not retried.
+      expect(stub.paths.where((p) => p == '/park').length, 1);
     });
 
     test('a 500 says nothing was paid for', () async {

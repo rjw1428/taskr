@@ -228,6 +228,32 @@ source control.
 - **THEN** the client informs the user that the parking request was not accepted
   and does not retry
 
+### Requirement: A payment that cannot succeed is reported immediately
+
+The system SHALL check the parking service's upstream session before triggering
+a purchase, and SHALL notify the user without sending the request when that
+session is known to be dead. The service's own result push is best-effort, so a
+failure that is already knowable MUST NOT be left to a message that may never
+arrive. The check SHALL fail open: an indeterminate result proceeds with the
+request.
+
+#### Scenario: Upstream session is expired
+
+- **WHEN** the user answers yes and the service reports `hasSession` false
+- **THEN** no purchase request is sent, and the user is notified that the parking
+  account needs signing in again and that nothing was charged
+
+#### Scenario: Upstream session is healthy
+
+- **WHEN** the service reports `hasSession` true
+- **THEN** the purchase request is sent as normal
+
+#### Scenario: Upstream health cannot be determined
+
+- **WHEN** the health check fails, times out, or omits the field
+- **THEN** the purchase request is still sent, because treating unknown as dead
+  would turn a service hiccup into unpaid parking
+
 ### Requirement: An accepted request is never reported as a completed payment
 
 The system SHALL NOT tell the user that parking is paid for on the basis of the
@@ -278,6 +304,32 @@ never succeed because it requires a person to complete an SMS verification.
 - **WHEN** a push arrives with `type` of `septapark`
 - **THEN** it is handled as an informational notification and is not mistaken for
   an actionable prompt
+
+### Requirement: Locally raised notifications reach the in-app inbox
+
+Every parking notification the client raises SHALL also be recorded to the
+in-app notification centre. Cloud Functions record the messages they send, but
+outcome notifications are drawn on the device and the parking service's result
+pushes bypass the backend entirely, so neither would otherwise leave any trace
+once dismissed. Recording SHALL be best-effort and MUST NOT prevent the
+notification from being shown.
+
+#### Scenario: Payment outcome is recorded
+
+- **WHEN** the client raises a notification for a parking trigger outcome or a
+  result push
+- **THEN** a matching entry appears in the in-app notification centre
+
+#### Scenario: Answering from inside the app is recorded
+
+- **WHEN** the user answers yes via the in-app dialog and the outcome is shown as
+  a transient message
+- **THEN** the outcome is still recorded, so dismissing it loses nothing
+
+#### Scenario: Recording fails
+
+- **WHEN** the inbox write fails
+- **THEN** the notification is still displayed to the user
 
 ### Requirement: Notification actions dispatch on the selected action
 

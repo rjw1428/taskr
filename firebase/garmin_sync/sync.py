@@ -5,9 +5,13 @@ garminconnect library and writes them to todos/{uid}/health/{yyyy-MM-dd},
 matching the journal collection layout so the app can key both off the
 selected date.
 
+Tokens live in Firestore at secrets/garmin and are rewritten after every login,
+because Garmin rotates the refresh token each time one is used. GARMINTOKENS is
+only the initial seed; a blob kept solely in the secret is spent after one run.
+
 Environment:
-    GARMINTOKENS      token blob from login.py (required; read natively by
-                      the garminconnect library)
+    GARMINTOKENS      seed token blob from login.py, used only when Firestore
+                      has none yet
     TASKR_EMAIL       Firebase Auth email of the taskr user to write under
                       (required unless TASKR_UID is set)
     TASKR_UID         Firebase Auth uid, overrides TASKR_EMAIL lookup
@@ -28,6 +32,44 @@ from datetime import date, timedelta
 import firebase_admin
 from firebase_admin import auth, firestore
 from garminconnect import Garmin
+
+
+TOKEN_DOC = ("secrets", "garmin")
+
+
+def load_tokens() -> str | None:
+    """Return the stored token blob, preferring the durable copy in Firestore.
+
+    GARMINTOKENS is only a seed. Garmin rotates the refresh token on every
+    refresh, so the blob baked into the secret is spent the first time it is
+    used and every later run presenting it gets a 401.
+    """
+    try:
+        doc = firestore.client().collection(TOKEN_DOC[0]).document(TOKEN_DOC[1]).get()
+        stored = (doc.to_dict() or {}).get("tokens") if doc.exists else None
+        if stored:
+            return stored
+        print("No stored tokens; seeding from GARMINTOKENS", flush=True)
+    except Exception as e:  # noqa: BLE001 - fall back to the seed rather than fail
+        print(f"Could not read stored tokens ({e}); falling back to GARMINTOKENS", flush=True)
+    return os.environ.get("GARMINTOKENS")
+
+
+def save_tokens(garmin: Garmin) -> None:
+    """Persist the current (possibly rotated) token blob.
+
+    Without this the rotated refresh token lives only in the instance's memory
+    and dies with it, which is what left the nightly sync unable to authenticate
+    while looking like an expired credential.
+    """
+    try:
+        firestore.client().collection(TOKEN_DOC[0]).document(TOKEN_DOC[1]).set({
+            "tokens": garmin.client.dumps(),
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+        })
+        print("Stored refreshed Garmin tokens", flush=True)
+    except Exception as e:  # noqa: BLE001 - a sync that worked should not fail here
+        print(f"WARNING: could not store refreshed tokens: {e}", flush=True)
 
 
 def resolve_uid() -> str:
@@ -122,7 +164,13 @@ def run_sync(days: int) -> None:
     """Sync the last `days` days. Assumes firebase_admin is initialized and
     GARMINTOKENS is set in the environment."""
     garmin = Garmin()
-    garmin.login()  # reads GARMINTOKENS
+    tokens = load_tokens()
+    if not tokens:
+        sys.exit("No Garmin tokens available (run login.py and seed GARMINTOKENS)")
+    garmin.login(tokens)
+    # Immediately, not at the end: login may already have rotated the refresh
+    # token, and a sync that dies midway must not strand the new one in memory.
+    save_tokens(garmin)
 
     db = firestore.client()
     uid = resolve_uid()
@@ -153,9 +201,10 @@ def main():
     parser.add_argument("--days", type=int, default=int(os.environ.get("SYNC_DAYS", 7)))
     args = parser.parse_args()
 
-    if not os.environ.get("GARMINTOKENS"):
-        sys.exit("Set GARMINTOKENS (run login.py to generate the token blob)")
     firebase_admin.initialize_app()
+    # Not required once Firestore holds a blob, which is the normal case.
+    if not os.environ.get("GARMINTOKENS"):
+        print("GARMINTOKENS unset; relying on stored tokens", flush=True)
     run_sync(args.days)
 
 

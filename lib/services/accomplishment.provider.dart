@@ -6,8 +6,12 @@ class AccomplishmentProvider with ChangeNotifier {
   final AccomplishmentService _accomplishmentService = AccomplishmentService();
 
   // New method to expose the stream for direct consumption
-  Stream<List<Accomplishment>> getAccomplishments() {
-    return _accomplishmentService.getAccomplishments();
+  Stream<List<Accomplishment>> getAccomplishments({int? limit}) {
+    return _accomplishmentService.getAccomplishments(limit: limit);
+  }
+
+  Stream<Accomplishment?> getAccomplishment(String id) {
+    return _accomplishmentService.getAccomplishment(id);
   }
 
   Future<void> addAccomplishment(Accomplishment accomplishment) {
