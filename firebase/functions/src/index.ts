@@ -1046,20 +1046,44 @@ export const scheduleReminder = onCall(async (request) => {
   const payload = JSON.stringify({uid, taskId, taskDate, title});
   const scheduleTimestamp = Math.floor(scheduledDate.getTime() / 1000);
 
-  const [task] = await tasksClient.createTask({
-    parent: queuePath,
-    task: {
-      httpRequest: {
-        httpMethod: "POST",
-        url: deliverUrl,
-        headers: {"Content-Type": "application/json"},
-        body: Buffer.from(payload).toString("base64"),
-      },
-      scheduleTime: {seconds: scheduleTimestamp},
-    },
-  });
+  // A deterministic name makes this idempotent, the same way scheduleParkingPrompt
+  // is: two devices running the recurring top-up before either has written
+  // reminderTaskName back would otherwise enqueue two Cloud Tasks, and the user
+  // would get the same reminder twice. Both compute the same instant, so both
+  // land on the same name and the second collides harmlessly.
+  //
+  // The instant is part of the name deliberately. Cloud Tasks will not reuse a
+  // task name for a period after that task is deleted or executed, so keying on
+  // the task id alone would make rescheduling the SAME task at a new time (the
+  // cancel-then-schedule in ReminderService.updateReminder) silently no-op.
+  const deterministicName =
+    `${queuePath}/tasks/reminder-${uid}-${taskId}-${scheduleTimestamp}`;
 
-  const taskName = task.name!;
+  let taskName = deterministicName;
+  try {
+    const [task] = await tasksClient.createTask({
+      parent: queuePath,
+      task: {
+        name: deterministicName,
+        httpRequest: {
+          httpMethod: "POST",
+          url: deliverUrl,
+          headers: {"Content-Type": "application/json"},
+          body: Buffer.from(payload).toString("base64"),
+        },
+        scheduleTime: {seconds: scheduleTimestamp},
+      },
+    });
+    taskName = task.name!;
+  } catch (e: any) {
+    // 6 = ALREADY_EXISTS. Someone else scheduled this same reminder; the
+    // deterministic name is the one they used, so hand it back and move on.
+    if (e.code === 6) {
+      logger.info(`Reminder already scheduled for task ${taskId}`);
+    } else {
+      throw e;
+    }
+  }
   logger.info(`Scheduled reminder for task ${taskId} at ${reminderTime}: ${taskName}`);
 
   return {reminderTaskName: taskName};

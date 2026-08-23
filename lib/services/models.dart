@@ -429,6 +429,13 @@ class RecurringTask {
   DateTime? startDate;
   DateTime? endDate;
   int? dayOfMonth;
+  // Rolling top-up bookkeeping, mirroring [Habit.lastMaterializedDate]. Null on
+  // series created before the horizon change; the collection-group dedupe is the
+  // authority, so a null/stale watermark can never duplicate occurrences.
+  String? lastMaterializedDate; // yyyy-MM-dd
+  // Local wall time the reminder fires on each occurrence's own date. The
+  // absolute instant lives on each materialized Task.reminderTime.
+  String? reminderTimeOfDay; // HH:mm
 
   RecurringTask({
     required this.recurrenceType,
@@ -437,6 +444,8 @@ class RecurringTask {
     this.startDate,
     this.endDate,
     this.dayOfMonth = 1,
+    this.lastMaterializedDate,
+    this.reminderTimeOfDay,
   });
 
   factory RecurringTask.fromJson(Map<String, dynamic> json) => _$RecurringTaskFromJson(json);
@@ -450,6 +459,8 @@ class RecurringTask {
     DateTime? startDate,
     DateTime? endDate,
     int? dayOfMonth,
+    String? lastMaterializedDate,
+    String? reminderTimeOfDay,
   }) {
     final copy = RecurringTask(
       recurrenceType: recurrenceType ?? this.recurrenceType,
@@ -458,6 +469,8 @@ class RecurringTask {
       startDate: startDate ?? this.startDate,
       endDate: endDate ?? this.endDate,
       dayOfMonth: dayOfMonth ?? this.dayOfMonth,
+      lastMaterializedDate: lastMaterializedDate ?? this.lastMaterializedDate,
+      reminderTimeOfDay: reminderTimeOfDay ?? this.reminderTimeOfDay,
     );
     copy.id = id ?? this.id;
     return copy;

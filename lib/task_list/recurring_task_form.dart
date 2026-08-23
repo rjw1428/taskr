@@ -9,13 +9,17 @@ class RecurringTaskForm extends StatefulWidget {
       required this.startDate,
       required this.onRecurringTaskChanged,
       this.recurringTask,
-      this.hideEndDate = false});
+      this.hideEndDate = false,
+      this.showReminder = false});
 
   final String? startDate;
   final void Function(RecurringTask) onRecurringTaskChanged;
   final RecurringTask? recurringTask;
   // Habits are open-ended: hide + don't require the end date.
   final bool hideEndDate;
+  // Opt-in so habits, which share this form, are left alone until their own
+  // reminder wiring lands.
+  final bool showReminder;
 
   @override
   State<RecurringTaskForm> createState() => RecurringTaskFormState();
@@ -40,6 +44,8 @@ class RecurringTaskFormState extends State<RecurringTaskForm> {
   final TextEditingController _dayOfMonthController = TextEditingController();
   int _dayOfMonth = 1;
   String? _startDate;
+  // A series reminder is a time of day; the date comes from each occurrence.
+  TimeOfDay? _reminderTime;
 
   @override
   void initState() {
@@ -56,6 +62,7 @@ class RecurringTaskFormState extends State<RecurringTaskForm> {
       }
       _endDate = widget.recurringTask!.endDate;
       _dayOfMonth = widget.recurringTask!.dayOfMonth ?? 1;
+      _reminderTime = _parseTimeOfDay(widget.recurringTask!.reminderTimeOfDay);
     }
 
     _frequencyController.text = _frequency.toString();
@@ -82,8 +89,24 @@ class RecurringTaskFormState extends State<RecurringTaskForm> {
       startDate: _startDate != null ? DateService().getDate(_startDate!) : null,
       endDate: _endDate,
       dayOfMonth: _dayOfMonth,
+      reminderTimeOfDay: _formatTimeOfDay(_reminderTime),
     );
     widget.onRecurringTaskChanged(recurringTask);
+  }
+
+  static TimeOfDay? _parseTimeOfDay(String? value) {
+    if (value == null) return null;
+    final parts = value.split(':');
+    if (parts.length != 2) return null;
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour == null || minute == null) return null;
+    return TimeOfDay(hour: hour, minute: minute);
+  }
+
+  static String? _formatTimeOfDay(TimeOfDay? t) {
+    if (t == null) return null;
+    return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
   }
 
   String? validate() {
@@ -249,7 +272,53 @@ class RecurringTaskFormState extends State<RecurringTaskForm> {
                   icon: const Icon(FontAwesomeIcons.xmark),
                 ),
             ],
-          )
+          ),
+          if (widget.showReminder)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Remind me at',
+                      // The date is not asked for: every occurrence reminds on its own day.
+                      helperText: 'On each occurrence',
+                      icon: Icon(FontAwesomeIcons.bell, size: 16),
+                    ),
+                    child: InkWell(
+                      onTap: () async {
+                        final time = await showTimePicker(
+                          context: context,
+                          initialTime: _reminderTime ?? DateService().getRoundedTime(TimeOfDay.now()),
+                        );
+                        if (time == null) return;
+                        setState(() {
+                          _reminderTime = time;
+                          _updateParent();
+                        });
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4.0),
+                        child: Text(
+                          _reminderTime != null ? _reminderTime!.format(context) : 'Set a time',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                if (_reminderTime != null)
+                  IconButton(
+                    onPressed: () {
+                      setState(() {
+                        _reminderTime = null;
+                        _updateParent();
+                      });
+                    },
+                    icon: const Icon(FontAwesomeIcons.xmark),
+                  ),
+              ],
+            ),
         ],
       ),
     );

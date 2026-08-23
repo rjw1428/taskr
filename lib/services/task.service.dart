@@ -7,11 +7,24 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/task_ordering.dart';
+import 'package:taskr/services/recurring_series.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:taskr/shared/shared.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:rrule/rrule.dart';
 import 'package:intl/intl.dart';
+
+/// Outcome of materializing a series: the template id, the occurrences actually
+/// written (so the caller can enqueue their reminders), and how the commit landed.
+class RecurringSeriesWrite {
+  final String templateId;
+  final List<Task> occurrences;
+  final WriteAck ack;
+  const RecurringSeriesWrite({
+    required this.templateId,
+    required this.occurrences,
+    required this.ack,
+  });
+}
 
 class TaskService {
   // `late` so a test can inject a fake via [db] before the real instance is
@@ -39,6 +52,13 @@ class TaskService {
     return _db.collection('todos').doc(userId).collection('countdowns');
   }
 
+  /// Whether [task] belongs in the countdown index. Shared so the batched series
+  /// path and [_syncCountdownIndex] can never drift apart.
+  bool countdownEligible(Task task) {
+    final isNonStartMultiDay = task.multiDayGroupId != null && task.multiDayPosition != 'start';
+    return task.countdown && task.dueDate != null && !task.completed && !isNonStartMultiDay;
+  }
+
   Future<void> _syncCountdownIndex(String userId, Task task) async {
     if (task.id == null) return;
     // The countdown index is a denormalized cache; a failure here must never
@@ -46,8 +66,7 @@ class TaskService {
     // stuck open because the caller never reaches its pop()).
     try {
       final ref = countdownCollection(userId).doc(task.id);
-      final isNonStartMultiDay = task.multiDayGroupId != null && task.multiDayPosition != 'start';
-      if (task.countdown && task.dueDate != null && !task.completed && !isNonStartMultiDay) {
+      if (countdownEligible(task)) {
         await ref.set({
           'title': task.title,
           'dueDate': task.dueDate,
@@ -574,6 +593,25 @@ class TaskService {
     }
   }
 
+  /// The reminder instant a pushed occurrence should carry on its new date, or
+  /// null when it has no series reminder to inherit. A deleted template is a
+  /// state the app already tolerates (see the orphaned-series view), so it
+  /// degrades quietly to no reminder rather than failing the push.
+  Future<String?> _seriesReminderFor(Task task) async {
+    if (task.recurringTemplateId == null || task.dueDate == null) return null;
+    try {
+      final template = await getRecurringTemplate(task.recurringTemplateId!);
+      if (template.reminderTimeOfDay == null) return null;
+      return RecurringSeries.reminderInstantFor(
+        template.reminderTimeOfDay,
+        DateService().getDate(task.dueDate!),
+      );
+    } catch (e) {
+      debugPrint('No series template for pushed task ${task.id}: $e');
+      return null;
+    }
+  }
+
   Future<void> pushTask(Task task) async {
     var user = AuthService().user!;
     if (task.reminderTaskName != null) {
@@ -587,11 +625,19 @@ class TaskService {
     final decrementScore = d.day == now.day && d.month == now.month && d.year == now.year;
     task.dueDate = DateService().incrementDate(d);
     task.pushCount += 1;
-    task.reminderTime = null;
+    // A series' reminder is a time of day, not a property of the original date,
+    // so it follows the task when it moves. Everything else (one-off tasks, a
+    // series with no reminder time, an occurrence whose template is gone) keeps
+    // the old behaviour of clearing the reminder.
+    task.reminderTime = await _seriesReminderFor(task);
     task.reminderTaskName = null;
     // Preserve the document id across the move so id-keyed links (e.g. a goal
     // generation's taskIds) stay connected after a push.
     await addTask(task, existingId: task.id);
+    if (task.reminderTime != null) {
+      // Only actually schedules if the new instant is inside the enqueue window.
+      await ReminderService().enqueueDueReminders([task]);
+    }
     // Record the effort points pushed off the from-date (any day, not just today).
     await PerformanceService().recordPush(user.uid, task, fromDate);
     if (decrementScore) {
@@ -690,27 +736,174 @@ class TaskService {
     }
   }
 
-  Future<String?> saveRecurringTask(RecurringTask template) async {
-    final user = AuthService().user!;
-    try {
-      final resp = await recurringTempateCollection(user.uid).add(template.toJson());
-      final templateId = resp.id;
-      return templateId;
-    } catch (e, s) {
-      reportError(e, s, "Couldn't save recurring task");
-      return null;
+  /// Creates a recurring series — the template plus every occurrence inside the
+  /// materialization horizon — in ONE batched commit with no per-occurrence reads.
+  ///
+  /// This replaces the old save-then-loop path, which cost roughly four serial
+  /// round trips per occurrence and left the add-task form open behind a spinner
+  /// while it worked through the series.
+  Future<RecurringSeriesWrite> createRecurringSeries(RecurringTask template, Task prototype) async {
+    final user = AuthService().user;
+    if (user == null) throw "No user logged in when adding recurring task";
+
+    final now = DateTime.now();
+    // doc() mints the id client-side, so no round trip is needed before the batch.
+    final templateRef = recurringTempateCollection(user.uid).doc();
+    final dates = RecurringSeries.occurrencesInHorizon(template, today: now);
+    final tasks = _buildOccurrences(
+      uid: user.uid,
+      prototype: prototype,
+      templateId: templateRef.id,
+      dates: dates,
+      reminderTimeOfDay: template.reminderTimeOfDay,
+    );
+
+    // Only the first occurrence's day gets an ordered insert: it is usually today,
+    // the day the user is looking at. Later occurrences land on empty future days
+    // where arrayUnion is equivalent to ordered insertion and needs no read.
+    final firstOrder = tasks.isEmpty ? null : await _orderedInsertFor(user.uid, tasks.first);
+
+    final templateData = removeNulls(template.toJson())..remove('id');
+    if (tasks.isNotEmpty) {
+      templateData['lastMaterializedDate'] = tasks.last.dueDate;
     }
+
+    final ack = await _commitSeriesBatches(
+      uid: user.uid,
+      tasks: tasks,
+      firstOrder: firstOrder,
+      templateRef: templateRef,
+      templateData: templateData,
+      action: "Couldn't save recurring task",
+    );
+    return RecurringSeriesWrite(templateId: templateRef.id, occurrences: tasks, ack: ack);
   }
 
-  Future _addRecurringTask(Task task, List<DateTime> instances, String templateId) async {
-    for (final dueDate in instances) {
-      await addTask(
-        task.copyWith(
-          dueDate: DateService().getString(dueDate),
-          recurringTemplateId: templateId,
-        ),
-      );
+  /// Materializes [dates] for an existing series and advances its watermark, in
+  /// one batched commit. Used by the rolling top-up; every date lands on a future
+  /// day, so no ordered insert is needed.
+  Future<RecurringSeriesWrite> materializeOccurrences({
+    required String templateId,
+    required RecurringTask template,
+    required Task prototype,
+    required List<DateTime> dates,
+  }) async {
+    final user = AuthService().user;
+    if (user == null) throw "No user logged in when materializing recurring task";
+    if (dates.isEmpty) {
+      return RecurringSeriesWrite(templateId: templateId, occurrences: const [], ack: WriteAck.confirmed);
     }
+
+    final tasks = _buildOccurrences(
+      uid: user.uid,
+      prototype: prototype,
+      templateId: templateId,
+      dates: dates,
+      reminderTimeOfDay: template.reminderTimeOfDay,
+    );
+
+    final ack = await _commitSeriesBatches(
+      uid: user.uid,
+      tasks: tasks,
+      templateRef: recurringTempateCollection(user.uid).doc(templateId),
+      templateData: {'lastMaterializedDate': tasks.last.dueDate},
+      templateMerge: true,
+      action: "Couldn't extend the recurring series",
+    );
+    return RecurringSeriesWrite(templateId: templateId, occurrences: tasks, ack: ack);
+  }
+
+  /// One [Task] per date, each with a client-minted id and — when the series
+  /// defines a time of day — its own absolute reminder instant. Every occurrence
+  /// gets identical field treatment; the old path silently dropped `countdown`
+  /// and other fields on every occurrence after the first.
+  List<Task> _buildOccurrences({
+    required String uid,
+    required Task prototype,
+    required String templateId,
+    required List<DateTime> dates,
+    required String? reminderTimeOfDay,
+  }) {
+    final dateService = DateService();
+    return dates.map((date) {
+      final dateStr = dateService.getString(date);
+      return prototype.copyWith(
+        id: taskCollection(uid, dateStr).doc().id,
+        dueDate: dateStr,
+        recurringTemplateId: templateId,
+        reminderTime: RecurringSeries.reminderInstantFor(reminderTimeOfDay, date),
+      );
+    }).toList();
+  }
+
+  Future<List<String>> _orderedInsertFor(String uid, Task task) async {
+    final existing = await getTasksInOrder(uid, task.dueDate!);
+    return TaskOrdering.insertInto(
+      existing,
+      task.id!,
+      priority: task.priority,
+      startTime: task.startTime,
+      endTime: task.endTime,
+    );
+  }
+
+  /// Commits [tasks] (and optionally a template write) as batches chunked below
+  /// Firestore's 500-operation limit. A WriteBatch is atomic, so a failure is
+  /// all-or-nothing per chunk; a series large enough to span chunks is completed
+  /// by the next top-up pass if one chunk fails.
+  Future<WriteAck> _commitSeriesBatches({
+    required String uid,
+    required List<Task> tasks,
+    required String action,
+    List<String>? firstOrder,
+    DocumentReference<Map<String, dynamic>>? templateRef,
+    Map<String, dynamic>? templateData,
+    bool templateMerge = false,
+  }) async {
+    final tasksDoc = _db.collection('todos').doc(uid).collection('tasks');
+    final commits = <Future<void>>[];
+    var batch = _db.batch();
+    var ops = 0;
+
+    void flush() {
+      if (ops == 0) return;
+      commits.add(batch.commit());
+      batch = _db.batch();
+      ops = 0;
+    }
+
+    if (templateRef != null && templateData != null) {
+      batch.set(templateRef, templateData, SetOptions(merge: templateMerge));
+      ops++;
+    }
+
+    for (var i = 0; i < tasks.length; i++) {
+      final task = tasks[i];
+      final date = task.dueDate!;
+      final data = removeNulls(task.toDbTask());
+      // Stamp the owner so the collection-group queries (subtasks, series
+      // dedupe) can find this doc across date partitions.
+      data['userId'] = uid;
+      batch.set(taskCollection(uid, date).doc(task.id), data);
+      ops++;
+
+      batch.set(
+        tasksDoc.doc(date),
+        {'taskOrder': i == 0 && firstOrder != null ? firstOrder : FieldValue.arrayUnion([task.id])},
+        SetOptions(merge: true),
+      );
+      ops++;
+
+      if (countdownEligible(task)) {
+        batch.set(countdownCollection(uid).doc(task.id), {'title': task.title, 'dueDate': task.dueDate});
+        ops++;
+      }
+
+      if (ops >= RecurringSeries.batchChunkSize) flush();
+    }
+    flush();
+
+    return ackWrite(Future.wait(commits), action: action);
   }
 
   Future<RecurringTask> getRecurringTemplate(String templateId) async {
@@ -723,146 +916,114 @@ class TaskService {
     return RecurringTask.fromJson(data);
   }
 
+  /// Rewrites a series in place: drop its outstanding occurrences (cancelling any
+  /// enqueued reminders), then re-materialize the new definition across the same
+  /// horizon creation uses.
+  ///
+  /// Creation and editing used to disagree — creation took 30 occurrences, editing
+  /// regenerated only a month — so an edited series silently changed length. Both
+  /// now go through [createRecurringSeries].
   Future<void> updateRecurringTemplate(Task task, RecurringTask updatedTemplate) async {
-    final user = AuthService().user!;
     try {
       final existingTemplate = await getRecurringTemplate(task.recurringTemplateId!);
-
-      // Remove & Create new template
       await deleteRecurringTemplate(task, existingTemplate);
-      final newTemplate = await recurringTempateCollection(user.uid).add(updatedTemplate.toJson());
 
-      // Generate and add new task instances based on the updated template
-      final instances = _generateRecurringTaskInstances(updatedTemplate);
-      await _addRecurringTask(task, instances, newTemplate.id);
+      // The edited occurrence is the prototype for the new series; clear the
+      // fields that belong to a single occurrence rather than to the series.
+      final prototype = task.copyWith(
+        id: null,
+        completed: false,
+        pushCount: 0,
+        added: DateTime.now().millisecondsSinceEpoch,
+      );
+      prototype.id = null;
+      prototype.reminderTime = null;
+      prototype.reminderTaskName = null;
+      prototype.recurringTemplateId = null;
+
+      // A fresh series has no watermark; re-materializing sets it.
+      updatedTemplate.lastMaterializedDate = null;
+      final written = await createRecurringSeries(updatedTemplate, prototype);
+      await ReminderService().enqueueDueReminders(written.occurrences);
     } catch (e) {
       debugPrint('Error updating recurring template: $e');
       rethrow;
     }
   }
 
+  /// Removes a series' outstanding occurrences, cancelling any reminder already
+  /// handed to Cloud Tasks. Completed occurrences are preserved as history.
+  ///
+  /// Prefers one collection-group read. The old path expanded every occurrence
+  /// across the whole series and issued a query per date — up to ~365 serial
+  /// reads to delete a daily year-long series — which is retained only as the
+  /// fallback for when the index is not yet deployed.
   Future<void> _deleteRecurringInstances(String templateId, RecurringTask template) async {
-    final user = AuthService().user!;
+    final found = await seriesInstances(templateId);
+    if (found != null) {
+      await _removeOccurrences(found.where((t) => !t.completed));
+      return;
+    }
+    await _deleteRecurringInstancesByDate(templateId, template);
+  }
 
-    // Expand EVERY occurrence across the whole series (start -> endDate), not just
-    // the first month. Creation materializes up to 30 occurrences, but this used to
-    // regenerate only a one-month window, so "Delete Series" left every later
-    // occurrence orphaned in the database (they kept re-appearing on the list).
-    final instances = _generateAllRecurringInstances(template);
-    for (var instance in instances) {
-      final dateStr = DateService().getString(instance);
-      final tasksSnapshot =
-          await taskCollection(user.uid, dateStr).where('recurringTemplateId', isEqualTo: templateId).get();
-
-      for (final doc in tasksSnapshot.docs) {
-        var data = doc.data();
-        data['id'] = doc.id;
-        final task = Task.fromJson(data);
-        // Preserve completed occurrences as history; only remove outstanding ones.
-        // Reuse deleteTask so taskOrder, reminders and countdowns are cleaned up too.
-        if (!task.completed) {
-          await deleteTask(task);
-        }
+  /// Cancels reminders and deletes each occurrence. [deleteTask] keeps taskOrder
+  /// and the countdown index consistent.
+  Future<void> _removeOccurrences(Iterable<Task> occurrences) async {
+    for (final task in occurrences) {
+      if (task.reminderTaskName != null) {
+        await ReminderService().cancelReminder(task);
       }
+      await deleteTask(task);
     }
   }
 
-  RecurrenceRule _buildRecurrenceRule(RecurringTask template) {
-    final type = getRecurrenceFrequency(template.recurrenceType);
-    final untilDate = template.endDate?.toUtc();
-    switch (template.recurrenceType) {
-      case 'Weekly':
-        return RecurrenceRule(
-          frequency: type,
-          interval: template.frequency ?? 1,
-          until: untilDate,
-          byWeekDays: getWeeklyRecurrenceList(template.daysOfWeek!),
-        );
-      case 'Monthly':
-        return RecurrenceRule(
-          frequency: type,
-          interval: template.frequency ?? 1,
-          until: untilDate,
-          byMonthDays: [template.dayOfMonth!],
-        );
-      default:
-        return RecurrenceRule(
-          frequency: type,
-          interval: template.frequency ?? 1,
-          until: untilDate,
-        );
+  /// Degraded path used until the (userId, recurringTemplateId) index exists.
+  Future<void> _deleteRecurringInstancesByDate(String templateId, RecurringTask template) async {
+    final user = AuthService().user!;
+    final instances = RecurringSeries.allOccurrences(template, today: DateTime.now());
+    for (final instance in instances) {
+      final dateStr = DateService().getString(instance);
+      final snapshot =
+          await taskCollection(user.uid, dateStr).where('recurringTemplateId', isEqualTo: templateId).get();
+      final tasks = snapshot.docs.map((doc) {
+        final data = {...doc.data(), 'id': doc.id};
+        return Task.fromJson(data);
+      }).where((t) => !t.completed);
+      await _removeOccurrences(tasks);
     }
   }
 
-  // Full series expansion used when deleting a series. Templates always carry an
-  // end date (enforced by the recurring task form), so this is finite; the take()
-  // cap is only a guard against a malformed template with a missing/far-future end.
-  List<DateTime> _generateAllRecurringInstances(RecurringTask template) {
-    final start = template.startDate?.toUtc() ?? DateTime.now().toUtc();
-    final rule = _buildRecurrenceRule(template);
-    return rule.getInstances(start: start).take(1000).toList();
-  }
-
-  List<DateTime> _generateRecurringTaskInstances(RecurringTask template) {
-    final type = getRecurrenceFrequency(template.recurrenceType);
-    final untilDate = template.endDate?.toUtc();
-    RecurrenceRule rule;
-
-    // Determine the start date for recurrence generation
-    // If the template has a startDate, use it. Otherwise, use now.
-    final DateTime generationStartDate =
-        template.startDate != null ? template.startDate!.toUtc() : DateTime.now().toUtc();
-    debugPrint('generationStartDate: $generationStartDate');
-
-    // Calculate one month from the generation start date
-    final DateTime untilDateForGeneration = DateTime.utc(
-      generationStartDate.year,
-      generationStartDate.month + 1,
-      generationStartDate.day,
-      generationStartDate.hour,
-      generationStartDate.minute,
-      generationStartDate.second,
-    );
-
-    switch (template.recurrenceType) {
-      case 'Weekly':
-        rule = RecurrenceRule(
-          frequency: type,
-          interval: template.frequency ?? 1,
-          until: untilDate,
-          byWeekDays: getWeeklyRecurrenceList(template.daysOfWeek!),
-        );
-        break;
-      case 'Monthly':
-        rule = RecurrenceRule(
-          frequency: type,
-          interval: template.frequency ?? 1,
-          until: untilDate,
-          byMonthDays: [template.dayOfMonth!],
-        );
-        break;
-      default:
-        rule = RecurrenceRule(
-          frequency: type,
-          interval: template.frequency ?? 1,
-          until: untilDate,
-        );
+  /// Occurrences of a series, found in one collection-group read instead of a
+  /// query per date. Needs the (userId, recurringTemplateId) index; until that is
+  /// deployed the query fails with failed-precondition, so degrade gracefully and
+  /// return null — callers fall back to the per-date scan / watermark alone.
+  Future<List<Task>?> seriesInstances(String templateId) async {
+    final user = AuthService().user;
+    if (user == null) return null;
+    try {
+      final snap = await _db
+          .collectionGroup('items')
+          .where('userId', isEqualTo: user.uid)
+          .where('recurringTemplateId', isEqualTo: templateId)
+          .get();
+      return snap.docs.map((doc) {
+        final data = {...doc.data(), 'id': doc.id};
+        data['tags'] = <dynamic>[]; // tags are irrelevant to the operations that use this
+        return Task.fromJson(data);
+      }).toList();
+    } catch (e) {
+      debugPrint('Series instance query failed (index building?): $e');
+      return null;
     }
-
-    final instances = rule
-        .getInstances(start: generationStartDate)
-        .where((instance) => instance.isBefore(untilDateForGeneration)) // Filter instances within the next month
-        .toList();
-    debugPrint('Generated ${instances.length} instances for the next month.');
-    return instances;
   }
 
   /// Scheduled instance dates for [template] from [start], bounded by the
-  /// template's endDate (habits set endDate to their rolling horizon). Reuses
-  /// the shared RRULE builder so habits and recurring tasks share one generator.
+  /// template's endDate (habits set endDate to their rolling horizon). Delegates
+  /// to the shared generator so habits, recurring tasks and delete-series can
+  /// never disagree about what a series' occurrences are.
   List<DateTime> generateInstancesInWindow(RecurringTask template, DateTime start) {
-    final rule = _buildRecurrenceRule(template);
-    return rule.getInstances(start: start.toUtc()).take(500).toList();
+    return RecurringSeries.buildRule(template).getInstances(start: RecurringSeries.utcDate(start)).take(500).toList();
   }
 
   Future<void> deleteRecurringTemplate(Task task, RecurringTask template) async {
@@ -941,25 +1102,3 @@ class TaskService {
   }
 }
 
-Frequency getRecurrenceFrequency(String templateRecurrance) {
-  if (templateRecurrance == 'Daily') return Frequency.daily;
-  if (templateRecurrance == 'Weekly') return Frequency.weekly;
-  if (templateRecurrance == 'Monthly') return Frequency.monthly;
-  if (templateRecurrance == 'Yearly') return Frequency.yearly;
-  throw Exception('Invalid recurrence type');
-}
-
-List<ByWeekDayEntry> getWeeklyRecurrenceList(Map<String, bool> daysOfWeek) {
-  return daysOfWeek.entries.fold<List<ByWeekDayEntry>>([], (acc, entry) {
-    if (!entry.value) return acc;
-
-    if (entry.key == 'Su') acc.add(ByWeekDayEntry(DateTime.sunday));
-    if (entry.key == 'Mo') acc.add(ByWeekDayEntry(DateTime.monday));
-    if (entry.key == 'Tu') acc.add(ByWeekDayEntry(DateTime.tuesday));
-    if (entry.key == 'We') acc.add(ByWeekDayEntry(DateTime.wednesday));
-    if (entry.key == 'Th') acc.add(ByWeekDayEntry(DateTime.thursday));
-    if (entry.key == 'Fr') acc.add(ByWeekDayEntry(DateTime.friday));
-    if (entry.key == 'Sa') acc.add(ByWeekDayEntry(DateTime.saturday));
-    return acc;
-  });
-}

@@ -277,6 +277,8 @@ RecurringTask _$RecurringTaskFromJson(Map<String, dynamic> json) =>
           ? null
           : DateTime.parse(json['endDate'] as String),
       dayOfMonth: (json['dayOfMonth'] as num?)?.toInt() ?? 1,
+      lastMaterializedDate: json['lastMaterializedDate'] as String?,
+      reminderTimeOfDay: json['reminderTimeOfDay'] as String?,
     )..id = json['id'] as String?;
 
 Map<String, dynamic> _$RecurringTaskToJson(RecurringTask instance) =>
@@ -288,6 +290,8 @@ Map<String, dynamic> _$RecurringTaskToJson(RecurringTask instance) =>
       'startDate': instance.startDate?.toIso8601String(),
       'endDate': instance.endDate?.toIso8601String(),
       'dayOfMonth': instance.dayOfMonth,
+      'lastMaterializedDate': instance.lastMaterializedDate,
+      'reminderTimeOfDay': instance.reminderTimeOfDay,
     };
 
 Kid _$KidFromJson(Map<String, dynamic> json) => Kid(

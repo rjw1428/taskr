@@ -4,32 +4,70 @@
       "collectionGroup": "items",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
-        { "fieldPath": "userId", "order": "ASCENDING" },
-        { "fieldPath": "parentId", "order": "ASCENDING" }
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "parentId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "items",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
-        { "fieldPath": "userId", "order": "ASCENDING" },
-        { "fieldPath": "habitId", "order": "ASCENDING" }
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "habitId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "items",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
-        { "fieldPath": "userId", "order": "ASCENDING" },
-        { "fieldPath": "goalId", "order": "ASCENDING" }
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "goalId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "items",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "completed", "order": "ASCENDING" },
-        { "fieldPath": "goalId", "order": "ASCENDING" }
+        {
+          "fieldPath": "completed",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "goalId",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "items",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "recurringTemplateId",
+          "order": "ASCENDING"
+        }
       ]
     }
   ],

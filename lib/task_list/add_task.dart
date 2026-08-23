@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:rrule/rrule.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/services/tag.provider.dart';
@@ -50,28 +49,6 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
     if (!_countdown) return null;
     final text = _countdownLabel.value.text.trim();
     return text.isEmpty ? null : text;
-  }
-
-  getRecurrenceFrequency(String templateRecurrance) {
-    if (templateRecurrance == 'Daily') return Frequency.daily;
-    if (templateRecurrance == 'Weekly') return Frequency.weekly;
-    if (templateRecurrance == 'Monthly') return Frequency.monthly;
-    if (templateRecurrance == 'Yearly') return Frequency.yearly;
-  }
-
-  List<ByWeekDayEntry> getWeeklyRecurrenceList(Map<String, bool> daysOfWeek) {
-    return daysOfWeek.entries.fold([], (acc, entry) {
-      if (!entry.value) return acc;
-
-      if (entry.key == 'Su') acc.add(ByWeekDayEntry(DateTime.sunday));
-      if (entry.key == 'Mo') acc.add(ByWeekDayEntry(DateTime.monday));
-      if (entry.key == 'Tu') acc.add(ByWeekDayEntry(DateTime.tuesday));
-      if (entry.key == 'We') acc.add(ByWeekDayEntry(DateTime.wednesday));
-      if (entry.key == 'Th') acc.add(ByWeekDayEntry(DateTime.thursday));
-      if (entry.key == 'Fr') acc.add(ByWeekDayEntry(DateTime.friday));
-      if (entry.key == 'Sa') acc.add(ByWeekDayEntry(DateTime.saturday));
-      return acc;
-    });
   }
 
   String _formatReminder(String isoString) {
@@ -143,57 +120,25 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
         _recurringTaskTemplate!.dayOfMonth = null;
       }
 
-      final recurringTaskTemplateId = await TaskService().saveRecurringTask(_recurringTaskTemplate!);
-
-      final type = getRecurrenceFrequency(_recurringTaskTemplate!.recurrenceType);
-      final untilDate = _recurringTaskTemplate!.endDate?.toUtc();
-      RecurrenceRule rule;
-      switch (_recurringTaskTemplate!.recurrenceType) {
-        case 'Weekly':
-          rule = RecurrenceRule(
-            frequency: type,
-            interval: _recurringTaskTemplate!.frequency ?? 1,
-            until: untilDate,
-            byWeekDays: getWeeklyRecurrenceList(_recurringTaskTemplate!.daysOfWeek!),
-          );
-          break;
-        case 'Monthly':
-          rule = RecurrenceRule(
-            frequency: type,
-            interval: _recurringTaskTemplate!.frequency ?? 1,
-            until: untilDate,
-            byMonthDays: [_recurringTaskTemplate!.dayOfMonth!],
-          );
-          break;
-        default:
-          rule = RecurrenceRule(
-            frequency: type,
-            interval: _recurringTaskTemplate!.frequency ?? 1,
-            until: untilDate,
-          );
-      }
-
-      final instancesStart = _recurringTaskTemplate!.startDate?.toUtc() ?? DateTime.now().toUtc();
-      final instances = rule.getInstances(start: instancesStart).take(30);
-
-      final firstInstance = instances.first;
-
-      final firstTask = Task(
+      // Everything the occurrences share. The service stamps each one's id,
+      // dueDate, template id and reminder instant.
+      final prototype = Task(
         title: _title.value.text.trim(),
         description: _description.value.text.trim(),
         priority: _priority,
         completed: false,
-        dueDate: DateService().getString(firstInstance),
         startTime: _startTime,
         endTime: _endTime,
-        recurringTemplateId: recurringTaskTemplateId,
         added: DateTime.now().millisecondsSinceEpoch,
         tags: _selectedTags,
         pushCount: 0,
         countdown: _countdown,
         countdownLabel: _countdownLabelValue,
       );
-      await _taskService.addTask(firstTask);
+
+      // One batched commit for the template and every occurrence in the horizon,
+      // so the form closes in constant time however long the series is.
+      final written = await _taskService.createRecurringSeries(_recurringTaskTemplate!, prototype);
 
       setState(() {
         apiPending = false;
@@ -201,15 +146,17 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
 
       if (mounted) {
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('First task in series added. The rest are being added in the background.'),
-          ),
-        );
       }
 
-      // Add remaining tasks in the background
-      _addRemainingTasks(instances.skip(1), recurringTaskTemplateId);
+      // Reminders are enqueued after the form is gone; nothing here blocks it.
+      final deferred = await ReminderService().enqueueDueReminders(written.occurrences);
+      if (deferred > 0) {
+        // Said here, where the user has the context for it. The launch-time
+        // top-up pass stays silent — an unexplained notice on every app open is
+        // noise they cannot act on.
+        showNoticeSnack("Reminders for this series are still being scheduled.");
+      }
+
     } else if (_isMultiDay && _dueDate != null && _multiDayEndDate != null && widget.task == null) {
       final startDate = DateService().getDate(_dueDate!);
       final endDate = DateService().getDate(_multiDayEndDate!);
@@ -354,32 +301,6 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
         );
         Navigator.of(context).pop();
       }
-    }
-  }
-
-  Future<void> _addRemainingTasks(Iterable<DateTime> instances, String? recurringTaskTemplateId) async {
-    for (var instance in instances) {
-      final task = Task(
-        title: _title.value.text.trim(),
-        description: _description.value.text.trim(),
-        priority: _priority,
-        completed: false,
-        dueDate: DateService().getString(instance),
-        startTime: _startTime,
-        endTime: _endTime,
-        recurringTemplateId: recurringTaskTemplateId,
-        added: DateTime.now().millisecondsSinceEpoch,
-        tags: _selectedTags,
-        pushCount: 0,
-      );
-      await _taskService.addTask(task);
-    }
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Recurring task series fully added.'),
-        ),
-      );
     }
   }
 
@@ -614,11 +535,22 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                                       : () => setState(() => _multiDayEndDate = null),
                                 ),
                               if (_dueDate != null && widget.task?.recurringTemplateId == null && !_isMultiDay)
-                                _toggleRow('Recurring', _isRecurring,
-                                    (value) => setState(() => _isRecurring = value)),
+                                _toggleRow('Recurring', _isRecurring, (value) {
+                                  setState(() {
+                                    _isRecurring = value;
+                                    // Only one reminder concept is live at a time: a
+                                    // recurring series reminds by time of day, via
+                                    // RecurringTaskForm.
+                                    if (value) {
+                                      _reminderEnabled = false;
+                                      _reminderTime = null;
+                                    }
+                                  });
+                                }),
                               if (_isRecurring)
                                 RecurringTaskForm(
                                   key: _recurringTaskFormKey,
+                                  showReminder: true,
                                   startDate: _dueDate,
                                   onRecurringTaskChanged: (recurringTask) {
                                     setState(() {
@@ -626,15 +558,16 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                                     });
                                   },
                                 ),
-                              _toggleRow(
-                                'Reminder',
-                                _reminderEnabled,
-                                (value) => setState(() {
-                                  _reminderEnabled = value;
-                                  if (!value) _reminderTime = null;
-                                }),
-                              ),
-                              if (_reminderEnabled)
+                              if (!_isRecurring)
+                                _toggleRow(
+                                  'Reminder',
+                                  _reminderEnabled,
+                                  (value) => setState(() {
+                                    _reminderEnabled = value;
+                                    if (!value) _reminderTime = null;
+                                  }),
+                                ),
+                              if (_reminderEnabled && !_isRecurring)
                                 _pickerField(
                                   icon: FontAwesomeIcons.bell,
                                   label: 'Remind me at',

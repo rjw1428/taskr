@@ -17,6 +17,7 @@ import 'package:taskr/services/goal.service.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/parking_notifications.dart';
 import 'package:taskr/services/people.provider.dart';
+import 'package:taskr/services/recurring_series.service.dart';
 import 'package:taskr/services/tag.provider.dart';
 import 'package:taskr/services/theme.provider.dart';
 import 'package:taskr/about/about.dart';
@@ -349,6 +350,16 @@ class _MyAppState extends State<MyApp> {
       if (message.data.containsKey('actions')) {
         _showWindTaskDialog(message);
       }
+    });
+
+    // Recurring series are materialized on a rolling 60-day horizon, so something
+    // has to extend them. Recurring tasks have no owning screen (habits piggyback
+    // on the goals tab), and the task list is the hot screen — so the pass runs
+    // here, once, when auth resolves. It also enqueues reminders that have come
+    // into the Cloud Tasks window.
+    AuthService().userStream.listen((user) {
+      if (user == null) return;
+      RecurringSeriesService().runLaunchPass();
     });
 
     // Cold start: the app was launched by tapping the prompt itself, so the tap

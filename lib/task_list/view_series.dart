@@ -148,6 +148,7 @@ class _ViewSeriesState extends State<ViewSeries> {
                   children: [
                     RecurringTaskForm(
                       key: _recurringTaskFormKey,
+                      showReminder: true,
                       startDate: DateService().getString(snapshot.data!.startDate!),
                       recurringTask: snapshot.data,
                       onRecurringTaskChanged: (recurringTask) {
