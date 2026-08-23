@@ -411,6 +411,14 @@ class TaskListState extends State<TaskListScreen> {
                               children: chips.map((cd) {
                                 final dueDate = DateService().getDate(cd['dueDate'] as String);
                                 final days = dueDate.difference(viewed).inDays;
+                                final label = (cd['label'] as String?)?.trim();
+                                final text = label != null && label.isNotEmpty
+                                    ? label
+                                    : cd['title'] as String;
+                                final chipStyle = TextStyle(
+                                  fontSize: 11,
+                                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                );
                                 return ConstrainedBox(
                                   constraints: const BoxConstraints(maxWidth: 100),
                                   child: ActionChip(
@@ -418,13 +426,21 @@ class TaskListState extends State<TaskListScreen> {
                                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
                                     backgroundColor: Theme.of(context).colorScheme.primaryContainer,
                                     side: BorderSide.none,
-                                    label: Text(
-                                      '${cd['title']} · ${days}d',
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Theme.of(context).colorScheme.onPrimaryContainer,
-                                      ),
+                                    // Title flexes (and ellipses) so the day count is never
+                                    // clipped away by the chip's max width.
+                                    label: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            text,
+                                            overflow: TextOverflow.ellipsis,
+                                            softWrap: false,
+                                            style: chipStyle,
+                                          ),
+                                        ),
+                                        Text(' · ${days}d', style: chipStyle),
+                                      ],
                                     ),
                                     onPressed: () {
                                       final due = cd['dueDate'] as String;

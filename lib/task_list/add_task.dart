@@ -24,6 +24,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   // String _modified = '';
   final TextEditingController _title = TextEditingController();
   final TextEditingController _description = TextEditingController();
+  final TextEditingController _countdownLabel = TextEditingController();
   String? _dueDate;
   String? _startTime;
   String? _endTime;
@@ -44,6 +45,12 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   late List<Tag> _allTags = [];
   late List<Tag> _selectedTags = [];
   final TaskService _taskService = TaskService();
+
+  String? get _countdownLabelValue {
+    if (!_countdown) return null;
+    final text = _countdownLabel.value.text.trim();
+    return text.isEmpty ? null : text;
+  }
 
   getRecurrenceFrequency(String templateRecurrance) {
     if (templateRecurrance == 'Daily') return Frequency.daily;
@@ -184,6 +191,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
         tags: _selectedTags,
         pushCount: 0,
         countdown: _countdown,
+        countdownLabel: _countdownLabelValue,
       );
       await _taskService.addTask(firstTask);
 
@@ -235,6 +243,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
           tags: _selectedTags,
           pushCount: 0,
           countdown: _countdown,
+          countdownLabel: _countdownLabelValue,
           multiDayGroupId: groupId,
           multiDayPosition: position,
         );
@@ -299,7 +308,8 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
           reminderTaskName: widget.task?.reminderTaskName,
           parentId: widget.task?.parentId,
           parentTitle: widget.task?.parentTitle,
-          countdown: _countdown);
+          countdown: _countdown,
+          countdownLabel: _countdownLabelValue);
 
       if (widget.task == null) {
         final taskId = await _taskService.addTask(newTask);
@@ -392,6 +402,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
       _reminderTime = widget.task!.reminderTime;
       _reminderEnabled = _reminderTime != null;
       _countdown = widget.task!.countdown;
+      _countdownLabel.text = widget.task!.countdownLabel ?? '';
       if (widget.task!.isMultiDay) {
         _isMultiDay = true;
         _loadMultiDayEndDate();
@@ -655,7 +666,23 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                                 ),
                               if (_dueDate != null)
                                 _toggleRow('Countdown', _countdown,
-                                    (value) => setState(() => _countdown = value)),
+                                    (value) => setState(() {
+                                          _countdown = value;
+                                          if (!value) _countdownLabel.clear();
+                                        })),
+                              if (_dueDate != null && _countdown)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: Insets.xs),
+                                  child: TextFormField(
+                                    controller: _countdownLabel,
+                                    textCapitalization: TextCapitalization.words,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Countdown label (optional)',
+                                      helperText: 'Shown on the countdown chip instead of the title',
+                                    ),
+                                    style: theme.textTheme.bodyLarge,
+                                  ),
+                                ),
                             ],
                           ),
                         ),

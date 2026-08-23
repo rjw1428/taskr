@@ -48,7 +48,12 @@ class TaskService {
       final ref = countdownCollection(userId).doc(task.id);
       final isNonStartMultiDay = task.multiDayGroupId != null && task.multiDayPosition != 'start';
       if (task.countdown && task.dueDate != null && !task.completed && !isNonStartMultiDay) {
-        await ref.set({'title': task.title, 'dueDate': task.dueDate});
+        await ref.set({
+          'title': task.title,
+          'dueDate': task.dueDate,
+          if (task.countdownLabel != null && task.countdownLabel!.isNotEmpty)
+            'label': task.countdownLabel,
+        });
       } else {
         await ref.delete();
       }

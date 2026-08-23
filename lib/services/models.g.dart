@@ -200,6 +200,7 @@ Task _$TaskFromJson(Map<String, dynamic> json) => Task(
       reminderTaskName: json['reminderTaskName'] as String?,
       pushCount: (json['pushCount'] as num?)?.toInt() ?? 0,
       countdown: json['countdown'] as bool? ?? false,
+      countdownLabel: json['countdownLabel'] as String?,
       parentId: json['parentId'] as String?,
       parentTitle: json['parentTitle'] as String?,
       userId: json['userId'] as String?,
@@ -238,6 +239,7 @@ Map<String, dynamic> _$TaskToJson(Task instance) => <String, dynamic>{
       'priority': _$EffortEnumMap[instance.priority]!,
       'pushCount': instance.pushCount,
       'countdown': instance.countdown,
+      'countdownLabel': instance.countdownLabel,
     };
 
 const _$EffortEnumMap = {

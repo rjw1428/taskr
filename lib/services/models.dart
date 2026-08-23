@@ -287,6 +287,7 @@ class Task {
   Effort priority;
   int pushCount;
   bool countdown;
+  String? countdownLabel;
 
   bool get isDivider => type == 'divider';
   bool get isMultiDay => multiDayGroupId != null;
@@ -319,6 +320,7 @@ class Task {
       this.reminderTaskName,
       this.pushCount = 0,
       this.countdown = false,
+      this.countdownLabel,
       this.parentId,
       this.parentTitle,
       this.userId,
@@ -357,6 +359,7 @@ class Task {
     Effort? priority,
     int? pushCount,
     bool? countdown,
+    String? countdownLabel,
     String? recurringTemplateId,
     String? goalId,
     String? calendarEventId,
@@ -387,6 +390,7 @@ class Task {
         priority: priority ?? this.priority,
         pushCount: pushCount ?? this.pushCount,
         countdown: countdown ?? this.countdown,
+        countdownLabel: countdownLabel ?? this.countdownLabel,
         recurringTemplateId: recurringTemplateId ?? this.recurringTemplateId,
         goalId: goalId ?? this.goalId,
         calendarEventId: calendarEventId ?? this.calendarEventId,
