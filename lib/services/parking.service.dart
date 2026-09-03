@@ -9,10 +9,16 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 /// and the service's own `/park` are the same endpoint.
 const String parkingBaseUrl = 'https://api.ryanwilk.com/parking';
 
-/// How long to wait on the service before giving up. The trigger is
-/// fire-and-forget on the far side, so a slow response means a slow *network*,
-/// not a slow purchase.
-const Duration _parkingTimeout = Duration(seconds: 10);
+/// How long to wait on the service before giving up on a single attempt. The
+/// trigger is fire-and-forget on the far side, so a slow response means a slow
+/// *network*, not a slow purchase.
+const Duration _parkingTimeout = Duration(seconds: 15);
+
+/// Waits between attempts; its length is also the retry count.
+const List<Duration> _parkingRetryBackoff = [
+  Duration(seconds: 1),
+  Duration(seconds: 3),
+];
 
 /// What happened when we asked the service to buy parking.
 ///
@@ -38,7 +44,12 @@ enum ParkingTriggerOutcome {
 }
 
 class ParkingTriggerResult {
-  const ParkingTriggerResult(this.outcome, this.message, {this.requestId});
+  const ParkingTriggerResult(
+    this.outcome,
+    this.message, {
+    this.requestId,
+    this.detail,
+  });
 
   final ParkingTriggerOutcome outcome;
 
@@ -47,6 +58,10 @@ class ParkingTriggerResult {
 
   /// Correlates with the service's logs and its result push.
   final String? requestId;
+
+  /// Exception type, message and per-attempt timings. Recorded with the inbox
+  /// entry, never shown to the user.
+  final String? detail;
 }
 
 class ParkingService {
@@ -59,14 +74,18 @@ class ParkingService {
   /// can inject one without a dotenv fixture.
   late String token = dotenv.env['PARKING_TRIGGER_TOKEN'] ?? '';
 
+  /// Waits between attempts. Overridden in tests so they exercise the retry
+  /// logic without actually sleeping through the backoff.
+  List<Duration> retryBackoff = _parkingRetryBackoff;
+
   String get _token => token;
 
   bool get isConfigured => _token.isNotEmpty;
 
   /// Whether the service still has a working upstream session.
   ///
-  /// Returns null when that cannot be determined, so callers can carry on
-  /// rather than block a purchase that might have succeeded.
+  /// Returns null when that cannot be determined. Not called by
+  /// [triggerParking] — `/park` reports a dead session itself with a `409`.
   Future<bool?> hasUpstreamSession() async {
     try {
       // /health needs no auth and reports the upstream session directly.
@@ -98,17 +117,44 @@ class ParkingService {
       );
     }
 
-    // The service reports a dead upstream session before we spend a request on
-    // it. Its own result push is best-effort, so catching this here is the
-    // difference between a certain notification and a silent non-payment.
-    if (await hasUpstreamSession() == false) {
-      return const ParkingTriggerResult(
-        ParkingTriggerOutcome.needsAuth,
-        'Parking could not be paid: the parking account needs to be signed in '
-        'again. Nothing was charged.',
-      );
+    ParkingTriggerResult? lastFailure;
+    final trail = <String>[];
+
+    for (var attempt = 0; attempt <= retryBackoff.length; attempt++) {
+      if (attempt > 0) {
+        await Future<void>.delayed(retryBackoff[attempt - 1]);
+      }
+
+      final started = DateTime.now();
+      final (result, mayRetry) = await _attemptTrigger();
+      final ms = DateTime.now().difference(started).inMilliseconds;
+
+      if (!mayRetry) {
+        trail.add('#${attempt + 1} ${ms}ms ${result.detail ?? result.outcome.name}');
+        return ParkingTriggerResult(
+          result.outcome,
+          result.message,
+          requestId: result.requestId,
+          detail: trail.join('; '),
+        );
+      }
+
+      trail.add('#${attempt + 1} ${ms}ms ${result.detail ?? "retryable"}');
+      debugPrint('ParkingService.triggerParking attempt ${attempt + 1} failed '
+          'after ${ms}ms: ${result.detail ?? result.message}');
+      lastFailure = result;
     }
 
+    return ParkingTriggerResult(
+      lastFailure!.outcome,
+      lastFailure.message,
+      detail: trail.join('; '),
+    );
+  }
+
+  /// One attempt at the trigger. Returns the outcome and whether retrying could
+  /// change it — only transport failures and gateway errors are retryable.
+  Future<(ParkingTriggerResult, bool)> _attemptTrigger() async {
     try {
       final url = Uri.parse('$baseUrl/park');
       final response = await HttpClient()
@@ -124,17 +170,35 @@ class ParkingService {
       final body = await response.transform(utf8.decoder).join();
 
       if (response.statusCode == 401) {
-        return const ParkingTriggerResult(
-          ParkingTriggerOutcome.unauthorized,
-          'Parking request was rejected. The access token needs updating.',
+        return (
+          const ParkingTriggerResult(
+            ParkingTriggerOutcome.unauthorized,
+            'Parking request was rejected. The access token needs updating.',
+          ),
+          false,
+        );
+      }
+
+      if (response.statusCode == 409) {
+        return (
+          const ParkingTriggerResult(
+            ParkingTriggerOutcome.needsAuth,
+            'Parking could not be paid: the parking account needs to be signed in '
+            'again. Nothing was charged.',
+          ),
+          false,
         );
       }
 
       if (response.statusCode != 200) {
-        return ParkingTriggerResult(
-          ParkingTriggerOutcome.failed,
-          'Could not reach the parking service (${response.statusCode}). '
-          'Nothing was paid for.',
+        return (
+          ParkingTriggerResult(
+            ParkingTriggerOutcome.failed,
+            'Could not reach the parking service (${response.statusCode}). '
+            'Nothing was paid for.',
+            detail: 'HTTP ${response.statusCode}',
+          ),
+          const {502, 503, 504}.contains(response.statusCode),
         );
       }
 
@@ -147,18 +211,31 @@ class ParkingService {
       }
 
       // 200 means *accepted*, not paid. Say so.
-      return ParkingTriggerResult(
-        ParkingTriggerOutcome.accepted,
-        'Parking request sent. You will get a notification when it completes.',
-        requestId: requestId,
+      return (
+        ParkingTriggerResult(
+          ParkingTriggerOutcome.accepted,
+          'Parking request sent. You will get a notification when it completes.',
+          requestId: requestId,
+        ),
+        false,
       );
     } catch (e) {
       debugPrint('ParkingService.triggerParking error: $e');
-      return const ParkingTriggerResult(
-        ParkingTriggerOutcome.failed,
-        'Could not send the parking request. Nothing was paid for.',
+      return (
+        ParkingTriggerResult(
+          ParkingTriggerOutcome.failed,
+          'Could not send the parking request. Nothing was paid for.',
+          detail: _describe(e),
+        ),
+        true,
       );
     }
+  }
+
+  /// A one-line, length-capped rendering of an error, safe to store.
+  static String _describe(Object e) {
+    final text = '${e.runtimeType}: $e'.replaceAll(RegExp(r'\s+'), ' ');
+    return text.length <= 300 ? text : '${text.substring(0, 297)}...';
   }
 
   /// Whether a parking session is already covering the vehicle.

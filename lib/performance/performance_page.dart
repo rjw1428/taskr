@@ -65,11 +65,7 @@ class CurrentScoreState extends State<CurrentScore> {
       );
     }
 
-    // A perf doc can exist with only a `pushed`/`date` field (see
-    // PerformanceService.recordPush) and no `completed` map — default to an
-    // empty map so a non-null cast doesn't throw and blank the whole page.
-    final chartData =
-        performance.map((days) => (days['completed'] as Map<String, dynamic>?) ?? const <String, dynamic>{}).toList();
+    final chartData = alignDailyCompleted(performance, DateTime.now());
 
     // Y-axis max reflects the series actually shown: the total ('ALL') in Total
     // mode, or the largest per-effort value in Breakdown mode. Previously the max
@@ -324,6 +320,34 @@ class _RecordsCard extends StatelessWidget {
       },
     );
   }
+}
+
+/// One `completed` map per day for the last [dayCount] days, oldest first.
+///
+/// A day on which nothing was completed and nothing pushed has no performance
+/// document at all, so the raw stream is a sparse list. The chart plots by list
+/// index and the axis labels each index as "N days back from today", so a gap
+/// used to slide every earlier point one day later — a Tuesday score shown on
+/// Wednesday. Filling the gaps keeps index and date in step.
+///
+/// A doc can also carry only `pushed`/`date` and no `completed` map (see
+/// PerformanceService.recordPush), hence the empty-map default.
+List<Map<String, dynamic>> alignDailyCompleted(
+  List<Map<String, dynamic>> performance,
+  DateTime today, {
+  int dayCount = 7,
+}) {
+  final byDay = <String, Map<String, dynamic>>{};
+  for (final doc in performance) {
+    final ts = doc['date'] as Timestamp?;
+    if (ts == null) continue;
+    byDay[DateService().getString(ts.toDate())] =
+        (doc['completed'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+  }
+  return List.generate(dayCount, (i) {
+    final day = today.subtract(Duration(days: dayCount - 1 - i));
+    return byDay[DateService().getString(day)] ?? const <String, dynamic>{};
+  });
 }
 
 Widget bottomTitleWidgets(double value, TitleMeta meta, int dataLength, Color color) {

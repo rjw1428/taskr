@@ -53,4 +53,73 @@ void main() {
     expect(after.values.every((c) => c == 1), isTrue,
         reason: 'each date must still have exactly one instance');
   });
+
+  // Regression (2026-08): "No Vending Machine" — a Tue/Wed/Thu habit whose title
+  // was edited — ended up with lastMaterializedDate two months ahead of its last
+  // real instance, so every upcoming occurrence was missing and could never come
+  // back. updateHabit deletes the future before regenerating it, and the
+  // regenerating writes did not land; the watermark advanced anyway, because it
+  // moves on loop completion and addTask cannot report failure (ackWrite
+  // swallows errors and offline timeouts by design).
+  group('backfill behind a stale watermark', () {
+    Habit tueWedThu() => Habit(
+          title: 'No Vending Machine',
+          effort: Effort.low,
+          recurrenceType: 'Weekly',
+          frequency: 1,
+          daysOfWeek: const {
+            'Su': false, 'Mo': false, 'Tu': true, 'We': true,
+            'Th': true, 'Fr': false, 'Sa': false,
+          },
+          startDate: DateService().getString(DateTime.now()),
+        );
+
+    test('instances missing behind the watermark are regenerated', () async {
+      final h = tueWedThu();
+      final id = await habits.addHabit(h);
+      final full = (await instancesPerDate(id)).length;
+      expect(full, greaterThan(0));
+
+      // Exactly the observed corruption: every future instance gone, watermark
+      // still claiming the whole horizon.
+      final todayStr = DateService().getString(DateTime.now());
+      final wm = h.lastMaterializedDate!;
+      for (final dd in (await fake.collection('todos').doc(uid).collection('tasks').get()).docs) {
+        final items = await fake
+            .collection('todos').doc(uid).collection('tasks').doc(dd.id)
+            .collection('items').where('habitId', isEqualTo: id).get();
+        for (final i in items.docs) {
+          if (dd.id.compareTo(todayStr) >= 0) await i.reference.delete();
+        }
+      }
+      expect((await instancesPerDate(id)).length, 0);
+
+      h.lastMaterializedDate = wm;
+      await habits.ensureInstances(h);
+
+      expect((await instancesPerDate(id)).length, full);
+    });
+
+    test('editing the title leaves the habit fully materialized', () async {
+      final h = tueWedThu();
+      final id = await habits.addHabit(h);
+      final full = (await instancesPerDate(id)).length;
+
+      h.title = 'No Vending Machine - including soda';
+      await habits.updateHabit(h);
+
+      final after = await instancesPerDate(id);
+      expect(after.length, full);
+      expect(after.values.every((n) => n == 1), isTrue, reason: 'no duplicates');
+    });
+
+    test('a repeated pass does not duplicate', () async {
+      final h = tueWedThu();
+      final id = await habits.addHabit(h);
+      final full = (await instancesPerDate(id)).length;
+      await habits.ensureInstances(h);
+      await habits.ensureInstances(h);
+      expect((await instancesPerDate(id)).length, full);
+    });
+  });
 }

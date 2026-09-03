@@ -157,6 +157,43 @@ void main() {
     });
   });
 
+  group('backfill behind a stale watermark', () {
+    // Regression: a watermark can end up ahead of what actually exists, because
+    // it advances on loop completion while ackWrite swallows write failures and
+    // offline timeouts. The occurrences behind it used to be unrecoverable.
+    test('occurrences missing behind the watermark are regenerated', () async {
+      final written = await tasks.createRecurringSeries(template(), prototype());
+      final full = await occurrenceCount();
+      final watermark = written.occurrences.last.dueDate!;
+
+      // Delete a stretch of the middle while the watermark still claims the
+      // whole horizon is materialized.
+      final gapStart = DateService().getString(DateTime.now().add(const Duration(days: 10)));
+      final gapEnd = DateService().getString(DateTime.now().add(const Duration(days: 20)));
+      final existing = await tasks.seriesInstances(written.templateId);
+      for (final t in existing!.where((t) => t.dueDate!.compareTo(gapStart) >= 0 && t.dueDate!.compareTo(gapEnd) <= 0)) {
+        await tasks.deleteTask(t);
+      }
+      expect(await occurrenceCount(), lessThan(full));
+
+      final stale = await reloadTemplate(written.templateId);
+      expect(stale.lastMaterializedDate, watermark);
+
+      await series.ensureInstances(stale);
+
+      // The collection-group query, not the watermark, decides what is missing.
+      expect(await occurrenceCount(), full);
+    });
+
+    test('backfilling does not duplicate what already exists', () async {
+      final written = await tasks.createRecurringSeries(template(), prototype());
+      final full = await occurrenceCount();
+      await series.ensureInstances(await reloadTemplate(written.templateId));
+      await series.ensureInstances(await reloadTemplate(written.templateId));
+      expect(await occurrenceCount(), full);
+    });
+  });
+
   group('delete series', () {
     test('removes outstanding occurrences and the template', () async {
       final written = await tasks.createRecurringSeries(template(), prototype());

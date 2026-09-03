@@ -6,6 +6,7 @@ import 'package:taskr/shared/error_reporting.dart';
 
 import 'notification.service.dart';
 import 'parking.service.dart';
+import 'parking_work.dart';
 
 /// FCM `data.type` identifying the actionable "pay for parking?" prompt.
 const String parkingPromptType = 'parking_prompt';
@@ -154,7 +155,23 @@ Future<bool> handleParkingAction(String? actionId) async {
   }
 }
 
+/// Hands the purchase to WorkManager rather than running it here.
+///
+/// The notification action is delivered to a BroadcastReceiver that returns as
+/// soon as it has started a Flutter engine, so this isolate has no guaranteed
+/// lifetime — a network call started here is killed with the process, which was
+/// measured happening. Queueing is a fast local write that finishes inside that
+/// window, and Android then runs the purchase in a Worker it is committed to.
 Future<void> _payForParking() async {
+  await enqueueParkingPurchase();
+  debugPrint('parking: purchase queued');
+}
+
+/// Performs the purchase and reports it. Runs in the WorkManager isolate.
+///
+/// Returns false when the attempt is worth retrying, which is what makes a tap
+/// with no signal still pay once signal returns.
+Future<bool> runParkingPurchase() async {
   await _ensureEnvLoaded();
 
   final result = await ParkingService().triggerParking();
@@ -165,6 +182,15 @@ Future<void> _payForParking() async {
   // service pushes the actual payment outcome separately, and that push is
   // best-effort, so a failure we already know about is reported here rather
   // than being left to a message that may never arrive.
+
+  // Stay quiet on a retryable failure: WorkManager tries again shortly, and a
+  // burst of "NOT paid" notifications for attempts that then succeed is worse
+  // than saying nothing. Giving up is reported by [reportParkingAbandoned].
+  if (result.outcome == ParkingTriggerOutcome.failed) {
+    debugPrint('parking: retryable failure, leaving it to WorkManager');
+    return false;
+  }
+
   await _showParkingInfo(
     switch (result.outcome) {
       ParkingTriggerOutcome.accepted => 'Parking requested',
@@ -172,46 +198,76 @@ Future<void> _payForParking() async {
       _ => 'Parking NOT paid',
     },
     result.message,
+    data: {
+      'outcome': result.outcome.name,
+      if (result.detail != null) 'detail': result.detail,
+      if (result.requestId != null) 'requestId': result.requestId,
+    },
+  );
+  return true;
+}
+
+/// Reports a queued purchase that was retried past the point of being useful.
+Future<void> reportParkingAbandoned() async {
+  await _showParkingInfo(
+    'Parking NOT paid',
+    'Could not reach the parking service. Nothing was paid for.',
+    data: {'outcome': 'abandoned'},
   );
 }
 
 /// Surfaces the parking service's own asynchronous result push.
 Future<void> showParkingResult(Map<String, dynamic> data) async {
-  final status = data['status'] as String?;
+  final message = parkingResultMessage(data);
+  await _showParkingInfo(message.title, message.body);
+}
+
+/// Records a result push in the in-app inbox without drawing a notification.
+///
+/// The service's result push carries a `notification` block, so when the app is
+/// not in the foreground Android draws it before any Dart runs and
+/// [showParkingResult] never fires. That path is the common one — the answer
+/// arrives while the user is walking to the train — and without this the
+/// confirmation would leave no trace once it is swiped away. Drawing here would
+/// duplicate the copy the system already showed, so this only records.
+Future<void> recordParkingResult(Map<String, dynamic> data) async {
+  final message = parkingResultMessage(data);
+  await NotificationService()
+      .record(title: message.title, body: message.body, type: 'parking_result');
+}
+
+/// The wording for a result push, by its `status`.
+///
+/// Shared so the notification and the inbox entry can never drift apart.
+({String title, String body}) parkingResultMessage(Map<String, dynamic> data) {
   // These arrive straight from the parking service to FCM, never touching our
   // backend, so this is the only opportunity to record them.
-
-  switch (status) {
+  switch (data['status'] as String?) {
     case 'paid':
-      await _showParkingInfo('Parking paid', 'Your parking session is active.');
-      break;
+      return (title: 'Parking paid', body: 'Your parking session is active.');
     case 'skipped':
-      await _showParkingInfo(
-        'Parking already active',
-        'A session was already covering you. Nothing was bought.',
+      return (
+        title: 'Parking already active',
+        body: 'A session was already covering you. Nothing was bought.',
       );
-      break;
     case 'needs-auth':
       // Retrying can never fix this — it needs a person to complete an SMS
       // verification — so this deliberately offers no retry affordance.
-      await _showParkingInfo(
-        'Parking needs sign-in',
-        'The parking account must be re-authenticated before it can pay again.',
+      return (
+        title: 'Parking needs sign-in',
+        body: 'The parking account must be re-authenticated before it can pay again.',
       );
-      break;
     case 'dry-run':
-      await _showParkingInfo('Parking dry run', 'Nothing was charged.');
-      break;
+      return (title: 'Parking dry run', body: 'Nothing was charged.');
     case 'refused':
-      await _showParkingInfo(
-        'Parking refused',
-        'A safety check stopped the purchase. Nothing was charged.',
+      return (
+        title: 'Parking refused',
+        body: 'A safety check stopped the purchase. Nothing was charged.',
       );
-      break;
     default:
-      await _showParkingInfo(
-        'Parking failed',
-        'The parking run did not complete. Nothing was charged.',
+      return (
+        title: 'Parking failed',
+        body: 'The parking run did not complete. Nothing was charged.',
       );
   }
 }
@@ -220,11 +276,12 @@ Future<void> _showParkingInfo(
   String title,
   String body, {
   String type = 'parking_result',
+  Map<String, dynamic> data = const {},
 }) async {
   // Mirror it into the in-app inbox. These are drawn on the device, so unlike
   // notifications sent by Cloud Functions nothing else records them, and a
   // missed or swiped notification would otherwise leave no trace at all.
-  await NotificationService().record(title: title, body: body, type: type);
+  await NotificationService().record(title: title, body: body, type: type, data: data);
 
   await _plugin.show(
     _parkingResultId,

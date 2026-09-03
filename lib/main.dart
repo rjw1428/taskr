@@ -9,6 +9,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'
     as local_notifications;
 import 'package:provider/provider.dart';
+import 'package:workmanager/workmanager.dart';
 import 'package:taskr/firebase_options.dart';
 import 'package:taskr/home/home.dart';
 import 'package:taskr/services/accomplishment.provider.dart';
@@ -16,6 +17,7 @@ import 'package:taskr/services/auth.service.dart';
 import 'package:taskr/services/goal.service.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/parking_notifications.dart';
+import 'package:taskr/services/parking_work.dart';
 import 'package:taskr/services/people.provider.dart';
 import 'package:taskr/services/recurring_series.service.dart';
 import 'package:taskr/services/tag.provider.dart';
@@ -69,6 +71,18 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       debugPrint('Failed to draw parking prompt: $e\n$s');
     }
   }
+
+  // The result push carries a `notification` block, so Android has already
+  // drawn it by the time this runs — nothing to display, but this is the only
+  // Dart that sees it while the app is backgrounded, and so the only chance to
+  // get the confirmation into the notification centre.
+  if (message.data['type'] == parkingResultType) {
+    try {
+      await recordParkingResult(message.data);
+    } catch (e, s) {
+      debugPrint('Failed to record parking result: $e\n$s');
+    }
+  }
 }
 
 /// Runs when the user taps a notification action while the app is not running.
@@ -91,6 +105,9 @@ Future<void> notificationBackgroundResponseHandler(
   // The plugin has never been initialized in this isolate, and the handler
   // reports its outcome by showing a notification.
   await _initLocalNotifications();
+  // The purchase itself is queued, not run here: this isolate is hosted by a
+  // BroadcastReceiver with no guaranteed lifetime.
+  await Workmanager().initialize(parkingCallbackDispatcher);
   debugPrint('Notification action (background): ${response.actionId}');
   await handleParkingAction(response.actionId);
 }
@@ -156,6 +173,7 @@ Future<void> _bootstrap() async {
     return true;
   };
   await dotenv.load(fileName: ".env");
+  await Workmanager().initialize(parkingCallbackDispatcher);
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -364,7 +382,7 @@ class _MyAppState extends State<MyApp> {
 
     // Cold start: the app was launched by tapping the prompt itself, so the tap
     // arrives as launch details rather than a live callback. An actionId here
-    // means a button was used and the background handler already ran it.
+    // means a button was used, and that is queued as WorkManager work instead.
     flutterLocalNotificationsPlugin.getNotificationAppLaunchDetails().then((d) {
       final response = d?.notificationResponse;
       if (d?.didNotificationLaunchApp == true &&

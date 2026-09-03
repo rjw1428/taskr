@@ -14,8 +14,17 @@ class _StubServer {
 
   int status = 200;
   String body = '{"success": true, "requestId": "abc123"}';
+
+  /// Statuses to serve, one per request, before falling back to [status].
+  /// Lets a test make an attempt fail and the next one succeed.
+  final List<int> statusSequence = [];
+
   /// What /health reports for `hasSession`. null omits the field entirely.
   Object? hasSession = true;
+
+  /// Status for /health, which is served independently of [status] so a test
+  /// can break the health endpoint without breaking /park, or the reverse.
+  int healthStatus = 200;
 
   Future<String> start() async {
     _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -23,7 +32,7 @@ class _StubServer {
       authHeaders.add(request.headers.value(HttpHeaders.authorizationHeader));
       paths.add(request.uri.toString());
       if (request.uri.path == '/health') {
-        request.response.statusCode = 200;
+        request.response.statusCode = healthStatus;
         request.response.write(jsonEncode({
           'ok': true,
           if (hasSession != null) 'hasSession': hasSession,
@@ -31,7 +40,8 @@ class _StubServer {
         request.response.close();
         return;
       }
-      request.response.statusCode = status;
+      request.response.statusCode =
+          statusSequence.isNotEmpty ? statusSequence.removeAt(0) : status;
       request.response.write(body);
       request.response.close();
     }));
@@ -50,44 +60,44 @@ void main() {
     final url = await stub.start();
     service = ParkingService()
       ..baseUrl = url
-      ..token = 'test-token';
+      ..token = 'test-token'
+      ..retryBackoff = const [Duration.zero, Duration.zero];
   });
 
   tearDown(() async => stub.stop());
 
-  group('triggerParking pre-flight', () {
-    test('refuses and reports when the upstream session is dead', () async {
-      // Exactly the live failure: the service is up but locked out of SEPTA, so
-      // /park could only ever report needs-auth.
-      stub.hasSession = false;
+  group('triggerParking upstream session', () {
+    test('a 409 reports that the account needs signing in', () async {
+      stub.status = 409;
 
       final result = await service.triggerParking();
 
       expect(result.outcome, ParkingTriggerOutcome.needsAuth);
       expect(result.message.toLowerCase(), contains('signed in'));
       expect(result.message.toLowerCase(), contains('nothing was charged'));
-      // No point spending a request on a purchase that cannot succeed.
-      expect(stub.paths, isNot(contains('/park')));
     });
 
-    test('proceeds when the upstream session is alive', () async {
-      stub.hasSession = true;
+    test('a 409 is not retried', () async {
+      stub.status = 409;
+
+      await service.triggerParking();
+
+      expect(stub.paths.where((p) => p == '/park').length, 1);
+    });
+
+    test('does not consult /health on the way to paying', () async {
+      stub.hasSession = false;
 
       final result = await service.triggerParking();
 
+      expect(stub.paths, isNot(contains('/health')));
       expect(result.outcome, ParkingTriggerOutcome.accepted);
-      expect(stub.paths, contains('/park'));
     });
 
-    test('proceeds when health cannot be determined', () async {
-      // Unknown is not the same as dead: blocking here would turn a service
-      // hiccup into unpaid parking.
-      stub.hasSession = null;
+    test('costs no extra round trip when the session is fine', () async {
+      await service.triggerParking();
 
-      final result = await service.triggerParking();
-
-      expect(result.outcome, ParkingTriggerOutcome.accepted);
-      expect(stub.paths, contains('/park'));
+      expect(stub.paths, ['/park']);
     });
   });
 
@@ -95,8 +105,7 @@ void main() {
     test('sends the token as a bearer header, never in the query string', () async {
       await service.triggerParking();
 
-      // /health first (unauthenticated), then the authenticated /park.
-      expect(stub.paths, ['/health', '/park']);
+      expect(stub.paths, ['/park']);
       expect(stub.authHeaders.last, 'Bearer test-token');
       expect(stub.paths.last, isNot(contains('test-token')));
     });
@@ -131,13 +140,14 @@ void main() {
       expect(stub.paths.where((p) => p == '/park').length, 1);
     });
 
-    test('a 500 says nothing was paid for', () async {
+    test('a 500 says nothing was paid for, and is not retried', () async {
       stub.status = 500;
 
       final result = await service.triggerParking();
 
       expect(result.outcome, ParkingTriggerOutcome.failed);
       expect(result.message.toLowerCase(), contains('nothing was paid'));
+      expect(stub.paths.where((p) => p == '/park').length, 1);
     });
 
     test('an unreachable service reports that the request was not sent', () async {
@@ -146,6 +156,46 @@ void main() {
       final result = await service.triggerParking();
 
       expect(result.outcome, ParkingTriggerOutcome.failed);
+      expect(result.message.toLowerCase(), contains('could not send'));
+    });
+
+    test('records the underlying error and per-attempt timings', () async {
+      await stub.stop();
+
+      final result = await service.triggerParking();
+
+      expect(result.detail, contains('SocketException'));
+      expect(RegExp(r'#\d+ \d+ms').allMatches(result.detail!).length, 3);
+      expect(result.message, isNot(contains('SocketException')));
+    });
+
+    test('carries the trail on a decisive answer too', () async {
+      stub.statusSequence.addAll([503, 503]);
+
+      final result = await service.triggerParking();
+
+      expect(result.outcome, ParkingTriggerOutcome.accepted);
+      expect(result.detail, contains('HTTP 503'));
+      expect(RegExp(r'#\d+ \d+ms').allMatches(result.detail!).length, 3);
+    });
+
+    test('a transient gateway error is retried and can still succeed', () async {
+      stub.statusSequence.addAll([503, 502]);
+
+      final result = await service.triggerParking();
+
+      expect(result.outcome, ParkingTriggerOutcome.accepted);
+      expect(result.requestId, 'abc123');
+      expect(stub.paths.where((p) => p == '/park').length, 3);
+    });
+
+    test('gives up after the configured number of attempts', () async {
+      stub.status = 503;
+
+      final result = await service.triggerParking();
+
+      expect(result.outcome, ParkingTriggerOutcome.failed);
+      expect(stub.paths.where((p) => p == '/park').length, 3);
     });
 
     test('a missing token makes no request at all', () async {
@@ -155,6 +205,39 @@ void main() {
 
       expect(result.outcome, ParkingTriggerOutcome.unconfigured);
       expect(stub.paths, isEmpty);
+    });
+  });
+
+  group('hasUpstreamSession', () {
+    test('true when the service reports a live session', () async {
+      stub.hasSession = true;
+
+      expect(await service.hasUpstreamSession(), isTrue);
+      expect(stub.paths, ['/health']);
+    });
+
+    test('false when the service reports a dead session', () async {
+      stub.hasSession = false;
+
+      expect(await service.hasUpstreamSession(), isFalse);
+    });
+
+    test('null when the field is absent', () async {
+      stub.hasSession = null;
+
+      expect(await service.hasUpstreamSession(), isNull);
+    });
+
+    test('null when /health itself errors', () async {
+      stub.healthStatus = 503;
+
+      expect(await service.hasUpstreamSession(), isNull);
+    });
+
+    test('null when the service is unreachable', () async {
+      await stub.stop();
+
+      expect(await service.hasUpstreamSession(), isNull);
     });
   });
 

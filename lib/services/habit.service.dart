@@ -86,26 +86,38 @@ class HabitService {
       final todayStr = _dates.getString(DateTime.now());
       final today = _dates.getDate(todayStr);
       final start = _dates.getDate(h.startDate);
+      // Dates that already have an instance for this habit — the authoritative
+      // record of what exists. (Collection-group query on (userId, habitId);
+      // null if the index isn't ready.)
+      final snap = await _habitInstanceQuery(h.id!);
+      final Set<String>? existingDates =
+          snap?.docs.map((d) => d.data()['dueDate'] as String?).whereType<String>().toSet();
+
+      // When that query is available it — not the watermark — decides the window,
+      // so the whole horizon is scanned from today and any date missing BEHIND
+      // the watermark is backfilled.
+      //
+      // The watermark alone could not do this. It advances on loop completion,
+      // and addTask cannot report otherwise: ackWrite deliberately swallows
+      // failures (WriteAck.failed) and timeouts (WriteAck.queued) so a form is
+      // never left hanging. So a write that failed, or was stranded in the
+      // offline queue and lost, still moved the watermark past its date — and
+      // that date could never be regenerated. Editing a habit hit this hardest,
+      // since updateHabit deletes the future before regenerating it.
       DateTime windowStart = start.isAfter(today) ? start : today;
-      if (h.lastMaterializedDate != null) {
+      if (existingDates == null && h.lastMaterializedDate != null) {
         final next = _dates.getDate(h.lastMaterializedDate!).add(const Duration(days: 1));
         if (next.isAfter(windowStart)) windowStart = next;
       }
       final until = today.add(Duration(days: horizonDays));
       if (windowStart.isAfter(until)) return;
 
-      // Dates that already have an instance for this habit — the authoritative
-      // dedupe. (Collection-group query on (userId, habitId); returns empty if
-      // the index isn't ready, in which case we fall back to the lastMaterialized
-      // window alone.)
-      final existingDates = (await _habitInstances(h.id!)).map((t) => t.dueDate).whereType<String>().toSet();
-
       final template = _toRecurringTask(h, start: windowStart, until: until);
       final instances = _taskService.generateInstancesInWindow(template, windowStart);
       String? lastDate = h.lastMaterializedDate;
       for (final inst in instances) {
         final dateStr = _dates.getString(inst);
-        if (existingDates.contains(dateStr)) {
+        if (existingDates != null && existingDates.contains(dateStr)) {
           lastDate = dateStr;
           continue;
         }

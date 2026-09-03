@@ -84,13 +84,23 @@ class RecurringSeriesService {
       // Past its end date: nothing left to materialize.
       if (template.endDate != null && template.endDate!.isBefore(today)) return;
 
-      DateTime? from;
-      if (template.lastMaterializedDate != null) {
-        from = _dates.getDate(template.lastMaterializedDate!).add(const Duration(days: 1));
-      }
-
       final existing = await _taskService.seriesInstances(id);
       final existingDates = existing?.map((t) => t.dueDate).whereType<String>().toSet();
+
+      // The watermark is only a fallback for when the collection-group query is
+      // unavailable. When the query works it is the authority on what exists, so
+      // the whole horizon is scanned and dates missing BEHIND the watermark are
+      // backfilled rather than lost.
+      //
+      // Trusting the watermark as a starting point is what made the equivalent
+      // habit path lose a series: it advances on loop completion, and the write
+      // helpers cannot report failure (ackWrite swallows both errors and
+      // timeouts by design), so a failed or offline-stranded write still moved
+      // the watermark past its date, permanently.
+      DateTime? from;
+      if (existingDates == null && template.lastMaterializedDate != null) {
+        from = _dates.getDate(template.lastMaterializedDate!).add(const Duration(days: 1));
+      }
 
       final dates = RecurringSeries.occurrencesInHorizon(template, today: today, from: from)
           .where((d) => existingDates == null || !existingDates.contains(_dates.getString(d)))
