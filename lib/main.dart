@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -20,6 +21,7 @@ import 'package:taskr/services/parking_notifications.dart';
 import 'package:taskr/services/parking_work.dart';
 import 'package:taskr/services/people.provider.dart';
 import 'package:taskr/services/recurring_series.service.dart';
+import 'package:taskr/services/reminder.service.dart';
 import 'package:taskr/services/tag.provider.dart';
 import 'package:taskr/services/theme.provider.dart';
 import 'package:taskr/about/about.dart';
@@ -180,6 +182,17 @@ Future<void> _bootstrap() async {
     );
   } catch (e) {
     debugPrint('Firebase already initialized: $e');
+  }
+
+  if (kIsWeb) {
+    // Mobile keeps an offline cache by default; web does not. Without one a
+    // listener that re-attaches (every tab switch, every rebuilt StreamBuilder)
+    // re-reads its whole result set instead of resuming from what it had.
+    try {
+      FirebaseFirestore.instance.settings = const Settings(persistenceEnabled: true);
+    } catch (e) {
+      debugPrint('Firestore web persistence unavailable: $e');
+    }
   }
 
   // if (kDebugMode) {
@@ -378,6 +391,10 @@ class _MyAppState extends State<MyApp> {
     AuthService().userStream.listen((user) {
       if (user == null) return;
       RecurringSeriesService().runLaunchPass();
+      // One-off tasks have no series to top them up, so their reminders get the
+      // same treatment here: a reminder set further out than Cloud Tasks accepts
+      // is scheduled by the first launch that finds it inside the window.
+      ReminderService().topUpPendingReminders();
     });
 
     // Cold start: the app was launched by tapping the prompt itself, so the tap

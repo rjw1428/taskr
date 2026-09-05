@@ -994,24 +994,72 @@ class TaskService {
     }
   }
 
-  /// Occurrences of a series, found in one collection-group read instead of a
-  /// query per date. Needs the (userId, recurringTemplateId) index; until that is
-  /// deployed the query fails with failed-precondition, so degrade gracefully and
-  /// return null — callers fall back to the per-date scan / watermark alone.
-  Future<List<Task>?> seriesInstances(String templateId) async {
+  /// Tasks carrying a reminder that has not been handed to Cloud Tasks yet —
+  /// the input to [ReminderService.topUpPendingReminders].
+  ///
+  /// Bounded by the enqueue window on both sides: past instants are dead, and
+  /// anything beyond the window still cannot be scheduled. `reminderTaskName`
+  /// is filtered client-side rather than in the query, because a task written
+  /// before that field existed has no `null` value for Firestore to match.
+  ///
+  /// Needs the (userId, reminderTime) index; until that is deployed the query
+  /// fails with failed-precondition, so degrade gracefully and return nothing —
+  /// reminders inside the window were already scheduled at save time.
+  Future<List<Task>> tasksWithPendingReminders() async {
     final user = AuthService().user;
-    if (user == null) return null;
+    if (user == null) return const [];
+    final now = DateTime.now().toUtc();
     try {
       final snap = await _db
           .collectionGroup('items')
           .where('userId', isEqualTo: user.uid)
-          .where('recurringTemplateId', isEqualTo: templateId)
+          .where('reminderTime', isGreaterThan: now.toIso8601String())
+          .where('reminderTime',
+              isLessThan: now
+                  .add(const Duration(days: RecurringSeries.reminderEnqueueWindowDays))
+                  .toIso8601String())
           .get();
       return snap.docs.map((doc) {
         final data = {...doc.data(), 'id': doc.id};
-        data['tags'] = <dynamic>[]; // tags are irrelevant to the operations that use this
+        data['tags'] = <dynamic>[]; // tags are irrelevant to scheduling
         return Task.fromJson(data);
-      }).toList();
+      }).where((t) => t.reminderTaskName == null && !t.completed).toList();
+    } catch (e) {
+      debugPrint('Pending reminder query failed (index building?): $e');
+      return const [];
+    }
+  }
+
+  /// Occurrences of a series, found in one collection-group read instead of a
+  /// query per date. Needs the (userId, recurringTemplateId) index; until that is
+  /// deployed the query fails with failed-precondition, so degrade gracefully and
+  /// return null — callers fall back to the per-date scan / watermark alone.
+  ///
+  /// [fromDate] bounds the read to occurrences due on or after that day, so a
+  /// launch-time top-up does not re-read a year of completed history. That
+  /// needs the (userId, recurringTemplateId, dueDate) index; until it exists the
+  /// bounded query fails and the unbounded one answers instead.
+  Future<List<Task>?> seriesInstances(String templateId, {String? fromDate}) async {
+    final user = AuthService().user;
+    if (user == null) return null;
+    final base = _db
+        .collectionGroup('items')
+        .where('userId', isEqualTo: user.uid)
+        .where('recurringTemplateId', isEqualTo: templateId);
+    List<Task> parse(QuerySnapshot<Map<String, dynamic>> snap) => snap.docs.map((doc) {
+          final data = {...doc.data(), 'id': doc.id};
+          data['tags'] = <dynamic>[]; // tags are irrelevant to the operations that use this
+          return Task.fromJson(data);
+        }).toList();
+    if (fromDate != null) {
+      try {
+        return parse(await base.where('dueDate', isGreaterThanOrEqualTo: fromDate).get());
+      } catch (e) {
+        debugPrint('Bounded series instance query failed (index building?): $e');
+      }
+    }
+    try {
+      return parse(await base.get());
     } catch (e) {
       debugPrint('Series instance query failed (index building?): $e');
       return null;

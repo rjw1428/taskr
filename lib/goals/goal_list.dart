@@ -6,23 +6,35 @@ import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/shared/shared.dart';
 
-class GoalListPage extends StatelessWidget {
+class GoalListPage extends StatefulWidget {
   const GoalListPage({super.key});
 
   @override
+  State<GoalListPage> createState() => _GoalListPageState();
+}
+
+class _GoalListPageState extends State<GoalListPage> {
+  final _goalService = GoalService();
+  final _habitService = HabitService();
+
+  // Created once: a stream built inside build() is torn down and re-subscribed
+  // on every rebuild, which re-fetches the collection each time.
+  late final Stream<List<Habit>> _habitStream = _habitService.streamHabits();
+  late final Stream<List<Goal>> _goalStream = _goalService.streamGoals();
+
+  @override
   Widget build(BuildContext context) {
-    final goalService = GoalService();
-    final habitService = HabitService();
     return StreamBuilder<List<Habit>>(
-      stream: habitService.streamHabits(),
+      stream: _habitStream,
       builder: (context, habitSnap) {
         final habits = habitSnap.data ?? const <Habit>[];
-        // Keep upcoming habit instances materialized (rolling top-up).
+        // Keep upcoming habit instances materialized (rolling top-up) — once per
+        // launch per habit, not on every snapshot.
         for (final h in habits) {
-          if (h.status == 'active') habitService.ensureInstances(h);
+          _habitService.ensureInstancesOnce(h);
         }
         return StreamBuilder<List<Goal>>(
-          stream: goalService.streamGoals(),
+          stream: _goalStream,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting && !habitSnap.hasData) {
               return const Center(child: CircularProgressIndicator());

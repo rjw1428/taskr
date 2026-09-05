@@ -1,6 +1,6 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:taskr/services/services.dart';
+import 'package:provider/provider.dart';
+import 'package:taskr/performance/performance_history.dart';
 import 'package:taskr/shared/shared.dart';
 
 const _windows = [7, 30, 90, 365];
@@ -25,23 +25,17 @@ class _PerformanceAverageHeaderState extends State<PerformanceAverageHeader> {
     final today = _dateKey(DateTime.now());
     final streamStart = today.subtract(const Duration(days: 364));
 
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: PerformanceService().streamPerformanceForMonth(
-        widget.userId,
-        streamStart,
-        today,
-      ),
-      builder: (context, snapshot) {
-        final scoresByDay = <DateTime, int>{};
-        final docs = snapshot.data ?? const <Map<String, dynamic>>[];
-        for (final data in docs) {
-          final ts = data['date'] as Timestamp?;
-          if (ts == null) continue;
-          final completed = data['completed'] as Map<String, dynamic>?;
-          final score = (completed?['ALL'] as int?) ?? 0;
-          scoresByDay[_dateKey(ts.toDate())] = score;
-        }
+    // Sliced from the page-wide history (which starts at the same day) rather
+    // than streamed here: this widget's own year-long listener was rebuilt and
+    // re-read every time the page did.
+    final history = context.watch<PerformanceHistory?>();
+    final scoresByDay = <DateTime, int>{};
+    history?.scoresByDay(until: today).forEach((date, score) {
+      if (!date.isBefore(streamStart)) scoresByDay[date] = score;
+    });
 
+    return Builder(
+      builder: (context) {
         final windowDays = _windows[_windowIndex];
         final average = _averageFor(windowDays, scoresByDay, today);
 

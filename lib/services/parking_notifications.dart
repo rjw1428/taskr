@@ -240,8 +240,18 @@ Future<void> recordParkingResult(Map<String, dynamic> data) async {
 ///
 /// Shared so the notification and the inbox entry can never drift apart.
 ({String title, String body}) parkingResultMessage(Map<String, dynamic> data) {
-  // These arrive straight from the parking service to FCM, never touching our
-  // backend, so this is the only opportunity to record them.
+  // The service composes the specific wording — amount, lot, plate, expiry — and
+  // sends it alongside the status. Prefer it: anything derived here from status
+  // alone can only be vaguer, and it is what Android already drew from the
+  // notification block when the app was backgrounded, so using it keeps the
+  // notification and the inbox entry saying the same thing.
+  final title = data['title'] as String?;
+  final body = data['body'] as String?;
+  if (title != null && title.isNotEmpty && body != null && body.isNotEmpty) {
+    return (title: title, body: body);
+  }
+
+  // Older pushes carry only a status.
   switch (data['status'] as String?) {
     case 'paid':
       return (title: 'Parking paid', body: 'Your parking session is active.');

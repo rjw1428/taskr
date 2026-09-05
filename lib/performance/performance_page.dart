@@ -3,6 +3,7 @@ import 'package:taskr/services/services.dart';
 import '../shared/shared.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:taskr/performance/performance_heatmap.dart';
+import 'package:taskr/performance/performance_history.dart';
 import 'package:taskr/performance/performance_average_header.dart';
 import 'package:provider/provider.dart';
 import 'package:taskr/services/accomplishment.provider.dart';
@@ -14,31 +15,56 @@ import 'package:taskr/accomplishments/accomplishment_list.dart';
 import 'package:taskr/accomplishments/accomplishment_color.dart';
 import 'package:taskr/services/tag.provider.dart';
 
-class PerformancePage extends StatelessWidget {
+class PerformancePage extends StatefulWidget {
   const PerformancePage({super.key});
+
+  @override
+  State<PerformancePage> createState() => _PerformancePageState();
+}
+
+class _PerformancePageState extends State<PerformancePage> {
+  final _userId = AuthService().user!.uid;
+
+  // Bounds are fixed when the page opens so the query — and therefore the
+  // listener — is stable across rebuilds. The window covers every card on the
+  // page: the year-long average and best-day stats, the 13-week heatmap (which
+  // runs to the end of the current week), and the 7-day charts.
+  late final DateTime _sevenDayCutoff = DateService().daysAgo(DateTime.now(), 7);
+  late final Stream<PerformanceHistory?> _history = () {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final start = today.subtract(const Duration(days: 364));
+    final end = today.subtract(Duration(days: today.weekday - 1)).add(const Duration(days: 6));
+    return PerformanceService()
+        .streamPerformanceForMonth(_userId, start, end)
+        .map<PerformanceHistory?>((docs) => PerformanceHistory(docs));
+  }();
+
   @override
   Widget build(BuildContext context) {
-    final user = AuthService().user!;
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AccomplishmentProvider()),
-        StreamProvider<List<Map<String, dynamic>>?>.value(
-          value: PerformanceService().streamPerformance(user.uid, DateService().daysAgo(DateTime.now(), 7)),
+        StreamProvider<PerformanceHistory?>.value(
+          value: _history,
           initialData: null,
           catchError: (context, error) {
             debugPrint('Error in PerformanceService stream: $error');
-            return [];
+            return const PerformanceHistory([]);
           },
         ),
       ],
-      child: CurrentScore(userId: user.uid),
+      child: CurrentScore(userId: _userId, sevenDayCutoff: _sevenDayCutoff),
     );
   }
 }
 
 class CurrentScore extends StatefulWidget {
   final String userId;
-  const CurrentScore({super.key, required this.userId});
+
+  /// Docs dated after this make up the 7-day charts.
+  final DateTime sevenDayCutoff;
+  const CurrentScore({super.key, required this.userId, required this.sevenDayCutoff});
 
   @override
   State<StatefulWidget> createState() => CurrentScoreState();
@@ -51,11 +77,12 @@ class CurrentScoreState extends State<CurrentScore> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final t = theme.appTokens;
-    final performance = Provider.of<List<Map<String, dynamic>>?>(context);
+    final history = Provider.of<PerformanceHistory?>(context);
 
-    if (performance == null) {
+    if (history == null) {
       return const LoadingScreen(message: 'Loading Performance Data...');
     }
+    final performance = history.between(after: widget.sevenDayCutoff);
 
     if (performance.isEmpty) {
       return const EmptyState(
@@ -244,9 +271,17 @@ class CurrentScoreState extends State<CurrentScore> {
 }
 
 /// All-time records shown at the bottom of the Performance tab.
-class _RecordsCard extends StatelessWidget {
+class _RecordsCard extends StatefulWidget {
   final String userId;
   const _RecordsCard({required this.userId});
+
+  @override
+  State<_RecordsCard> createState() => _RecordsCardState();
+}
+
+class _RecordsCardState extends State<_RecordsCard> {
+  // One subscription for the life of the card, not one per rebuild.
+  late final Stream<List<Habit>> _habits = HabitService().streamHabits();
 
   @override
   Widget build(BuildContext context) {
@@ -281,32 +316,26 @@ class _RecordsCard extends StatelessWidget {
   }
 
   Widget _highestScore(BuildContext context) {
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: PerformanceService().streamPerformanceForMonth(
-        userId,
-        DateTime.now().subtract(const Duration(days: 364)),
-        DateTime.now(),
-      ),
-      builder: (context, snap) {
-        int best = 0;
-        DateTime? bestDate;
-        for (final d in snap.data ?? const <Map<String, dynamic>>[]) {
-          final completed = d['completed'] as Map<String, dynamic>?;
-          final v = (completed?['ALL'] as int?) ?? 0;
-          if (v > best) {
-            best = v;
-            bestDate = (d['date'] as Timestamp?)?.toDate();
-          }
-        }
-        return _stat(context, 'Best day', '$best pts',
-            bestDate != null ? DateFormat('MMM d, yyyy').format(bestDate) : 'Complete tasks to set a record');
-      },
-    );
+    final history = context.watch<PerformanceHistory?>();
+    int best = 0;
+    DateTime? bestDate;
+    // Up to now only: the shared window runs to the end of the week, and a
+    // future-dated doc is not a record yet.
+    for (final d in history?.between(until: DateTime.now()) ?? const <Map<String, dynamic>>[]) {
+      final completed = d['completed'] as Map<String, dynamic>?;
+      final v = (completed?['ALL'] as int?) ?? 0;
+      if (v > best) {
+        best = v;
+        bestDate = (d['date'] as Timestamp?)?.toDate();
+      }
+    }
+    return _stat(context, 'Best day', '$best pts',
+        bestDate != null ? DateFormat('MMM d, yyyy').format(bestDate) : 'Complete tasks to set a record');
   }
 
   Widget _longestStreak(BuildContext context) {
     return StreamBuilder<List<Habit>>(
-      stream: HabitService().streamHabits(),
+      stream: _habits,
       builder: (context, snap) {
         Habit? best;
         for (final h in snap.data ?? const <Habit>[]) {
@@ -440,7 +469,7 @@ class _LegendDot extends StatelessWidget {
 /// Stacked bar chart of effort points lost off each of the last 7 days: points
 /// pushed (deferred to another day) plus points missed (left incomplete and
 /// never pushed). Today has no missed segment — the day isn't over yet.
-class _PushedChartCard extends StatelessWidget {
+class _PushedChartCard extends StatefulWidget {
   final List<int> values; // pushed, oldest -> today
   final List<String> labels;
   /// Day strings for the past days only (i.e. `labels` minus today), used to
@@ -454,6 +483,28 @@ class _PushedChartCard extends StatelessWidget {
     required this.userId,
   });
 
+  @override
+  State<_PushedChartCard> createState() => _PushedChartCardState();
+}
+
+class _PushedChartCardState extends State<_PushedChartCard> {
+  List<int> get values => widget.values;
+  List<String> get labels => widget.labels;
+
+  // Six per-day listeners, kept across rebuilds; re-created only when the set
+  // of days changes (i.e. at midnight).
+  String? _missedKey;
+  Stream<Map<String, int>>? _missed;
+
+  Stream<Map<String, int>> _missedStream() {
+    final key = widget.dayKeys.join(',');
+    if (key != _missedKey) {
+      _missedKey = key;
+      _missed = TaskService().streamMissedPoints(widget.userId, widget.dayKeys);
+    }
+    return _missed!;
+  }
+
   double _leftInterval(int maxV) {
     if (maxV <= 4) return 1;
     if (maxV <= 10) return 2;
@@ -462,8 +513,9 @@ class _PushedChartCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dayKeys = widget.dayKeys;
     return StreamBuilder<Map<String, int>>(
-      stream: TaskService().streamMissedPoints(userId, dayKeys),
+      stream: _missedStream(),
       builder: (context, snap) {
         // Until the missed tally arrives, render pushed-only rather than a
         // spinner — the chart is already meaningful without it.

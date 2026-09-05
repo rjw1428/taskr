@@ -6,6 +6,7 @@ import { Message } from "firebase-admin/lib/messaging/messaging-api";
 import {defineSecret} from "firebase-functions/params";
 import {google} from "googleapis";
 import {CloudTasksClient} from "@google-cloud/tasks";
+import * as crypto from "crypto";
 import {
   COMMUTE_TIMEZONE,
   localDateIn,
@@ -16,27 +17,58 @@ import {
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 const oauthClientSecret = defineSecret("GOOGLE_OAUTH_CLIENT_SECRET");
 const oauthWebClientId = defineSecret("GOOGLE_OAUTH_WEB_CLIENT_ID");
+// Shared key for the operator-only HTTP endpoints (the *Test triggers and
+// sendMessage). Without it anyone who finds a URL can fan out pushes, full
+// collection scans and Gemini calls across every user, on our bill.
+const internalKey = defineSecret("TASKR_INTERNAL_KEY");
 
 admin.initializeApp();
+
+/**
+ * Gate for operator-only HTTP endpoints. Callers must send the
+ * `X-Taskr-Key` header matching the TASKR_INTERNAL_KEY secret; the function
+ * must list `internalKey` in its `secrets` for the value to be available.
+ *
+ * @param {object} req incoming request
+ * @param {object} res response, written to on rejection
+ * @return {boolean} true when the caller is allowed through
+ */
+function requireInternalKey(
+  req: {get(name: string): string | undefined},
+  res: {status(code: number): {send(body: string): unknown}}
+): boolean {
+  const expected = internalKey.value();
+  const provided = req.get("x-taskr-key") ?? "";
+  const ok = expected.length > 0 &&
+    provided.length === expected.length &&
+    crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+  if (!ok) {
+    res.status(403).send("Forbidden");
+    return false;
+  }
+  return true;
+}
 
 // The two opt-ins are independent: a user can take the train without paying for
 // parking, or park without wanting the SEPTA status push.
 async function runTrainFanout() {
-  const todosSnap = await admin.firestore().collection("todos").get();
-  logger.info(`checking for ${todosSnap.size} users`);
+  // Filtered server-side so only opted-in users are read (and billed), not
+  // every user doc on every run.
+  const todos = admin.firestore().collection("todos");
+  const [trainSnap, parkingSnap] = await Promise.all([
+    todos.where("trainAlert", "==", true).get(),
+    todos.where("parkingAlert", "==", true).get(),
+  ]);
+  logger.info(`train: ${trainSnap.size} users, parking: ${parkingSnap.size} users`);
   const notifyPromises: Promise<any>[] = [];
 
-  todosSnap.forEach((doc) => {
-    const data = doc.data() as any;
-    if (!data) return;
-    if (data.trainAlert === true) {
-      logger.info(`Scheduling train notification for user ${doc.id}`);
-      notifyPromises.push(executeTrainNotification(doc.id));
-    }
-    if (data.parkingAlert === true) {
-      logger.info(`Scheduling parking prompt for user ${doc.id}`);
-      notifyPromises.push(scheduleParkingPrompt(doc.id));
-    }
+  trainSnap.forEach((doc) => {
+    logger.info(`Scheduling train notification for user ${doc.id}`);
+    notifyPromises.push(executeTrainNotification(doc.id));
+  });
+  parkingSnap.forEach((doc) => {
+    logger.info(`Scheduling parking prompt for user ${doc.id}`);
+    notifyPromises.push(scheduleParkingPrompt(doc.id));
   });
 
   return Promise.all(notifyPromises);
@@ -50,7 +82,8 @@ export const trainSchedule = onSchedule("every day 11:00", async () => {
   }
 });
 
-export const trainScheduleTest = onRequest({cors: false}, async (req, res) => {
+export const trainScheduleTest = onRequest({cors: false, secrets: [internalKey]}, async (req, res) => {
+  if (!requireInternalKey(req, res)) return;
   try {
     const result = await runTrainFanout();
     res.status(200).send(result);
@@ -189,7 +222,8 @@ async function executeTrainNotification(userId: string) {
   }
 }
 
-export const sendMessage = onRequest(async (request, response) => {
+export const sendMessage = onRequest({secrets: [internalKey]}, async (request, response) => {
+  if (!requireInternalKey(request, response)) return;
   const userId = request.body.userId;
   const payload = request.body.payload;
 
@@ -289,11 +323,12 @@ async function getIncompleteGoalTasksForToday(userId: string): Promise<{taskCoun
   });
 
   const goalNames: string[] = [];
-  for (const goalId of goalIds) {
-    const goalDoc = await admin.firestore()
-      .collection("todos").doc(userId)
-      .collection("goals").doc(goalId)
-      .get();
+  const goalRefs = [...goalIds].map((goalId) => admin.firestore()
+    .collection("todos").doc(userId)
+    .collection("goals").doc(goalId));
+  // One round-trip for all the goals instead of a serial get per goal.
+  const goalDocs = goalRefs.length > 0 ? await admin.firestore().getAll(...goalRefs) : [];
+  for (const goalDoc of goalDocs) {
     const goalData = goalDoc.data();
     if (goalData && goalData.status === "active") {
       goalNames.push(goalData.title);
@@ -337,19 +372,50 @@ async function sendGoalReminder(userId: string, messagePrefix: string): Promise<
   }
 }
 
+/**
+ * Whether a user wants the goal reminder sent at [hour].
+ *
+ * The two nudges are separate schedules, so the preference has three states:
+ * "off" mutes both, "5pm" keeps only the earlier one, "both" is the original
+ * behaviour. Anything unrecognised — including the absent field on every doc
+ * written before this setting shipped — means "both", so a user is never
+ * silently muted by a missing or malformed value.
+ *
+ * @param {FirebaseFirestore.DocumentData | undefined} data the user's todos doc
+ * @param {"5pm" | "9pm"} slot which of the two daily reminders is being sent
+ * @return {boolean} true when that reminder should be sent
+ */
+function wantsGoalReminder(
+  data: FirebaseFirestore.DocumentData | undefined,
+  slot: "5pm" | "9pm"
+): boolean {
+  if (!data || !data.fcmToken) return false;
+  const schedule = data.goalReminderSchedule;
+  if (schedule === "off") return false;
+  if (schedule === "5pm") return slot === "5pm";
+  return true;
+}
+
+async function runGoalReminderFanout(slot: "5pm" | "9pm", prefix: string) {
+  // A user without an FCM token can never be sent anything, so leave those
+  // docs unread: `!= null` only matches docs where the field exists.
+  const todosSnap = await admin.firestore().collection("todos")
+    .where("fcmToken", "!=", null)
+    .get();
+  const promises: Promise<void>[] = [];
+
+  todosSnap.forEach((doc) => {
+    if (wantsGoalReminder(doc.data(), slot)) {
+      promises.push(sendGoalReminder(doc.id, prefix));
+    }
+  });
+
+  await Promise.all(promises);
+}
+
 export const goalReminder5pm = onSchedule("every day 17:00", async () => {
   try {
-    const todosSnap = await admin.firestore().collection("todos").get();
-    const promises: Promise<void>[] = [];
-
-    todosSnap.forEach((doc) => {
-      const data = doc.data();
-      if (data && data.fcmToken) {
-        promises.push(sendGoalReminder(doc.id, "Goal Reminder"));
-      }
-    });
-
-    await Promise.all(promises);
+    await runGoalReminderFanout("5pm", "Goal Reminder");
   } catch (e) {
     logger.error("Error in goalReminder5pm:", e);
   }
@@ -357,17 +423,7 @@ export const goalReminder5pm = onSchedule("every day 17:00", async () => {
 
 export const goalReminder9pm = onSchedule("every day 21:00", async () => {
   try {
-    const todosSnap = await admin.firestore().collection("todos").get();
-    const promises: Promise<void>[] = [];
-
-    todosSnap.forEach((doc) => {
-      const data = doc.data();
-      if (data && data.fcmToken) {
-        promises.push(sendGoalReminder(doc.id, "Don't forget"));
-      }
-    });
-
-    await Promise.all(promises);
+    await runGoalReminderFanout("9pm", "Don't forget");
   } catch (e) {
     logger.error("Error in goalReminder9pm:", e);
   }
@@ -377,64 +433,83 @@ export const goalReminder9pm = onSchedule("every day 21:00", async () => {
 // Note: Task generation uses VertexAI which runs client-side on initial creation.
 // This function handles the weekly server-side regeneration.
 
+interface ActiveGoal {
+  userId: string;
+  goalId: string;
+  data: admin.firestore.DocumentData;
+}
+
+/**
+ * Every active, unexpired goal across all users.
+ *
+ * One collection-group query, so users without goals (the majority) cost
+ * nothing to skip. Needs the `goals.status` collection-group index; until that
+ * is deployed the query fails with FAILED_PRECONDITION and this falls back to
+ * the old scan of every user doc.
+ *
+ * @return {Promise<ActiveGoal[]>} goals to generate tasks for
+ */
+async function activeGoalsForGeneration(): Promise<ActiveGoal[]> {
+  const db = admin.firestore();
+  const now = new Date();
+  const unexpired = (data: admin.firestore.DocumentData) => new Date(data.endDate) > now;
+
+  try {
+    const snap = await db.collectionGroup("goals").where("status", "==", "active").get();
+    const goals: ActiveGoal[] = [];
+    for (const doc of snap.docs) {
+      const userDoc = doc.ref.parent.parent;
+      if (!userDoc || userDoc.parent.id !== "todos") continue;
+      const data = doc.data();
+      if (unexpired(data)) goals.push({userId: userDoc.id, goalId: doc.id, data});
+    }
+    return goals;
+  } catch (e: any) {
+    // 9 = FAILED_PRECONDITION: the collection-group index does not exist yet.
+    if (e?.code !== 9) throw e;
+    logger.warn("goals.status collection-group index missing; scanning per user");
+  }
+
+  const goals: ActiveGoal[] = [];
+  const todosSnap = await db.collection("todos").get();
+  for (const userDoc of todosSnap.docs) {
+    const goalsSnap = await userDoc.ref.collection("goals").where("status", "==", "active").get();
+    for (const goalDoc of goalsSnap.docs) {
+      const data = goalDoc.data();
+      if (unexpired(data)) goals.push({userId: userDoc.id, goalId: goalDoc.id, data});
+    }
+  }
+  return goals;
+}
+
+async function runGoalTaskGeneration(): Promise<number> {
+  const goals = await activeGoalsForGeneration();
+  await Promise.all(goals.map((g) => generateWeeklyTasksForGoal(g.userId, g.goalId, g.data)));
+  return goals.length;
+}
+
 export const generateGoalTasks = onSchedule({schedule: "every sunday 20:00", secrets: [geminiApiKey]}, async () => {
   try {
-    const todosSnap = await admin.firestore().collection("todos").get();
-    const promises: Promise<void>[] = [];
-
-    for (const userDoc of todosSnap.docs) {
-      const goalsSnap = await admin.firestore()
-        .collection("todos").doc(userDoc.id)
-        .collection("goals")
-        .where("status", "==", "active")
-        .get();
-
-      if (!goalsSnap.empty) {
-        for (const goalDoc of goalsSnap.docs) {
-          const goalData = goalDoc.data();
-          const endDate = new Date(goalData.endDate);
-          if (endDate > new Date()) {
-            promises.push(generateWeeklyTasksForGoal(userDoc.id, goalDoc.id, goalData));
-          }
-        }
-      }
-    }
-
-    await Promise.all(promises);
-    logger.info(`Weekly goal task generation complete. Processed ${promises.length} goals.`);
+    const processed = await runGoalTaskGeneration();
+    logger.info(`Weekly goal task generation complete. Processed ${processed} goals.`);
   } catch (e) {
     logger.error("Error in generateGoalTasks:", e);
   }
 });
 
-export const generateGoalTasksTest = onRequest({cors: false, secrets: [geminiApiKey]}, async (req, res) => {
-  try {
-    const todosSnap = await admin.firestore().collection("todos").get();
-    let processed = 0;
-
-    for (const userDoc of todosSnap.docs) {
-      const goalsSnap = await admin.firestore()
-        .collection("todos").doc(userDoc.id)
-        .collection("goals")
-        .where("status", "==", "active")
-        .get();
-
-      for (const goalDoc of goalsSnap.docs) {
-        const goalData = goalDoc.data();
-        const endDate = new Date(goalData.endDate);
-        if (endDate > new Date()) {
-          await generateWeeklyTasksForGoal(userDoc.id, goalDoc.id, goalData);
-          processed++;
-        }
-      }
+export const generateGoalTasksTest = onRequest(
+  {cors: false, secrets: [geminiApiKey, internalKey]},
+  async (req, res) => {
+    if (!requireInternalKey(req, res)) return;
+    try {
+      const processed = await runGoalTaskGeneration();
+      res.status(200).send({processed});
+    } catch (e) {
+      logger.error("Error in generateGoalTasksTest:", e);
+      res.status(500).send({error: String(e)});
     }
-
-    res.status(200).send({processed});
-  } catch (e) {
-    logger.error("Error in generateGoalTasksTest:", e);
-    res.status(500).send({error: String(e)});
   }
-});
+);
 
 async function generateWeeklyTasksForGoal(
   userId: string,
@@ -636,7 +711,12 @@ async function generateWeeklyTasksForGoal(
     weekEndDate.setDate(monday.getDate() + 6);
     const weekEnd = weekEndDate.toISOString().split("T")[0];
 
+    // One batch instead of two round-trips per task, and one taskOrder write
+    // per day instead of one per task.
+    const db = admin.firestore();
+    const batch = db.batch();
     const taskIds: string[] = [];
+    const idsByDate = new Map<string, string[]>();
     for (const task of tasks) {
       const dayOffset = Math.min(Math.max(task.dayOffset || 0, 0), 6);
       const taskDate = new Date(monday);
@@ -660,19 +740,23 @@ async function generateWeeklyTasksForGoal(
         pushCount: 0,
       };
 
-      const taskRef = await admin.firestore()
+      const taskRef = db
         .collection("todos").doc(userId)
         .collection("tasks").doc(dateStr)
         .collection("items")
-        .add(taskData);
-
-      await admin.firestore()
-        .collection("todos").doc(userId)
-        .collection("tasks").doc(dateStr)
-        .set({taskOrder: admin.firestore.FieldValue.arrayUnion(taskRef.id)}, {merge: true});
-
+        .doc();
+      batch.set(taskRef, taskData);
       taskIds.push(taskRef.id);
+      idsByDate.set(dateStr, [...(idsByDate.get(dateStr) ?? []), taskRef.id]);
     }
+    for (const [dateStr, ids] of idsByDate) {
+      batch.set(
+        db.collection("todos").doc(userId).collection("tasks").doc(dateStr),
+        {taskOrder: admin.firestore.FieldValue.arrayUnion(...ids)},
+        {merge: true}
+      );
+    }
+    await batch.commit();
 
     await admin.firestore()
       .collection("todos").doc(userId)
@@ -810,7 +894,36 @@ function eventStartDate(event: any): string | null {
   return null;
 }
 
+/**
+ * The task a calendar event was imported as, or null.
+ *
+ * One collection-group query on `calendarEventId`. Event ids are shared
+ * between attendees' calendars, so the hit is narrowed to this user's tree by
+ * path rather than trusted outright. Needs the `items.calendarEventId`
+ * collection-group index; until that is deployed the query fails with
+ * FAILED_PRECONDITION and this falls back to the old scan, which issued one
+ * query per day across a ±60-day window — for every event, every hour.
+ *
+ * @param {string} uid owner
+ * @param {string} eventId Google Calendar event id
+ * @return {Promise<FirebaseFirestore.DocumentReference | null>} the task ref
+ */
 async function findTaskByEventId(uid: string, eventId: string) {
+  try {
+    const snap = await admin.firestore()
+      .collectionGroup("items")
+      .where("calendarEventId", "==", eventId)
+      .get();
+    const hit = snap.docs.find((d) => d.ref.path.startsWith(`todos/${uid}/`));
+    return hit ? hit.ref : null;
+  } catch (e: any) {
+    if (e?.code !== 9) throw e;
+    logger.warn("calendarEventId collection-group index missing; falling back to per-day scan");
+    return findTaskByEventIdScan(uid, eventId);
+  }
+}
+
+async function findTaskByEventIdScan(uid: string, eventId: string) {
   const today = new Date();
   const ranges: string[] = [];
   for (let i = -60; i <= 60; i++) {
@@ -917,6 +1030,9 @@ async function processCalendarForUser(uid: string, clientId: string, clientSecre
           completed: false,
           type: "task",
           calendarEventId: eventId,
+          // Denormalized owner, like every other task writer, so the
+          // collection-group rule and queries can see this doc.
+          userId: uid,
           tags: [],
           modified: new Date().toISOString(),
         };
@@ -976,37 +1092,50 @@ async function processCalendarForUser(uid: string, clientId: string, clientSecre
   }
 }
 
+/**
+ * Users with a connected calendar. Filtered server-side: this runs hourly, so
+ * reading every user doc each time added up to the single largest recurring
+ * read in the project for a feature most users never enable.
+ *
+ * @return {Promise<string[]>} user ids
+ */
+async function connectedCalendarUsers(): Promise<string[]> {
+  const snap = await admin.firestore().collection("todos")
+    .where("calendarConnectedAt", "!=", null)
+    .get();
+  return snap.docs.map((d) => d.id);
+}
+
+async function runCalendarImport(): Promise<number> {
+  const clientId = oauthWebClientId.value();
+  const clientSecret = oauthClientSecret.value();
+  const candidates = await connectedCalendarUsers();
+  logger.info(`importCalendarEvents: processing ${candidates.length} users`);
+
+  for (const uid of candidates) {
+    try {
+      await processCalendarForUser(uid, clientId, clientSecret);
+    } catch (e) {
+      logger.error(`Unexpected error for ${uid}:`, e);
+    }
+  }
+  return candidates.length;
+}
+
 export const importCalendarEvents = onSchedule(
   {schedule: "every 1 hours from 08:00 to 23:00", secrets: [oauthClientSecret, oauthWebClientId]},
   async () => {
-    const clientId = oauthWebClientId.value();
-    const clientSecret = oauthClientSecret.value();
-    const todos = await admin.firestore().collection("todos").get();
-    const candidates = todos.docs.filter((d) => d.data()?.calendarConnectedAt);
-    logger.info(`importCalendarEvents: processing ${candidates.length} users`);
-
-    for (const doc of candidates) {
-      try {
-        await processCalendarForUser(doc.id, clientId, clientSecret);
-      } catch (e) {
-        logger.error(`Unexpected error for ${doc.id}:`, e);
-      }
-    }
+    await runCalendarImport();
   }
 );
 
 export const importCalendarEventsTest = onRequest(
-  {secrets: [oauthClientSecret, oauthWebClientId]},
-  async (_req, res) => {
+  {secrets: [oauthClientSecret, oauthWebClientId, internalKey]},
+  async (req, res) => {
+    if (!requireInternalKey(req, res)) return;
     try {
-      const clientId = oauthWebClientId.value();
-      const clientSecret = oauthClientSecret.value();
-      const todos = await admin.firestore().collection("todos").get();
-      const candidates = todos.docs.filter((d) => d.data()?.calendarConnectedAt);
-      for (const doc of candidates) {
-        await processCalendarForUser(doc.id, clientId, clientSecret);
-      }
-      res.status(200).send({processed: candidates.length});
+      const processed = await runCalendarImport();
+      res.status(200).send({processed});
     } catch (e: any) {
       res.status(500).send({error: e?.message || String(e)});
     }

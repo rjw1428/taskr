@@ -6,6 +6,7 @@ import 'package:taskr/services/models.dart';
 import 'package:taskr/services/recurring_series.dart';
 import 'package:taskr/services/reminder.service.dart';
 import 'package:taskr/services/task.service.dart';
+import 'package:taskr/shared/write_ack.dart';
 
 /// Keeps recurring series materialized on a rolling horizon, and hands their
 /// reminders to Cloud Tasks as they come into range.
@@ -84,7 +85,13 @@ class RecurringSeriesService {
       // Past its end date: nothing left to materialize.
       if (template.endDate != null && template.endDate!.isBefore(today)) return;
 
-      final existing = await _taskService.seriesInstances(id);
+      // Only today onwards can collide with what the horizon generates, so the
+      // read is bounded there. A series with nothing upcoming still needs an
+      // occurrence to copy from, so only then is its history read.
+      var existing = await _taskService.seriesInstances(id, fromDate: _dates.getString(today));
+      if (existing != null && existing.isEmpty) {
+        existing = await _taskService.seriesInstances(id);
+      }
       final existingDates = existing?.map((t) => t.dueDate).whereType<String>().toSet();
 
       // The watermark is only a fallback for when the collection-group query is
@@ -106,16 +113,20 @@ class RecurringSeriesService {
           .where((d) => existingDates == null || !existingDates.contains(_dates.getString(d)))
           .toList();
 
+      var written = const <Task>[];
       if (dates.isNotEmpty) {
-        await _taskService.materializeOccurrences(
+        final result = await _taskService.materializeOccurrences(
           templateId: id,
           template: template,
           prototype: _prototypeFrom(existing, template),
           dates: dates,
         );
+        // A queued (offline) write is still real: the SDK delivers it later,
+        // and its reminder should not wait for another launch.
+        if (result.ack != WriteAck.failed) written = result.occurrences;
       }
 
-      await _enqueueReminders(id, existing);
+      await _enqueueReminders(id, [...?existing, ...written]);
     } catch (e, s) {
       debugPrint('Top-up failed for series $id: $e\n$s');
     } finally {
@@ -151,10 +162,9 @@ class RecurringSeriesService {
   /// Enqueues reminders that have come into the Cloud Tasks window. Silent by
   /// design: this runs at launch, where a notice about reminder scheduling is
   /// something the user can neither expect nor act on.
-  Future<void> _enqueueReminders(String templateId, List<Task>? alreadyKnown) async {
-    // Re-read: the materialize above just added occurrences the earlier snapshot
-    // predates, and those are exactly the ones most likely to need scheduling.
-    final occurrences = await _taskService.seriesInstances(templateId) ?? alreadyKnown ?? const [];
+  Future<void> _enqueueReminders(String templateId, List<Task> occurrences) async {
+    // No re-read: the caller already holds the upcoming occurrences plus the
+    // ones it just wrote, which are exactly the ones that may need scheduling.
     if (occurrences.isEmpty) return;
     final deferred = await ReminderService().enqueueDueReminders(occurrences, reportFailures: false);
     if (deferred > 0) {

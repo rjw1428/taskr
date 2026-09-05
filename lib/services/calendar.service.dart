@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
+import 'package:rxdart/rxdart.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
 
@@ -18,11 +19,20 @@ class CalendarService {
   final _functions = FirebaseFunctions.instance;
   final _taskService = TaskService();
 
+  // One shared, ref-counted subscription per user rather than one per task row.
+  // `distinct` matters as much as the sharing: the user doc also carries the
+  // running score, so it changes on every completion, and every row used to
+  // setState on each of those even though the flag they care about had not.
+  final Map<String, Stream<bool>> _connectedStreams = {};
+
   Stream<bool> watchConnected(String userId) {
-    return _db.collection('todos').doc(userId).snapshots().map((snap) {
-      final data = snap.data();
-      return data != null && data['calendarConnectedAt'] != null;
-    });
+    return _connectedStreams.putIfAbsent(
+      userId,
+      () => _db.collection('todos').doc(userId).snapshots().map((snap) {
+        final data = snap.data();
+        return data != null && data['calendarConnectedAt'] != null;
+      }).distinct().shareValue(),
+    );
   }
 
   Future<DateTime?> connectedAt(String userId) async {

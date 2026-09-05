@@ -19,6 +19,17 @@ class ReminderService {
   Future<void> scheduleReminder(Task task) async {
     if (task.reminderTime == null || task.id == null) return;
 
+    // Cloud Tasks rejects a scheduleTime more than 30 days out, so a reminder
+    // past the window is stored and left for a later pass rather than sent now
+    // — otherwise saving a task with a far-future reminder fails outright, and
+    // the callable's error surfaces as "Failed to save task" even though the
+    // task itself was already written. `reminderTaskName == null` is the retry
+    // marker [topUpPendingReminders] picks up once the instant comes into range.
+    if (!RecurringSeries.isWithinEnqueueWindow(task.reminderTime!, now: DateTime.now())) {
+      debugPrint('Reminder for ${task.id} is outside the enqueue window; deferred');
+      return;
+    }
+
     final taskDate = task.dueDate ?? TaskService.defaultUnassignedDate;
     final callable = _functions.httpsCallable('scheduleReminder');
     final result = await callable.call<Map<String, dynamic>>({
@@ -51,9 +62,31 @@ class ReminderService {
       await callable.call({'reminderTaskName': task.reminderTaskName});
     }
 
-    await _taskService.updateTaskByKey({'reminderTime': newTime}, task);
-    final updated = task.copyWith(reminderTime: newTime);
+    // The old Cloud Task is gone, so its name must go with it — leaving a stale
+    // name behind would make the top-up pass skip this task forever when the new
+    // instant is outside the enqueue window and nothing is scheduled below.
+    await _taskService.updateTaskByKey({
+      'reminderTime': newTime,
+      'reminderTaskName': null,
+    }, task);
+    final updated = task.copyWith(reminderTime: newTime)..reminderTaskName = null;
     await scheduleReminder(updated);
+  }
+
+  /// Hands Cloud Tasks the reminders that have since come into its 30-day
+  /// window — the one-off counterpart to the recurring series' launch top-up.
+  ///
+  /// Without this a reminder set far ahead (stored, but refused by Cloud Tasks
+  /// at save time) would never be scheduled at all. Silent by design: this runs
+  /// at launch, where a scheduling notice is something the user can neither
+  /// expect nor act on.
+  Future<void> topUpPendingReminders() async {
+    final pending = await _taskService.tasksWithPendingReminders();
+    if (pending.isEmpty) return;
+    final deferred = await enqueueDueReminders(pending, reportFailures: false);
+    if (deferred > 0) {
+      debugPrint('$deferred pending reminder(s) deferred to a later pass');
+    }
   }
 
   /// Hands the reminders on [occurrences] to Cloud Tasks — but only those due

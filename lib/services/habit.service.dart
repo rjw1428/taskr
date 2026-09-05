@@ -32,6 +32,15 @@ class HabitService {
   // tab both calling ensureInstances at once) creating duplicate instances.
   static final Set<String> _materializing = {};
 
+  // Habits already topped up this launch. The Goals tab used to call
+  // [ensureInstances] for every active habit on every rebuild, and each call
+  // read the habit's entire instance history; once per launch is plenty for a
+  // 60-day horizon.
+  static final Set<String> _toppedUpThisLaunch = {};
+
+  @visibleForTesting
+  static void resetLaunchGuard() => _toppedUpThisLaunch.clear();
+
   String get _uid => AuthService().user!.uid;
 
   CollectionReference<Map<String, dynamic>> habitCollection(String uid) =>
@@ -74,6 +83,21 @@ class HabitService {
     return ref.id;
   }
 
+  /// [ensureInstances], at most once per habit per launch. This is the rolling
+  /// top-up a list screen wants; a direct edit (add/update/resume) still calls
+  /// [ensureInstances] itself so the change lands immediately.
+  Future<void> ensureInstancesOnce(Habit h) async {
+    final id = h.id;
+    if (id == null || h.status != 'active' || _toppedUpThisLaunch.contains(id)) return;
+    _toppedUpThisLaunch.add(id);
+    try {
+      await ensureInstances(h);
+    } catch (_) {
+      _toppedUpThisLaunch.remove(id); // let the next rebuild retry
+      rethrow;
+    }
+  }
+
   /// Rolling top-up: materialize the scheduled dates from (lastMaterialized+1 or
   /// today) through today+horizon. Idempotent: it skips any date that already
   /// has an instance, so a null/stale lastMaterializedDate (e.g. after an edit)
@@ -88,8 +112,9 @@ class HabitService {
       final start = _dates.getDate(h.startDate);
       // Dates that already have an instance for this habit — the authoritative
       // record of what exists. (Collection-group query on (userId, habitId);
-      // null if the index isn't ready.)
-      final snap = await _habitInstanceQuery(h.id!);
+      // null if the index isn't ready.) Only today onwards matters here: the
+      // window below never starts in the past, so history is left unread.
+      final snap = await _habitInstanceQuery(h.id!, fromDate: todayStr);
       final Set<String>? existingDates =
           snap?.docs.map((d) => d.data()['dueDate'] as String?).whereType<String>().toSet();
 
@@ -246,7 +271,7 @@ class HabitService {
   // Deletions run in parallel so cleanup of a long horizon isn't slow.
   Future<void> _deleteFutureIncomplete(String habitId) async {
     final todayStr = _dates.getString(DateTime.now());
-    final instances = await _habitInstances(habitId);
+    final instances = await _habitInstances(habitId, fromDate: todayStr);
     await Future.wait(instances
         .where((t) => !t.completed && t.dueDate != null && t.dueDate!.compareTo(todayStr) >= 0)
         .map((t) => _taskService.deleteTask(t)));
@@ -256,21 +281,36 @@ class HabitService {
   // deployed yet they fail with failed-precondition; degrade gracefully (return
   // empty) so habit management (delete/toggle) still works — streak/cleanup
   // simply wait for the index. Callers treat an empty result as "no instances".
-  Future<QuerySnapshot<Map<String, dynamic>>?> _habitInstanceQuery(String habitId) async {
+  //
+  // [fromDate] bounds the read to instances due on or after that day. That
+  // needs the (userId, habitId, dueDate) index; until it exists the bounded
+  // query fails and the unbounded one below answers instead — the same result,
+  // just at the old cost.
+  Future<QuerySnapshot<Map<String, dynamic>>?> _habitInstanceQuery(
+    String habitId, {
+    String? fromDate,
+  }) async {
+    final base = _db
+        .collectionGroup('items')
+        .where('userId', isEqualTo: _uid)
+        .where('habitId', isEqualTo: habitId);
+    if (fromDate != null) {
+      try {
+        return await base.where('dueDate', isGreaterThanOrEqualTo: fromDate).get();
+      } catch (e) {
+        debugPrint('Bounded habit instance query failed (index building?): $e');
+      }
+    }
     try {
-      return await _db
-          .collectionGroup('items')
-          .where('userId', isEqualTo: _uid)
-          .where('habitId', isEqualTo: habitId)
-          .get();
+      return await base.get();
     } catch (e) {
       debugPrint('Habit instance query failed (index building?): $e');
       return null;
     }
   }
 
-  Future<List<Task>> _habitInstances(String habitId) async {
-    final snap = await _habitInstanceQuery(habitId);
+  Future<List<Task>> _habitInstances(String habitId, {String? fromDate}) async {
+    final snap = await _habitInstanceQuery(habitId, fromDate: fromDate);
     if (snap == null) return [];
     return snap.docs.map((doc) {
       final data = {...doc.data(), 'id': doc.id};

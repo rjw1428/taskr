@@ -29,6 +29,38 @@ void main() {
     return counts;
   }
 
+  // The Goals tab tops habits up from inside its StreamBuilder, so the top-up
+  // used to run — and read the habit's whole instance history — on every
+  // rebuild. The list now goes through ensureInstancesOnce, which must do the
+  // work exactly once per launch and still let a direct call run again.
+  test('ensureInstancesOnce tops up a habit only once per launch', () async {
+    HabitService.resetLaunchGuard();
+    final today = DateService().getString(DateTime.now());
+    final h = Habit(id: 'h1', title: 'Shave', effort: Effort.low, startDate: today, recurrenceType: 'Daily');
+    await fake.collection('todos').doc(uid).collection('habits').doc('h1').set({'title': 'Shave', 'status': 'active'});
+
+    await habits.ensureInstancesOnce(h);
+    final first = await instancesPerDate('h1');
+    expect(first, isNotEmpty);
+
+    // Wipe the instances behind the guard's back: a second once-call must not
+    // notice, a direct call must.
+    for (final date in first.keys) {
+      final items = await fake
+          .collection('todos').doc(uid).collection('tasks').doc(date)
+          .collection('items').where('habitId', isEqualTo: 'h1').get();
+      for (final d in items.docs) {
+        await d.reference.delete();
+      }
+    }
+    await habits.ensureInstancesOnce(h);
+    expect(await instancesPerDate('h1'), isEmpty, reason: 'guarded call must be a no-op');
+
+    await habits.ensureInstances(h);
+    expect((await instancesPerDate('h1')).length, first.length, reason: 'direct call still materializes');
+    HabitService.resetLaunchGuard();
+  });
+
   // Regression: ensureInstances used to dedupe only via lastMaterializedDate,
   // so a null/stale value (which every habit edit produces) re-materialized the
   // whole window and piled up duplicate instances. It must now be idempotent.

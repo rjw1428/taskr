@@ -61,6 +61,9 @@ class SettingsPageState extends State<SettingsForm> {
             const SectionHeader('Appearance'),
             const _ThemeModeRow(),
             const SizedBox(height: Insets.sm),
+            const SectionHeader('Notifications'),
+            _GoalRemindersRow(userId: widget.userId),
+            const SizedBox(height: Insets.sm),
             const SectionHeader('Google Calendar'),
             _GoogleCalendarRow(userId: widget.userId),
             const SizedBox(height: Insets.sm),
@@ -161,6 +164,76 @@ class _ThemeModeRow extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _GoalRemindersRow extends StatelessWidget {
+  final String userId;
+  const _GoalRemindersRow({required this.userId});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final t = theme.appTokens;
+    return StreamBuilder<GoalReminderSchedule>(
+      stream: NotificationService().watchGoalReminders(userId),
+      // Assume the current behaviour until the doc arrives, matching the
+      // server's default — a control that starts elsewhere and then jumps reads
+      // as a setting being changed.
+      initialData: GoalReminderSchedule.both,
+      builder: (context, snapshot) {
+        final schedule = snapshot.data ?? GoalReminderSchedule.both;
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: Insets.xs, vertical: Insets.sm),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Goal reminders', style: theme.textTheme.bodyLarge),
+              Padding(
+                padding: const EdgeInsets.only(top: Insets.xs, bottom: Insets.sm),
+                child: Text(
+                  'A nudge when goal tasks are still outstanding',
+                  style: theme.textTheme.bodySmall?.copyWith(color: t.textMuted),
+                ),
+              ),
+              SizedBox(
+                width: double.infinity,
+                child: SegmentedButton<GoalReminderSchedule>(
+                  segments: const [
+                    ButtonSegment(
+                        value: GoalReminderSchedule.off,
+                        label: Text('Off'),
+                        icon: Icon(FontAwesomeIcons.bellSlash, size: 14)),
+                    ButtonSegment(
+                        value: GoalReminderSchedule.eveningOnly,
+                        label: Text('5pm'),
+                        icon: Icon(FontAwesomeIcons.bell, size: 14)),
+                    ButtonSegment(
+                        value: GoalReminderSchedule.both,
+                        label: Text('5 & 9pm'),
+                        icon: Icon(FontAwesomeIcons.bellConcierge, size: 14)),
+                  ],
+                  selected: {schedule},
+                  showSelectedIcon: false,
+                  onSelectionChanged: (selection) => _set(context, selection.first),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _set(BuildContext context, GoalReminderSchedule schedule) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await NotificationService().setGoalReminders(userId, schedule);
+    } catch (e) {
+      // The control is driven by the stream, so a failed write leaves it where
+      // it was; say so rather than letting it silently snap back.
+      messenger.showSnackBar(SnackBar(content: Text('Could not update goal reminders: $e')));
+    }
   }
 }
 

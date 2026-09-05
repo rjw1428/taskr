@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:taskr/services/services.dart';
+import 'package:provider/provider.dart';
+import 'package:taskr/performance/performance_history.dart';
 import 'package:taskr/shared/shared.dart';
 
 const int _weekCount = 13;
@@ -29,28 +29,17 @@ class _PerformanceHeatmapState extends State<PerformanceHeatmap> {
     final windowStart = _mondayOf(today).subtract(const Duration(days: (_weekCount - 1) * 7));
     final windowEnd = windowStart.add(const Duration(days: _weekCount * 7 - 1));
 
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: PerformanceService().streamPerformanceForMonth(
-        widget.userId,
-        windowStart,
-        windowEnd,
-      ),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          debugPrint(snapshot.error.toString());
-          return const ErrorMessage();
-        }
+    // Sliced from the page-wide history rather than streamed here: this
+    // widget's own listener was rebuilt (and its 13 weeks re-read) every time
+    // the page did.
+    final history = context.watch<PerformanceHistory?>();
+    final dailyScores = <DateTime, int>{};
+    history?.scoresByDay(until: windowEnd).forEach((date, score) {
+      if (!date.isBefore(windowStart)) dailyScores[date] = score;
+    });
 
-        final dailyScores = <DateTime, int>{};
-        final docs = snapshot.data ?? const <Map<String, dynamic>>[];
-        for (final data in docs) {
-          final ts = data['date'] as Timestamp?;
-          if (ts == null) continue;
-          final completed = data['completed'] as Map<String, dynamic>?;
-          final score = (completed?['ALL'] as int?) ?? 0;
-          dailyScores[_dateKey(ts.toDate())] = score;
-        }
-
+    return Builder(
+      builder: (context) {
         final theme = Theme.of(context);
         final t = theme.appTokens;
         return Column(

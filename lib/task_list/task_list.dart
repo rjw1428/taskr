@@ -40,9 +40,21 @@ class TaskListState extends State<TaskListScreen> {
   Stream<List<Task>>? _taskStream;
   Stream<List<Task>>? _subtaskStream;
   Stream<List<Habit>>? _habitStream;
+  Stream<List<Map<String, dynamic>>>? _countdownStream;
+  // The footer's journal/health streams follow the selected day only; the
+  // search box, drags and progress updates used to re-create them every rebuild.
+  String? _footerDate;
+  Stream<JournalEntry?>? _journalStream;
+  Stream<HealthEntry?>? _healthStream;
 
   void _ensureStreams(List<Tag> tags) {
     _habitStream ??= HabitService().streamHabits();
+    _countdownStream ??= _taskService.streamCountdowns(userId);
+    if (_footerDate != selectedDate) {
+      _footerDate = selectedDate;
+      _journalStream = JournalService().streamEntry(selectedDate);
+      _healthStream = HealthService().streamEntry(selectedDate);
+    }
     final key = "${widget.isBacklog}|$selectedDate|${tags.map((t) => t.id).join(',')}";
     if (key == _streamKey) return;
     _streamKey = key;
@@ -308,7 +320,7 @@ class TaskListState extends State<TaskListScreen> {
               child: ReorderableListView(
                   footer: !widget.isBacklog && AuthService().isOwner
                       ? StreamBuilder<JournalEntry?>(
-                          stream: JournalService().streamEntry(selectedDate),
+                          stream: _journalStream,
                           builder: (context, journalSnapshot) {
                             final hasJournal = journalSnapshot.data != null && journalSnapshot.data!.hasData;
                             return Padding(
@@ -352,7 +364,7 @@ class TaskListState extends State<TaskListScreen> {
                                     ),
                                   ),
                                   StreamBuilder<HealthEntry?>(
-                                    stream: HealthService().streamEntry(selectedDate),
+                                    stream: _healthStream,
                                     builder: (context, healthSnapshot) {
                                       final hasHealth =
                                           healthSnapshot.data != null && healthSnapshot.data!.hasData;
@@ -390,7 +402,7 @@ class TaskListState extends State<TaskListScreen> {
                     if (!widget.isBacklog) DailyProgress(numerator: _completedCount, denominator: _totalCount),
                     if (!widget.isBacklog)
                       StreamBuilder<List<Map<String, dynamic>>>(
-                        stream: _taskService.streamCountdowns(userId),
+                        stream: _countdownStream,
                         builder: (context, cdSnapshot) {
                           if (!cdSnapshot.hasData) return const SizedBox.shrink();
                           final viewed = DateService().getDate(selectedDate);
