@@ -5,35 +5,105 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:taskr/shared/constants.dart';
-
-// ignore: non_constant_identifier_names
-final WEB_CLIENT_ID = dotenv.env['WEB_CLIENT_ID'];
-// ignore: non_constant_identifier_names
-final CALENDAR_WEB_CLIENT_ID = dotenv.env['CALENDAR_WEB_CLIENT_ID'];
+import 'package:taskr/services/firebase_refs.dart';
 
 const _calendarScope = 'https://www.googleapis.com/auth/calendar';
 
+/// Which Google OAuth client a sign-in goes through: the plain login client, or
+/// the calendar client that also asks for calendar scope and a server code.
+enum GoogleSignInProfile { login, calendar }
+
+/// What a Google sign-in yields, independent of the plugin's own types so the
+/// auth flows can be driven from a test.
+class GoogleAuthResult {
+  final String? accessToken;
+  final String? idToken;
+  final String? serverAuthCode;
+  final String email;
+  const GoogleAuthResult({this.accessToken, this.idToken, this.serverAuthCode, required this.email});
+}
+
+/// The Google sign-in plugin behind an interface. [instance] resolves to the
+/// real plugin unless a test installs a fake.
+abstract class GoogleSignInGateway {
+  static GoogleSignInGateway? _override;
+  static GoogleSignInGateway get instance => _override ?? _PluginGoogleSignIn.shared;
+
+  @visibleForTesting
+  static set override(GoogleSignInGateway? gateway) => _override = gateway;
+
+  /// Interactive sign-in; null when the user dismissed the picker.
+  Future<GoogleAuthResult?> signIn(GoogleSignInProfile profile);
+
+  /// Reuses a previous session without UI; null when there is none.
+  Future<GoogleAuthResult?> signInSilently(GoogleSignInProfile profile);
+
+  Future<void> signOut(GoogleSignInProfile profile);
+  Future<void> disconnect(GoogleSignInProfile profile);
+}
+
+class _PluginGoogleSignIn implements GoogleSignInGateway {
+  _PluginGoogleSignIn._();
+  static final shared = _PluginGoogleSignIn._();
+
+  final Map<GoogleSignInProfile, GoogleSignIn> _clients = {};
+
+  GoogleSignIn _client(GoogleSignInProfile profile) => _clients.putIfAbsent(profile, () {
+        switch (profile) {
+          case GoogleSignInProfile.login:
+            return GoogleSignIn(serverClientId: dotenv.env['WEB_CLIENT_ID']);
+          case GoogleSignInProfile.calendar:
+            return GoogleSignIn(
+              serverClientId: dotenv.env['CALENDAR_WEB_CLIENT_ID'],
+              scopes: [_calendarScope],
+            );
+        }
+      });
+
+  Future<GoogleAuthResult?> _result(GoogleSignInAccount? account) async {
+    if (account == null) return null;
+    final auth = await account.authentication;
+    return GoogleAuthResult(
+      accessToken: auth.accessToken,
+      idToken: auth.idToken,
+      serverAuthCode: account.serverAuthCode,
+      email: account.email,
+    );
+  }
+
+  @override
+  Future<GoogleAuthResult?> signIn(GoogleSignInProfile profile) async => _result(await _client(profile).signIn());
+
+  @override
+  Future<GoogleAuthResult?> signInSilently(GoogleSignInProfile profile) async =>
+      _result(await _client(profile).signInSilently());
+
+  @override
+  Future<void> signOut(GoogleSignInProfile profile) => _client(profile).signOut();
+
+  @override
+  Future<void> disconnect(GoogleSignInProfile profile) => _client(profile).disconnect();
+}
+
 class AuthService {
   AuthService._internal();
-  static final _instance = AuthService._internal();
+  static AuthService _instance = AuthService._internal();
+
+  /// Drops all state so the next `AuthService()` starts fresh.
+  @visibleForTesting
+  static void resetInstance() => _instance = AuthService._internal();
   // `late` so tests can inject fakes (via [user]/[db] setters) before these
   // initializers run — reading them otherwise touches real Firebase, which
   // isn't initialized under `flutter test`.
-  late final userStream = FirebaseAuth.instance.authStateChanges().shareReplay(maxSize: 1);
-  late User? user = FirebaseAuth.instance.currentUser;
+  late final userStream = FirebaseRefs.auth.authStateChanges().shareReplay(maxSize: 1);
+  late User? user = FirebaseRefs.auth.currentUser;
 
-  late FirebaseFirestore _db = FirebaseFirestore.instance;
+  late FirebaseFirestore _db = FirebaseRefs.firestore;
 
   @visibleForTesting
   set db(FirebaseFirestore db) => _db = db;
 
-  GoogleSignIn? _calendarSignIn;
-  GoogleSignIn _getCalendarSignIn() {
-    return _calendarSignIn ??= GoogleSignIn(
-      serverClientId: CALENDAR_WEB_CLIENT_ID,
-      scopes: [_calendarScope],
-    );
-  }
+  GoogleSignInGateway get _google => GoogleSignInGateway.instance;
 
   factory AuthService() {
     return _instance;
@@ -41,7 +111,7 @@ class AuthService {
 
   Future<void> anonLogin() async {
     try {
-      await FirebaseAuth.instance.signInAnonymously();
+      await FirebaseRefs.auth.signInAnonymously();
     } on FirebaseAuthException {
       // handle error
     }
@@ -49,7 +119,7 @@ class AuthService {
 
   Future<void> createUser(String email, String password) async {
     try {
-      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      await FirebaseRefs.auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
@@ -71,18 +141,17 @@ class AuthService {
         final googleProvider = GoogleAuthProvider();
         googleProvider.addScope('https://www.googleapis.com/auth/contacts.readonly');
         googleProvider.setCustomParameters({'login_hint': 'user@example.com'});
-        await FirebaseAuth.instance.signInWithPopup(googleProvider);
+        await FirebaseRefs.auth.signInWithPopup(googleProvider);
       } else {
-        final googleUser = await GoogleSignIn(serverClientId: WEB_CLIENT_ID).signIn();
+        final googleUser = await _google.signIn(GoogleSignInProfile.login);
         if (googleUser == null) return;
-        final googleAuth = await googleUser.authentication;
         final credential = GoogleAuthProvider.credential(
-          accessToken: googleAuth.accessToken,
-          idToken: googleAuth.idToken,
+          accessToken: googleUser.accessToken,
+          idToken: googleUser.idToken,
         );
-        await FirebaseAuth.instance.signInWithCredential(credential);
+        await FirebaseRefs.auth.signInWithCredential(credential);
       }
-      user = FirebaseAuth.instance.currentUser;
+      user = FirebaseRefs.auth.currentUser;
       await ensureUserDoc();
     } catch (e) {
       debugPrint('Google sign-in error: $e');
@@ -128,30 +197,28 @@ class AuthService {
     // reuses the same account instead of showing the account picker.
     if (!kIsWeb) {
       try {
-        await GoogleSignIn(serverClientId: WEB_CLIENT_ID).disconnect();
+        await _google.disconnect(GoogleSignInProfile.login);
       } catch (_) {
         try {
-          await GoogleSignIn(serverClientId: WEB_CLIENT_ID).signOut();
+          await _google.signOut(GoogleSignInProfile.login);
         } catch (_) {}
       }
     }
-    await FirebaseAuth.instance.signOut();
+    await FirebaseRefs.auth.signOut();
   }
 
   Future<CalendarConsent?> requestCalendarConsent() async {
     if (kIsWeb) {
       throw UnsupportedError('Calendar connection is not supported on web yet');
     }
-    final signIn = _getCalendarSignIn();
-    final account = await signIn.signIn();
+    final account = await _google.signIn(GoogleSignInProfile.calendar);
     if (account == null) return null;
-    final auth = await account.authentication;
     final serverAuthCode = account.serverAuthCode;
-    if (serverAuthCode == null || auth.accessToken == null) {
+    if (serverAuthCode == null || account.accessToken == null) {
       throw Exception('Google did not return a server auth code; check OAuth client configuration');
     }
     return CalendarConsent(
-      accessToken: auth.accessToken!,
+      accessToken: account.accessToken!,
       serverAuthCode: serverAuthCode,
       email: account.email,
     );
@@ -159,21 +226,19 @@ class AuthService {
 
   Future<String?> getCalendarAccessToken({bool silent = true}) async {
     if (kIsWeb) return null;
-    final signIn = _getCalendarSignIn();
-    GoogleSignInAccount? account = silent ? await signIn.signInSilently() : await signIn.signIn();
-    if (account == null) return null;
-    final auth = await account.authentication;
-    return auth.accessToken;
+    final account = silent
+        ? await _google.signInSilently(GoogleSignInProfile.calendar)
+        : await _google.signIn(GoogleSignInProfile.calendar);
+    return account?.accessToken;
   }
 
   Future<void> revokeCalendarConsent() async {
     if (kIsWeb) return;
-    final signIn = _getCalendarSignIn();
     try {
-      await signIn.disconnect();
+      await _google.disconnect(GoogleSignInProfile.calendar);
     } catch (_) {
       try {
-        await signIn.signOut();
+        await _google.signOut(GoogleSignInProfile.calendar);
       } catch (_) {}
     }
   }

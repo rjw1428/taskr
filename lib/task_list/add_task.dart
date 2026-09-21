@@ -6,6 +6,7 @@ import 'package:taskr/services/services.dart';
 import 'package:taskr/services/tag.provider.dart';
 import 'package:taskr/shared/shared.dart';
 import 'package:multi_select_flutter/multi_select_flutter.dart';
+import 'package:taskr/task_list/add_task_logic.dart';
 import 'package:taskr/task_list/recurring_task_form.dart';
 
 class AddTaskScreen extends StatefulWidget {
@@ -45,21 +46,9 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   late List<Tag> _selectedTags = [];
   final TaskService _taskService = TaskService();
 
-  String? get _countdownLabelValue {
-    if (!_countdown) return null;
-    final text = _countdownLabel.value.text.trim();
-    return text.isEmpty ? null : text;
-  }
+  String? get _countdownLabelValue => AddTaskLogic.countdownLabel(_countdown, _countdownLabel.value.text);
 
-  String _formatReminder(String isoString) {
-    final dt = DateTime.parse(isoString).toLocal();
-    final month = dt.month.toString().padLeft(2, '0');
-    final day = dt.day.toString().padLeft(2, '0');
-    final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
-    final minute = dt.minute.toString().padLeft(2, '0');
-    final period = dt.hour >= 12 ? 'PM' : 'AM';
-    return '$month/$day $hour:$minute $period';
-  }
+  String _formatReminder(String isoString) => AddTaskLogic.formatReminder(DateTime.parse(isoString).toLocal());
 
   Future<void> _loadMultiDayEndDate() async {
     final group = await _taskService.getMultiDayGroup(
@@ -105,20 +94,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   Future<void> _saveTask() async {
     // Save Recurring Task
     if (_isRecurring && _dueDate != null && _recurringTaskTemplate != null) {
-      _recurringTaskTemplate!.startDate = DateService().getDate(_dueDate!);
-
-      // if not weekly, remove daysOfWeek
-      if (_recurringTaskTemplate!.recurrenceType != "Weekly") {
-        _recurringTaskTemplate!.daysOfWeek = null;
-      }
-
-      if (_recurringTaskTemplate!.recurrenceType == 'Yearly' || _recurringTaskTemplate!.recurrenceType == 'Daily') {
-        _recurringTaskTemplate!.frequency = null;
-      }
-
-      if (_recurringTaskTemplate!.recurrenceType != 'Monthly') {
-        _recurringTaskTemplate!.dayOfMonth = null;
-      }
+      AddTaskLogic.normalizeTemplate(_recurringTaskTemplate!, DateService().getDate(_dueDate!));
 
       // Everything the occurrences share. The service stamps each one's id,
       // dueDate, template id and reminder instant.
@@ -160,7 +136,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
     } else if (_isMultiDay && _dueDate != null && _multiDayEndDate != null && widget.task == null) {
       final startDate = DateService().getDate(_dueDate!);
       final endDate = DateService().getDate(_multiDayEndDate!);
-      final dayCount = endDate.difference(startDate).inDays + 1;
+      final dayCount = AddTaskLogic.multiDayCount(startDate, endDate);
 
       if (dayCount < 2) {
         setState(() => apiPending = false);
@@ -171,14 +147,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
 
       for (int i = 0; i < dayCount; i++) {
         final date = startDate.add(Duration(days: i));
-        String position;
-        if (i == 0) {
-          position = 'start';
-        } else if (i == dayCount - 1) {
-          position = 'end';
-        } else {
-          position = 'middle';
-        }
+        final position = AddTaskLogic.multiDayPosition(i, dayCount);
 
         final task = Task(
           title: _title.value.text.trim(),
@@ -266,25 +235,32 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
         }
       } else {
         if (widget.task!.dueDate != newTask.dueDate) {
-          if (widget.task!.reminderTaskName != null) {
-            await ReminderService().cancelReminder(widget.task!);
+          var old = widget.task!;
+          if (old.reminderTaskName != null) {
+            // Awaited so a failed cancel surfaces as a save error rather than
+            // orphaning a scheduled reminder. The copy handed to deleteTask has
+            // no task name, so it does not fire the same cancel again.
+            await ReminderService().cancelReminder(old);
+            old = old.copyWith()..reminderTaskName = null;
           }
-          await _taskService.deleteTask(widget.task!);
-          await _taskService.addTask(newTask);
+          await _taskService.deleteTask(old);
+          // The re-added doc gets a fresh id; the reminder has to be scheduled
+          // against that one or its task name never lands on the moved doc.
+          final movedId = await _taskService.addTask(newTask);
           if (_reminderTime != null) {
-            await ReminderService().scheduleReminder(newTask);
+            await ReminderService().scheduleReminder(newTask.copyWith(id: movedId));
           }
         } else {
           await _taskService.updateTask(widget.task!.id!, newTask, widget.task!);
-          final oldReminder = widget.task!.reminderTime;
-          if (oldReminder != _reminderTime) {
-            if (_reminderTime == null) {
+          switch (AddTaskLogic.reminderTransition(widget.task!.reminderTime, _reminderTime)) {
+            case ReminderTransition.none:
+              break;
+            case ReminderTransition.cancel:
               await ReminderService().cancelReminder(widget.task!);
-            } else if (oldReminder == null) {
+            case ReminderTransition.schedule:
               await ReminderService().scheduleReminder(newTask);
-            } else {
+            case ReminderTransition.update:
               await ReminderService().updateReminder(widget.task!, _reminderTime!);
-            }
           }
         }
       }
@@ -435,7 +411,14 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                             if (date == null) return;
                             setState(() => _dueDate = DateService().getString(date));
                           },
-                          onClear: () => setState(() => _dueDate = null),
+                          onClear: () => setState(() {
+                            _dueDate = null;
+                            // Recurrence needs a start date. The toggle row hides
+                            // with the date, so the state has to go too, or the
+                            // series form stays on screen with no way to close it.
+                            _isRecurring = false;
+                            _recurringTaskTemplate = null;
+                          }),
                         ),
                         if (_dueDate != null)
                           _pickerField(
@@ -445,7 +428,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                             placeholder: 'Set a start time',
                             onTap: () async {
                               final initial = _startTime == null
-                                  ? DateService().getRoundedTime(TimeOfDay.now())
+                                  ? DateService().getRoundedTime(DateService().nowTime())
                                   : DateService().getTime(_startTime!);
                               final time = await _selectTime(context, initial);
                               if (time == null) return;
@@ -587,13 +570,11 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                                       context,
                                       _reminderTime != null
                                           ? TimeOfDay.fromDateTime(DateTime.parse(_reminderTime!).toLocal())
-                                          : DateService().getRoundedTime(TimeOfDay.now()),
+                                          : DateService().getRoundedTime(DateService().nowTime()),
                                     );
                                     if (time == null) return;
-                                    final dt = DateTime(date.year, date.month, date.day, time.hour, time.minute);
-                                    // Store as a UTC instant (with 'Z') so the backend resolves
-                                    // the same absolute moment regardless of server timezone.
-                                    setState(() => _reminderTime = dt.toUtc().toIso8601String());
+                                    setState(() =>
+                                        _reminderTime = AddTaskLogic.reminderInstant(date, time.hour, time.minute));
                                   },
                                   onClear: () => setState(() => _reminderTime = null),
                                 ),

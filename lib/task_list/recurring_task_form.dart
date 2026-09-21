@@ -289,7 +289,7 @@ class RecurringTaskFormState extends State<RecurringTaskForm> {
                       onTap: () async {
                         final time = await showTimePicker(
                           context: context,
-                          initialTime: _reminderTime ?? DateService().getRoundedTime(TimeOfDay.now()),
+                          initialTime: _reminderTime ?? DateService().getRoundedTime(DateService().nowTime()),
                         );
                         if (time == null) return;
                         setState(() {

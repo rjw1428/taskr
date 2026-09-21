@@ -2,11 +2,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:taskr/services/auth.service.dart';
 import 'package:taskr/services/models.dart';
+import 'package:taskr/services/firebase_refs.dart';
 
 class AccomplishmentService {
   // `late` so a test can inject a fake via [db] before the real instance is
   // touched (Firebase isn't initialized under `flutter test`).
-  late FirebaseFirestore _db = FirebaseFirestore.instance;
+  late FirebaseFirestore _db = FirebaseRefs.firestore;
   final AuthService _auth = AuthService();
 
   @visibleForTesting

@@ -1,13 +1,22 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
+import 'package:taskr/services/firebase_refs.dart';
 
 class HealthService {
   HealthService._internal();
-  static final _instance = HealthService._internal();
+  static HealthService _instance = HealthService._internal();
+
+  /// Drops all state so the next `HealthService()` starts fresh.
+  @visibleForTesting
+  static void resetInstance() => _instance = HealthService._internal();
   factory HealthService() => _instance;
 
-  final _db = FirebaseFirestore.instance;
+  late FirebaseFirestore _db = FirebaseRefs.firestore;
+
+  @visibleForTesting
+  set db(FirebaseFirestore db) => _db = db;
 
   CollectionReference<Map<String, dynamic>> _healthCollection(String userId) {
     return _db.collection('todos').doc(userId).collection('health');

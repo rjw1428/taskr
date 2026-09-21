@@ -29,8 +29,6 @@ String describeError(Object error) {
         return 'The server took too long (deadline-exceeded). The change may not be saved.';
       case 'not-found':
         return "That item no longer exists on the server (not-found).";
-      case 'failed-precondition':
-        return 'Save failed (failed-precondition)${error.message != null ? ': ${error.message}' : ''}';
       case 'resource-exhausted':
         return 'Quota exceeded (resource-exhausted). Try again later.';
       default:

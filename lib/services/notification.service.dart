@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:taskr/services/auth.service.dart';
 import 'package:taskr/services/models.dart';
+import 'package:taskr/services/firebase_refs.dart';
 
 /// Reads the notification records written by Cloud Functions whenever an FCM
 /// message is sent (see functions/src/index.ts `recordNotification`). Stored at
@@ -9,7 +10,7 @@ import 'package:taskr/services/models.dart';
 class NotificationService {
   // `late` so merely constructing the service doesn't touch Firebase, which
   // isn't initialized under `flutter test`.
-  late FirebaseFirestore _db = FirebaseFirestore.instance;
+  late FirebaseFirestore _db = FirebaseRefs.firestore;
   final AuthService _auth = AuthService();
 
   @visibleForTesting

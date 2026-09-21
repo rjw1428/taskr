@@ -1,14 +1,23 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/shared/shared.dart';
+import 'package:taskr/services/firebase_refs.dart';
 
 class JournalService {
   JournalService._internal();
-  static final _instance = JournalService._internal();
+  static JournalService _instance = JournalService._internal();
+
+  /// Drops all state so the next `JournalService()` starts fresh.
+  @visibleForTesting
+  static void resetInstance() => _instance = JournalService._internal();
   factory JournalService() => _instance;
 
-  final _db = FirebaseFirestore.instance;
+  late FirebaseFirestore _db = FirebaseRefs.firestore;
+
+  @visibleForTesting
+  set db(FirebaseFirestore db) => _db = db;
 
   CollectionReference<Map<String, dynamic>> _journalCollection(String userId) {
     return _db.collection('todos').doc(userId).collection('journal');

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mutations version="1.2">
+  <files><file>lib/people/person_avatar.dart</file></files>
+  <commands>
+    <command group="test" expected-return="0" working-directory="." timeout="900">flutter test test/person_avatar_test.dart</command>
+  </commands>
+</mutations>

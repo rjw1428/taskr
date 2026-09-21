@@ -4,7 +4,11 @@ import 'package:taskr/services/models.dart';
 
 class DateService {
   DateService._internal();
-  static final _instance = DateService._internal();
+  static DateService _instance = DateService._internal();
+
+  /// Drops all state so the next `DateService()` starts fresh.
+  @visibleForTesting
+  static void resetInstance() => _instance = DateService._internal();
   static const stringFmt = 'yyyy-MM-dd';
   static const dbTimeFormat = 'HH:mm';
   static const displayTimeFormat = 'h:mm aa';
@@ -12,6 +16,13 @@ class DateService {
   factory DateService() {
     return _instance;
   }
+
+  /// Clock, swappable so pickers that default to "now" are deterministic under test.
+  @visibleForTesting
+  DateTime Function() clock = DateTime.now;
+
+  /// The current wall-clock time of day.
+  TimeOfDay nowTime() => TimeOfDay.fromDateTime(clock());
 
   DateTime getSelectedDate() {
     return selectedDate;
@@ -110,8 +121,10 @@ class DateService {
     return aDate.isBefore(bDate);
   }
 
+  /// The top of the next hour. Wraps past 23:00 so a picker opened late in the
+  /// evening gets a valid time instead of hour 24.
   TimeOfDay getRoundedTime(TimeOfDay t) {
-    return TimeOfDay(hour: t.hour + 1, minute: 0);
+    return TimeOfDay(hour: (t.hour + 1) % 24, minute: 0);
   }
 
   String getDayOfWeekByIndex(int index) {

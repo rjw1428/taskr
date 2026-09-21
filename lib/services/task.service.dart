@@ -10,8 +10,8 @@ import 'package:taskr/services/task_ordering.dart';
 import 'package:taskr/services/recurring_series.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:taskr/shared/shared.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:intl/intl.dart';
+import 'package:taskr/services/firebase_refs.dart';
 
 /// Outcome of materializing a series: the template id, the occurrences actually
 /// written (so the caller can enqueue their reminders), and how the commit landed.
@@ -29,7 +29,7 @@ class RecurringSeriesWrite {
 class TaskService {
   // `late` so a test can inject a fake via [db] before the real instance is
   // touched (Firebase isn't initialized under `flutter test`).
-  late FirebaseFirestore _db = FirebaseFirestore.instance;
+  late FirebaseFirestore _db = FirebaseRefs.firestore;
   static const defaultUnassignedDate = "unassigned";
 
   @visibleForTesting
@@ -615,7 +615,11 @@ class TaskService {
   Future<void> pushTask(Task task) async {
     var user = AuthService().user!;
     if (task.reminderTaskName != null) {
+      // Awaited so a cancel that fails aborts the push instead of orphaning a
+      // scheduled reminder. The in-memory field is cleared too, otherwise
+      // [deleteTask] sees it and fires the same cancel a second time.
       await ReminderService().cancelReminder(task);
+      task.reminderTaskName = null;
     }
     await deleteTask(task);
     final now = DateTime.now();
@@ -726,11 +730,8 @@ class TaskService {
 
   Future<void> callRemoteMethod(String name, dynamic payload) async {
     try {
-      final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable(name);
-      final result = await callable.call(payload);
-      debugPrint('trainScheduleTest result: ${result.data}');
-    } on FirebaseFunctionsException catch (e, s) {
-      reportError(e, s, 'Server call "$name" failed');
+      final result = await FirebaseRefs.callFunction(name, payload);
+      debugPrint('$name result: $result');
     } catch (e, s) {
       reportError(e, s, 'Server call "$name" failed');
     }
@@ -973,6 +974,7 @@ class TaskService {
     for (final task in occurrences) {
       if (task.reminderTaskName != null) {
         await ReminderService().cancelReminder(task);
+        task.reminderTaskName = null; // so deleteTask does not cancel it again
       }
       await deleteTask(task);
     }

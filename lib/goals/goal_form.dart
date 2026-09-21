@@ -5,7 +5,13 @@ import 'package:taskr/shared/shared.dart';
 
 class GoalForm extends StatefulWidget {
   final Goal? goal;
-  const GoalForm({super.key, this.goal});
+
+  /// Test hook: stand in for the form's own [GoalService] (e.g. to stub the
+  /// model call). Production leaves it null.
+  @visibleForTesting
+  final GoalService? goalService;
+
+  const GoalForm({super.key, this.goal, this.goalService});
 
   @override
   State<GoalForm> createState() => _GoalFormState();
@@ -48,7 +54,7 @@ class _GoalFormState extends State<GoalForm> {
     setState(() => _apiPending = true);
 
     try {
-      final goalService = GoalService();
+      final goalService = widget.goalService ?? GoalService();
       final now = DateTime.now();
       final startDate = DateService().getString(now);
       final int? freqCount =

@@ -664,7 +664,9 @@ class _AccomplishmentsSummary extends StatelessWidget {
       stream: accomplishmentProvider.getAccomplishments(limit: _summaryCount),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const LoadingScreen();
+          // Bounded: this sits in the page's scroll column, which gives its
+          // children unbounded height, and LoadingScreen is a Scaffold.
+          return const SizedBox(height: 200, child: LoadingScreen());
         } else if (snapshot.hasError) {
           return Center(child: ErrorMessage(message: snapshot.error.toString()));
         } else if (snapshot.hasData) {

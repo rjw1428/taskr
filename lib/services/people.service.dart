@@ -1,16 +1,28 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:taskr/services/models.dart';
+import 'package:taskr/services/firebase_refs.dart';
 
 class PeopleService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  // `late` so a test can inject fakes before the real instances are touched
+  // (Firebase isn't initialized under `flutter test`).
+  late FirebaseFirestore _firestore = FirebaseRefs.firestore;
+  late FirebaseAuth _auth = FirebaseRefs.auth;
+
+  @visibleForTesting
+  set db(FirebaseFirestore db) => _firestore = db;
+
+  @visibleForTesting
+  set auth(FirebaseAuth auth) => _auth = auth;
 
   String get _userId => _auth.currentUser!.uid;
 
   Future<String> addPerson(Person person) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final personData = person.toJson();
+    // The document id is the identity; a stored `id: null` is just noise.
+    personData.remove('id');
     personData['createdAt'] = now;
     personData['lastUpdated'] = now;
 

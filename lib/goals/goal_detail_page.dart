@@ -7,14 +7,20 @@ import 'package:taskr/shared/shared.dart';
 
 class GoalDetailPage extends StatefulWidget {
   final String goalId;
-  const GoalDetailPage({super.key, required this.goalId});
+
+  /// Test hook: stand in for the page's own [GoalService] (e.g. to stub the
+  /// model call). Production leaves it null.
+  @visibleForTesting
+  final GoalService? goalService;
+
+  const GoalDetailPage({super.key, required this.goalId, this.goalService});
 
   @override
   State<GoalDetailPage> createState() => _GoalDetailPageState();
 }
 
 class _GoalDetailPageState extends State<GoalDetailPage> {
-  final _goalService = GoalService();
+  late final GoalService _goalService = widget.goalService ?? GoalService();
   Goal? _goal;
   Map<String, int> _stats = {};
   bool _loading = true;

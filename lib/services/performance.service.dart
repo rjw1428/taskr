@@ -3,13 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/shared/constants.dart';
+import 'package:taskr/services/firebase_refs.dart';
 
 class PerformanceService {
   PerformanceService._internal();
   // `late` so a test can inject a fake via [db] before the real instance is
   // touched (Firebase isn't initialized under `flutter test`).
-  late FirebaseFirestore _db = FirebaseFirestore.instance;
-  static final _instance = PerformanceService._internal();
+  late FirebaseFirestore _db = FirebaseRefs.firestore;
+  static PerformanceService _instance = PerformanceService._internal();
+
+  /// Drops all state so the next `PerformanceService()` starts fresh.
+  @visibleForTesting
+  static void resetInstance() => _instance = PerformanceService._internal();
 
   factory PerformanceService() {
     return _instance;

@@ -43,7 +43,6 @@ ThemeData _build({
   required Color outline,
   required Color hairline,
 }) {
-  final isDark = brightness == Brightness.dark;
   final scheme = ColorScheme.fromSeed(seedColor: accent, brightness: brightness).copyWith(
     primary: accent,
     onPrimary: accentInk,
@@ -97,7 +96,7 @@ ThemeData _build({
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Corners.lg)),
     ),
     bottomNavigationBarTheme: BottomNavigationBarThemeData(
-      backgroundColor: isDark ? surface : surface,
+      backgroundColor: surface,
       selectedItemColor: accent,
       unselectedItemColor: tokens.textFaint,
       type: BottomNavigationBarType.fixed,

@@ -3,6 +3,7 @@ import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taskr/services/accomplishment.service.dart';
 import 'package:taskr/services/auth.service.dart';
+import 'package:taskr/services/models.dart';
 
 void main() {
   late FakeFirebaseFirestore fake;
@@ -27,6 +28,8 @@ void main() {
     AuthService().user = MockUser(uid: uid);
     service = AccomplishmentService()..db = fake;
   });
+
+  group('writes', _writeTests);
 
   group('getAccomplishments', () {
     test('returns entries newest-first without client-side sorting', () async {
@@ -110,5 +113,57 @@ void main() {
 
       expect(await service.getAccomplishment('a').first, isNull);
     });
+  });
+}
+
+// ── Added coverage: writes and the unauthenticated guards ─────────────────────
+
+void _writeTests() {
+  late FakeFirebaseFirestore fake;
+  late AccomplishmentService service;
+  const uid = 'u1';
+
+  setUp(() {
+    fake = FakeFirebaseFirestore();
+    AuthService().user = MockUser(uid: uid);
+    service = AccomplishmentService()..db = fake;
+  });
+
+  Future<List<Map<String, dynamic>>> rows() async =>
+      (await fake.collection('todos').doc(uid).collection('accomplishments').get())
+          .docs
+          .map((d) => {...d.data(), 'id': d.id})
+          .toList();
+
+  test('addAccomplishment stores the entry under the signed-in user', () async {
+    await service.addAccomplishment(
+      Accomplishment(title: 'Ran 5k', description: 'Morning', date: '2026-09-10T08:00:00.000', difficultyScore: 4),
+    );
+
+    final stored = await rows();
+    expect(stored, hasLength(1));
+    expect(stored.single['title'], 'Ran 5k');
+    expect(stored.single['description'], 'Morning');
+    expect(stored.single['difficultyScore'], 4);
+  });
+
+  test('updateAccomplishment and deleteAccomplishment act on the id', () async {
+    await service.addAccomplishment(Accomplishment(title: 'one', date: '2026-01-01T00:00:00.000'));
+    final id = (await rows()).single['id'] as String;
+
+    await service.updateAccomplishment(Accomplishment(id: id, title: 'two', date: '2026-01-01T00:00:00.000'));
+    expect((await rows()).single['title'], 'two');
+
+    await service.deleteAccomplishment(id);
+    expect(await rows(), isEmpty);
+  });
+
+  test('every write throws when unauthenticated', () async {
+    AuthService().user = null;
+    final a = Accomplishment(id: 'x', title: 'one', date: '2026-01-01T00:00:00.000');
+
+    expect(() => service.addAccomplishment(a), throwsA(isA<Exception>()));
+    expect(() => service.updateAccomplishment(a), throwsA(isA<Exception>()));
+    expect(() => service.deleteAccomplishment('x'), throwsA(isA<Exception>()));
   });
 }

@@ -9,6 +9,7 @@ import 'package:taskr/services/models.dart';
 import 'package:taskr/services/people.provider.dart';
 import 'package:taskr/people/person_avatar.dart';
 import 'package:taskr/shared/shared.dart';
+import 'package:taskr/services/firebase_refs.dart';
 
 class PeopleListPage extends StatefulWidget {
   const PeopleListPage({super.key});
@@ -33,7 +34,7 @@ class _PeopleListPageState extends State<PeopleListPage> {
   DocumentReference<Map<String, dynamic>>? _prefsRef() {
     final uid = AuthService().user?.uid;
     if (uid == null) return null;
-    return FirebaseFirestore.instance.collection('todos').doc(uid).collection('settings').doc('preferences');
+    return FirebaseRefs.firestore.collection('todos').doc(uid).collection('settings').doc('preferences');
   }
 
   Future<void> _loadSortPref() async {

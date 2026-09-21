@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mutations version="1.2">
+  <files><file>lib/services/recurring_series.dart</file></files>
+  <commands>
+    <command group="test" expected-return="0" working-directory="." timeout="900">flutter test test/recurring_series_test.dart</command>
+  </commands>
+</mutations>

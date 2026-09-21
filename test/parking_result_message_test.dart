@@ -50,6 +50,13 @@ void main() {
       expect(message.body, isNotEmpty);
     });
 
+    test('needs-auth says the account must be re-authenticated', () {
+      final message = parkingResultMessage({'status': 'needs-auth'});
+
+      expect(message.title, 'Parking needs sign-in');
+      expect(message.body, contains('re-authenticated'));
+    });
+
     test('an unknown status never claims anything was charged', () {
       final message = parkingResultMessage({'status': 'something-new'});
 

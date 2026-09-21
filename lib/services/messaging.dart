@@ -3,26 +3,17 @@ import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:taskr/services/services.dart';
+import 'package:taskr/services/push_gateway.dart';
 
 class FirebaseMessageService {
-  final _fbMessaging = FirebaseMessaging.instance;
+  PushGateway get _push => PushGateway.instance;
   bool init = false;
   Future<void> initNotifiactions() async {
-    final settings = await _fbMessaging.requestPermission(
-      alert: true,
-      announcement: false,
-      badge: true,
-      carPlay: true,
-      criticalAlert: false,
-      provisional: false,
-      sound: true,
-    );
-
-    debugPrint('User granted permission: ${settings.authorizationStatus}');
-    final fcmToken = await _fbMessaging.getToken();
+    await _push.requestPermission();
+    final fcmToken = await _push.getToken();
     debugPrint("TOKEN: $fcmToken");
 
-    await FirebaseMessaging.instance.setAutoInitEnabled(true);
+    await _push.setAutoInitEnabled(true);
   }
 
   void handleMessage(
@@ -85,12 +76,12 @@ class FirebaseMessageService {
 
   Future initPushNotifications(BuildContext c) async {
     if (init) return;
-    RemoteMessage? initialMessage = await _fbMessaging.getInitialMessage();
+    RemoteMessage? initialMessage = await _push.getInitialMessage();
     if (initialMessage != null) {
       handleMessage(initialMessage);
     }
-    FirebaseMessaging.onMessageOpenedApp.listen((message) => handleMessage(message));
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    _push.onMessageOpenedApp.listen((message) => handleMessage(message));
+    _push.onMessage.listen((RemoteMessage message) {
       handleMessage(message);
     });
 

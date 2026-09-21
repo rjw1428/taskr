@@ -6,12 +6,25 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:taskr/services/models.dart';
+import 'package:taskr/services/firebase_refs.dart';
 
 class AIService {
   AIService._internal();
 
-  final _db = FirebaseFirestore.instance;
-  static final _instance = AIService._internal();
+  late FirebaseFirestore _db = FirebaseRefs.firestore;
+
+  @visibleForTesting
+  set db(FirebaseFirestore db) => _db = db;
+  static AIService _instance = AIService._internal();
+
+  /// Drops all state so the next `AIService()` starts fresh.
+  @visibleForTesting
+  static void resetInstance() => _instance = AIService._internal();
+
+  /// Mutable so a test can point the call at a local stub server.
+  @visibleForTesting
+  static String geminiEndpoint =
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
   static const _systemInstruction =
       "You are a personal coach, helping this person grow and become better. "
@@ -71,9 +84,7 @@ class AIService {
     final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
     if (apiKey.isEmpty) throw Exception('GEMINI_API_KEY not set in .env');
 
-    final url = Uri.parse(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey',
-    );
+    final url = Uri.parse('$geminiEndpoint?key=$apiKey');
 
     final body = jsonEncode({
       'system_instruction': {

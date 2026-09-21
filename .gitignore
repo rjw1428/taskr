@@ -52,3 +52,6 @@ app.*.map.json
 cache/
 
 service-account-key.json
+# Test tooling output
+/coverage/
+/tool/mutation/report/

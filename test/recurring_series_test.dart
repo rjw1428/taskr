@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taskr/services/models.dart';
+import 'package:rrule/rrule.dart';
 import 'package:taskr/services/recurring_series.dart';
 
 void main() {
@@ -25,6 +26,13 @@ void main() {
         startDate: start,
         endDate: end,
       );
+
+  test('the per-pass reminder cap is a usable count', () {
+    // `take()` on the due list would throw on anything negative, and zero would
+    // mean reminders never get enqueued.
+    expect(RecurringSeries.reminderEnqueueCapPerPass, greaterThan(0));
+    expect(RecurringSeries.reminderEnqueueCapPerPass, lessThan(100));
+  });
 
   group('occurrencesInHorizon', () {
     // 2026-01-05 is a Monday.
@@ -167,6 +175,50 @@ void main() {
       final justInside =
           now.add(const Duration(days: RecurringSeries.reminderEnqueueWindowDays - 1)).toIso8601String();
       expect(RecurringSeries.isWithinEnqueueWindow(justInside, now: now), isTrue);
+    });
+  });
+
+  group('recurrenceFrequency', () {
+    test('maps every template type and rejects the rest', () {
+      expect(recurrenceFrequency('Daily'), Frequency.daily);
+      expect(recurrenceFrequency('Weekly'), Frequency.weekly);
+      expect(recurrenceFrequency('Monthly'), Frequency.monthly);
+      expect(recurrenceFrequency('Yearly'), Frequency.yearly);
+      expect(() => recurrenceFrequency('Hourly'), throwsException);
+    });
+  });
+
+  group('weeklyRecurrenceList', () {
+    test('keeps only selected days with a known key', () {
+      final entries = weeklyRecurrenceList({'Mo': true, 'We': false, 'Fr': true, 'Xx': true});
+      expect(entries.map((e) => e.day), [DateTime.monday, DateTime.friday]);
+    });
+  });
+
+  group('buildRule', () {
+    // 2026-01-05 is a Monday.
+    final start = DateTime.utc(2026, 1, 5);
+    final end = DateTime.utc(2026, 1, 18);
+
+    test('a weekly template expands on each selected day', () {
+      final t = weekly(start: start, end: end, days: const {'Mo': true, 'We': true});
+      final dates = RecurringSeries.allOccurrences(t, today: start);
+      expect(dates, [
+        DateTime.utc(2026, 1, 5),
+        DateTime.utc(2026, 1, 7),
+        DateTime.utc(2026, 1, 12),
+        DateTime.utc(2026, 1, 14),
+      ]);
+    });
+
+    test('a weekly template with no day selected falls back to the start weekday', () {
+      final t = weekly(start: start, end: end, days: const {'Mo': false});
+      final dates = RecurringSeries.allOccurrences(t, today: start);
+      expect(dates, [DateTime.utc(2026, 1, 5), DateTime.utc(2026, 1, 12)]);
+    });
+
+    test('the batch chunk stays under the Firestore 500-op cap', () {
+      expect(RecurringSeries.batchChunkSize, inInclusiveRange(1, 499));
     });
   });
 }

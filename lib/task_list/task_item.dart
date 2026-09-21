@@ -407,8 +407,8 @@ class TaskItemState extends State<TaskItem> {
           } else if (value == "COPY") {
             showDialog(context: context, builder: (BuildContext context) => CopyTaskScreen(task: widget.task));
           } else if (value == "CHECK_TIME") {
-            final data = ["userId", AuthService().user!.uid];
-            widget.taskService.callRemoteMethod("trainScheduleTest", data);
+            // The signed-in user is taken from the auth context server-side.
+            widget.taskService.callRemoteMethod("checkTrainStatus", null);
           } else if (value == "VIEW_SERIES") {
             Navigator.push(
               context,

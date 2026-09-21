@@ -225,7 +225,7 @@ class ParkingService {
         ParkingTriggerResult(
           ParkingTriggerOutcome.failed,
           'Could not send the parking request. Nothing was paid for.',
-          detail: _describe(e),
+          detail: describeError(e),
         ),
         true,
       );
@@ -233,7 +233,8 @@ class ParkingService {
   }
 
   /// A one-line, length-capped rendering of an error, safe to store.
-  static String _describe(Object e) {
+  @visibleForTesting
+  static String describeError(Object e) {
     final text = '${e.runtimeType}: $e'.replaceAll(RegExp(r'\s+'), ' ');
     return text.length <= 300 ? text : '${text.substring(0, 297)}...';
   }

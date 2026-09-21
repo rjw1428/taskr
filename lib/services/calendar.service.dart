@@ -2,21 +2,30 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
+import 'package:taskr/services/firebase_refs.dart';
 
-const _calendarEventsUrl = 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
+/// Google Calendar events endpoint. Mutable so a test can point it at a
+/// local stub server.
+@visibleForTesting
+String calendarEventsUrl = 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
 
 class CalendarService {
   CalendarService._internal();
-  static final _instance = CalendarService._internal();
+  static CalendarService _instance = CalendarService._internal();
+
+  /// Drops all state so the next `CalendarService()` starts fresh.
+  @visibleForTesting
+  static void resetInstance() => _instance = CalendarService._internal();
   factory CalendarService() => _instance;
 
-  final _db = FirebaseFirestore.instance;
-  final _functions = FirebaseFunctions.instance;
+  late FirebaseFirestore _db = FirebaseRefs.firestore;
+
+  @visibleForTesting
+  set db(FirebaseFirestore db) => _db = db;
   final _taskService = TaskService();
 
   // One shared, ref-counted subscription per user rather than one per task row.
@@ -47,16 +56,14 @@ class CalendarService {
     if (consent == null) {
       throw Exception('Connection cancelled');
     }
-    final callable = _functions.httpsCallable('exchangeCalendarAuthCode');
-    await callable.call<Map<String, dynamic>>({
+    await FirebaseRefs.callFunction('exchangeCalendarAuthCode', {
       'code': consent.serverAuthCode,
     });
   }
 
   Future<void> disconnect() async {
-    final callable = _functions.httpsCallable('disconnectCalendar');
     try {
-      await callable.call();
+      await FirebaseRefs.callFunction('disconnectCalendar');
     } finally {
       await AuthService().revokeCalendarConsent();
     }
@@ -71,8 +78,8 @@ class CalendarService {
 
     final existingId = task.calendarEventId;
     final uri = existingId != null
-        ? Uri.parse('$_calendarEventsUrl/$existingId')
-        : Uri.parse(_calendarEventsUrl);
+        ? Uri.parse('$calendarEventsUrl/$existingId')
+        : Uri.parse(calendarEventsUrl);
 
     final client = HttpClient();
     try {

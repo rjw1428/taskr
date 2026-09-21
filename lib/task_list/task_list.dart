@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -13,8 +12,10 @@ import 'package:taskr/task_list/divider_item.dart';
 import 'package:taskr/task_list/health_page.dart';
 import 'package:taskr/task_list/journal_modal.dart';
 import 'package:taskr/task_list/task_item.dart';
+import 'package:taskr/task_list/task_list_logic.dart';
 import 'package:taskr/task_list/subtask_group.dart';
 import '../shared/shared.dart';
+import 'package:taskr/services/push_gateway.dart';
 
 class TaskListScreen extends StatefulWidget {
   final bool isBacklog;
@@ -62,6 +63,11 @@ class TaskListState extends State<TaskListScreen> {
     _subtaskStream = widget.isBacklog ? _taskService.streamSubtasks(userId, tags) : null;
   }
 
+  /// Stands in for the Algolia-backed [TaskService.searchTasks] under test,
+  /// where no search credentials exist. Null in production.
+  @visibleForTesting
+  static Future<List<Task>> Function(String query)? searchOverride;
+
   bool _isSearching = false;
   List<Task>? _searchResults;
   bool _searchLoading = false;
@@ -102,7 +108,7 @@ class TaskListState extends State<TaskListScreen> {
     }
     _debounce = Timer(const Duration(milliseconds: 300), () async {
       setState(() => _searchLoading = true);
-      final results = await _taskService.searchTasks(query);
+      final results = await (searchOverride ?? _taskService.searchTasks)(query);
       if (mounted) {
         setState(() {
           _searchResults = results;
@@ -122,8 +128,9 @@ class TaskListState extends State<TaskListScreen> {
     if (kIsWeb) {
       return;
     }
-    await FirebaseMessaging.instance.requestPermission();
-    final fcmToken = await FirebaseMessaging.instance.getToken();
+    final push = PushGateway.instance;
+    await push.requestPermission();
+    final fcmToken = await push.getToken();
     if (fcmToken != null && fcmToken != user['fcmToken']) {
       debugPrint('[Update FCM] Updating token');
       await AuthService().updateFcmToken(userId, fcmToken);
@@ -134,8 +141,7 @@ class TaskListState extends State<TaskListScreen> {
     // FCM rotates tokens on its own (reinstalls, restores, periodic rotation).
     // Persist any rotation that happens while the app is running so the token
     // in Firestore stays current and server-sent reminders keep reaching us.
-    _tokenRefreshSub ??=
-        FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+    _tokenRefreshSub ??= push.onTokenRefresh.listen((newToken) {
       debugPrint('[Update FCM] token refreshed; persisting');
       AuthService().updateFcmToken(userId, newToken);
     });
@@ -150,20 +156,14 @@ class TaskListState extends State<TaskListScreen> {
     return StreamBuilder<List<Habit>>(
       stream: _habitStream,
       builder: (context, habitSnap) {
-        final habitStreaks = <String, int>{
-          for (final h in (habitSnap.data ?? const <Habit>[]))
-            if (h.id != null) h.id!: h.currentStreak,
-        };
+        final habitStreaks = TaskListLogic.habitStreaksById(habitSnap.data ?? const <Habit>[]);
         // The backlog also streams subtasks (across date partitions) so it can
         // nest a parent's children beneath it, including ones scheduled elsewhere.
         if (widget.isBacklog) {
           return StreamBuilder<List<Task>>(
             stream: _subtaskStream,
             builder: (context, subSnap) {
-              final childrenByParent = <String, List<Task>>{};
-              for (final s in (subSnap.data ?? const <Task>[])) {
-                if (s.parentId != null) (childrenByParent[s.parentId!] ??= []).add(s);
-              }
+              final childrenByParent = TaskListLogic.childrenByParent(subSnap.data ?? const <Task>[]);
               return _buildTaskList(context, childrenByParent, habitStreaks);
             },
           );
@@ -186,46 +186,27 @@ class TaskListState extends State<TaskListScreen> {
             return const ErrorMessage(message: 'Oh Shit');
           }
           debugPrint("FETCHING NEW TASK DATA");
-          if (snapshot.hasError || !snapshot.hasData) {
-            _tasks = [];
-          }
-
-          _tasks = snapshot.data!;
-          _completedCount = 0;
-          _totalCount = 0;
+          _tasks = snapshot.data ?? <Task>[];
 
           // Rows actually rendered at the top level: hide container parents on a
           // day (they live only in the backlog), and hide subtasks in the
           // backlog (they're shown nested under their parent).
-          final visible = <Task>[];
-          for (final task in _tasks!) {
-            if (!widget.isBacklog && task.isParent) continue;
-            if (widget.isBacklog && task.isSubtask) continue;
-            visible.add(task);
-          }
+          final visible = TaskListLogic.visibleTasks(_tasks!, isBacklog: widget.isBacklog);
+          final visibleIds = visible.map((t) => t.id!).toList();
+          final progress = TaskListLogic.progress(visible, PerformanceService().getScore);
+          _completedCount = progress.completed;
+          _totalCount = progress.total;
 
           // Reorder/complete operate on the visible subset, then merge back into
           // the full partition order so hidden ids keep their positions.
           void persistVisibleOrder(List<String> newVisibleIds) {
-            final fullIds = _tasks!.map((t) => t.id!).toList();
-            final visibleIds = visible.map((t) => t.id!).toSet();
-            final positions = <int>[];
-            for (int k = 0; k < fullIds.length; k++) {
-              if (visibleIds.contains(fullIds[k])) positions.add(k);
-            }
-            for (int k = 0; k < positions.length && k < newVisibleIds.length; k++) {
-              fullIds[positions[k]] = newVisibleIds[k];
-            }
+            final fullIds = TaskListLogic.mergeVisibleOrder(
+                _tasks!.map((t) => t.id!).toList(), visibleIds.toSet(), newVisibleIds);
             _taskService.updateTaskOrder(userId, fullIds, widget.isBacklog ? null : selectedDate);
           }
 
           onComplete(int vIndex) {
-            setState(() {
-              final ids = visible.map((t) => t.id!).toList();
-              final moved = ids.removeAt(vIndex);
-              ids.add(moved);
-              persistVisibleOrder(ids);
-            });
+            setState(() => persistVisibleOrder(TaskListLogic.moveToEnd(visibleIds, vIndex)));
           }
 
           List<Widget> children = [];
@@ -304,18 +285,14 @@ class TaskListState extends State<TaskListScreen> {
               onHorizontalDragStart: (details) => dragStart = details.globalPosition.dx,
               onHorizontalDragEnd: (details) {
                 final dragEnd = details.globalPosition.dx;
-                final dragDelta = dragEnd - dragStart!;
-                if (dragDelta > 10) {
-                  setState(() {
-                    selectedDate = DateService().decrementDate(DateService().getDate(selectedDate));
-                    DateService().setSelectedDate(DateService().getDate(selectedDate));
-                  });
-                } else if (dragDelta < -10) {
-                  setState(() {
-                    selectedDate = DateService().incrementDate(DateService().getDate(selectedDate));
-                    DateService().setSelectedDate(DateService().getDate(selectedDate));
-                  });
-                }
+                final step = TaskListLogic.swipeDayDelta(dragEnd - dragStart!);
+                if (step == 0) return;
+                setState(() {
+                  final current = DateService().getDate(selectedDate);
+                  selectedDate =
+                      step < 0 ? DateService().decrementDate(current) : DateService().incrementDate(current);
+                  DateService().setSelectedDate(DateService().getDate(selectedDate));
+                });
               },
               child: ReorderableListView(
                   footer: !widget.isBacklog && AuthService().isOwner
@@ -406,13 +383,8 @@ class TaskListState extends State<TaskListScreen> {
                         builder: (context, cdSnapshot) {
                           if (!cdSnapshot.hasData) return const SizedBox.shrink();
                           final viewed = DateService().getDate(selectedDate);
-                          final chips = cdSnapshot.data!.where((cd) {
-                            final due = cd['dueDate'] as String?;
-                            if (due == null) return false;
-                            final dueDate = DateService().getDate(due);
-                            return dueDate.isAfter(viewed);
-                          }).toList()
-                            ..sort((a, b) => (a['dueDate'] as String).compareTo(b['dueDate'] as String));
+                          final chips = TaskListLogic.upcomingCountdowns(
+                              cdSnapshot.data!, viewed, DateService().getDate);
                           if (chips.isEmpty) return const SizedBox.shrink();
                           return Padding(
                             padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
@@ -423,10 +395,7 @@ class TaskListState extends State<TaskListScreen> {
                               children: chips.map((cd) {
                                 final dueDate = DateService().getDate(cd['dueDate'] as String);
                                 final days = dueDate.difference(viewed).inDays;
-                                final label = (cd['label'] as String?)?.trim();
-                                final text = label != null && label.isNotEmpty
-                                    ? label
-                                    : cd['title'] as String;
+                                final text = TaskListLogic.countdownChipText(cd);
                                 final chipStyle = TextStyle(
                                   fontSize: 11,
                                   color: Theme.of(context).colorScheme.onPrimaryContainer,
@@ -537,18 +506,7 @@ class TaskListState extends State<TaskListScreen> {
                   buildDefaultDragHandles: false,
                   onReorder: (int oldIndex, int newIndex) {
                     if (_isSearching) return;
-                    setState(() {
-                      final ids = visible.map((t) => t.id!).toList();
-                      final delta = newIndex > oldIndex ? -1 : 0;
-                      if (newIndex >= ids.length) {
-                        final m = ids.removeAt(oldIndex);
-                        ids.add(m);
-                      } else {
-                        final m = ids.removeAt(oldIndex);
-                        ids.insert(newIndex + delta, m);
-                      }
-                      persistVisibleOrder(ids);
-                    });
+                    setState(() => persistVisibleOrder(TaskListLogic.reorder(visibleIds, oldIndex, newIndex)));
                   },
                   children: children));
         });
@@ -610,9 +568,8 @@ class TaskListState extends State<TaskListScreen> {
 
   void deleteTaskWithUndo(Task task) async {
     final messenger = ScaffoldMessenger.of(context);
-    if (task.reminderTaskName != null) {
-      ReminderService().cancelReminder(task);
-    }
+    // TaskService.deleteTask cancels any reminder itself; doing it here too
+    // invoked the cancelReminder callable twice per delete.
     // Await the delete so we only report success when it actually happened.
     // Previously this was fire-and-forget, so a failed delete still showed a
     // "removed" snackbar while the task stayed on the list.
@@ -647,12 +604,6 @@ class TaskListState extends State<TaskListScreen> {
 
   displayTask(Task task, int i, Function onComplete, bool isBacklog, TaskService taskService,
       Function(Task) onDelete, Map<String, int> habitStreaks) {
-    if (!task.isDivider) {
-      _totalCount += PerformanceService().getScore(task.priority);
-      if (task.completed) {
-        _completedCount += PerformanceService().getScore(task.priority);
-      }
-    }
     return TaskItem(
         task: task,
         index: i,

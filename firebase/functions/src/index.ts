@@ -82,6 +82,17 @@ export const trainSchedule = onSchedule("every day 11:00", async () => {
   }
 });
 
+/**
+ * In-app "check my train" for the signed-in user only. The scheduled fan-out
+ * and its operator-only test trigger cover every opted-in user; this runs the
+ * same lookup and push for exactly one account, so it needs no shared key.
+ */
+export const checkTrainStatus = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Must be logged in");
+  return executeTrainNotification(uid);
+});
+
 export const trainScheduleTest = onRequest({cors: false, secrets: [internalKey]}, async (req, res) => {
   if (!requireInternalKey(req, res)) return;
   try {

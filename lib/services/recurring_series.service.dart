@@ -7,6 +7,7 @@ import 'package:taskr/services/recurring_series.dart';
 import 'package:taskr/services/reminder.service.dart';
 import 'package:taskr/services/task.service.dart';
 import 'package:taskr/shared/write_ack.dart';
+import 'package:taskr/services/firebase_refs.dart';
 
 /// Keeps recurring series materialized on a rolling horizon, and hands their
 /// reminders to Cloud Tasks as they come into range.
@@ -18,12 +19,20 @@ import 'package:taskr/shared/write_ack.dart';
 /// past it is this service's job.
 class RecurringSeriesService {
   RecurringSeriesService._internal();
-  static final _instance = RecurringSeriesService._internal();
+  static RecurringSeriesService _instance = RecurringSeriesService._internal();
+
+  /// Drops all state so the next `RecurringSeriesService()` starts fresh.
+  @visibleForTesting
+  static void resetInstance() => _instance = RecurringSeriesService._internal();
   factory RecurringSeriesService() => _instance;
 
   // `late` so a test can inject a fake before the real instance is touched
   // (Firebase isn't initialized under `flutter test`).
-  late FirebaseFirestore _db = FirebaseFirestore.instance;
+  late FirebaseFirestore _db = FirebaseRefs.firestore;
+
+  /// Clock, swappable so materialization is deterministic under test.
+  @visibleForTesting
+  DateTime Function() clock = DateTime.now;
   final TaskService _taskService = TaskService();
   final DateService _dates = DateService();
 
@@ -80,7 +89,7 @@ class RecurringSeriesService {
     if (_materializing.contains(id)) return;
     _materializing.add(id);
     try {
-      final today = _dates.getDate(_dates.getString(DateTime.now()));
+      final today = _dates.getDate(_dates.getString(clock()));
 
       // Past its end date: nothing left to materialize.
       if (template.endDate != null && template.endDate!.isBefore(today)) return;
@@ -92,25 +101,21 @@ class RecurringSeriesService {
       if (existing != null && existing.isEmpty) {
         existing = await _taskService.seriesInstances(id);
       }
-      final existingDates = existing?.map((t) => t.dueDate).whereType<String>().toSet();
-
-      // The watermark is only a fallback for when the collection-group query is
-      // unavailable. When the query works it is the authority on what exists, so
-      // the whole horizon is scanned and dates missing BEHIND the watermark are
-      // backfilled rather than lost.
-      //
-      // Trusting the watermark as a starting point is what made the equivalent
-      // habit path lose a series: it advances on loop completion, and the write
-      // helpers cannot report failure (ackWrite swallows both errors and
-      // timeouts by design), so a failed or offline-stranded write still moved
-      // the watermark past its date, permanently.
-      DateTime? from;
-      if (existingDates == null && template.lastMaterializedDate != null) {
-        from = _dates.getDate(template.lastMaterializedDate!).add(const Duration(days: 1));
+      // The template carries only the recurrence rule; title, effort, tags and
+      // times live on the occurrences. So without a readable occurrence there is
+      // nothing to extend the series with, and without the collection-group
+      // query (null: index still building) the pass cannot know what exists.
+      // Either way the pass is skipped and picked up by a later launch; the
+      // watermark is deliberately not trusted as a substitute, since it advances
+      // on loop completion even when a write was silently swallowed.
+      if (existing == null || existing.isEmpty) {
+        debugPrint('Series $id: no readable occurrence to extend from; skipping this pass');
+        return;
       }
+      final existingDates = existing.map((t) => t.dueDate).whereType<String>().toSet();
 
-      final dates = RecurringSeries.occurrencesInHorizon(template, today: today, from: from)
-          .where((d) => existingDates == null || !existingDates.contains(_dates.getString(d)))
+      final dates = RecurringSeries.occurrencesInHorizon(template, today: today)
+          .where((d) => !existingDates.contains(_dates.getString(d)))
           .toList();
 
       var written = const <Task>[];
@@ -118,7 +123,7 @@ class RecurringSeriesService {
         final result = await _taskService.materializeOccurrences(
           templateId: id,
           template: template,
-          prototype: _prototypeFrom(existing, template),
+          prototype: _prototypeFrom(existing),
           dates: dates,
         );
         // A queued (offline) write is still real: the SDK delivers it later,
@@ -126,7 +131,7 @@ class RecurringSeriesService {
         if (result.ack != WriteAck.failed) written = result.occurrences;
       }
 
-      await _enqueueReminders(id, [...?existing, ...written]);
+      await _enqueueReminders(id, [...existing, ...written]);
     } catch (e, s) {
       debugPrint('Top-up failed for series $id: $e\n$s');
     } finally {
@@ -137,15 +142,8 @@ class RecurringSeriesService {
   /// New occurrences copy an existing one, so title, effort, tags and times stay
   /// consistent with the rest of the series. Prefers an outstanding occurrence;
   /// a completed one still carries the right fields.
-  Task _prototypeFrom(List<Task>? existing, RecurringTask template) {
-    final source = (existing ?? const <Task>[]).isEmpty
-        ? null
-        : (existing!.firstWhere((t) => !t.completed, orElse: () => existing.first));
-    if (source == null) {
-      // No occurrence to copy: the series has nothing materialized to base a new
-      // one on, so there is nothing meaningful to extend it with.
-      throw StateError('No existing occurrence to model series ${template.id} on');
-    }
+  Task _prototypeFrom(List<Task> existing) {
+    final source = existing.firstWhere((t) => !t.completed, orElse: () => existing.first);
     return source.copyWith(
       id: null,
       completed: false,

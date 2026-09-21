@@ -8,6 +8,7 @@ import 'package:taskr/services/date.service.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/task.service.dart';
 import 'package:taskr/shared/shared.dart';
+import 'package:taskr/services/firebase_refs.dart';
 
 /// Manual, open-ended habits backed by the recurring-task generation engine.
 /// A habit materializes real task instances (stamped with `habitId`) on a
@@ -17,7 +18,7 @@ import 'package:taskr/shared/shared.dart';
 class HabitService {
   // `late` so a test can inject a fake via [db] before the real instance is
   // touched (Firebase isn't initialized under `flutter test`).
-  late FirebaseFirestore _db = FirebaseFirestore.instance;
+  late FirebaseFirestore _db = FirebaseRefs.firestore;
   final TaskService _taskService = TaskService();
   final DateService _dates = DateService();
 
@@ -131,10 +132,12 @@ class HabitService {
       // since updateHabit deletes the future before regenerating it.
       DateTime windowStart = start.isAfter(today) ? start : today;
       if (existingDates == null && h.lastMaterializedDate != null) {
-        final next = _dates.getDate(h.lastMaterializedDate!).add(const Duration(days: 1));
+        final last = _dates.getDate(h.lastMaterializedDate!);
+        final next = DateTime(last.year, last.month, last.day + 1);
         if (next.isAfter(windowStart)) windowStart = next;
       }
-      final until = today.add(Duration(days: horizonDays));
+      // Calendar-day arithmetic: a Duration lands an hour off across the DST change.
+      final until = DateTime(today.year, today.month, today.day + horizonDays);
       if (windowStart.isAfter(until)) return;
 
       final template = _toRecurringTask(h, start: windowStart, until: until);

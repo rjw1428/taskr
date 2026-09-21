@@ -4,9 +4,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:taskr/services/auth.service.dart';
 import 'package:taskr/services/models.dart';
+import 'package:taskr/services/firebase_refs.dart';
 
 class TagProvider with ChangeNotifier {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseFirestore _db = FirebaseRefs.firestore;
   final AuthService _auth = AuthService();
 
   List<Tag> _tags = [];

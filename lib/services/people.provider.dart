@@ -5,7 +5,7 @@ import 'package:taskr/services/models.dart';
 import 'package:taskr/services/people.service.dart';
 
 class PeopleProvider extends ChangeNotifier {
-  final PeopleService _service = PeopleService();
+  final PeopleService _service;
   StreamSubscription<List<Person>>? _subscription;
 
   List<Person> _people = [];
@@ -17,7 +17,14 @@ class PeopleProvider extends ChangeNotifier {
   String? _error;
   String? get error => _error;
 
-  PeopleProvider() {
+  PeopleProvider() : _service = PeopleService() {
+    _initializePeople();
+  }
+
+  /// Builds the provider over a caller-supplied service so tests can drive the
+  /// stream-error and write-failure paths.
+  @visibleForTesting
+  PeopleProvider.withService(this._service) {
     _initializePeople();
   }
 

@@ -38,6 +38,11 @@ const AndroidNotificationChannel _parkingChannel = AndroidNotificationChannel(
 /// isolate, where `main()` never ran.
 final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
 
+/// Builds the [ParkingService] these functions talk to. Mutable so a test can
+/// hand back one pointed at a local stub server instead of the real endpoint.
+@visibleForTesting
+ParkingService Function() parkingServiceFactory = ParkingService.new;
+
 /// Loads `.env` if this isolate has not already. The background isolate starts
 /// cold, so the token would otherwise be missing exactly when the user taps Yes.
 Future<void> _ensureEnvLoaded() async {
@@ -59,7 +64,7 @@ Future<void> showParkingPrompt([Map<String, dynamic>? data]) async {
   // Skip a prompt that could not do anything useful. This fails open: only an
   // unambiguous "yes, a session is active" suppresses it, because a swallowed
   // prompt costs a day of unpaid parking while a redundant one costs a tap.
-  if (await ParkingService().hasActiveSession()) {
+  if (await parkingServiceFactory().hasActiveSession()) {
     debugPrint('parking: session already active, suppressing prompt');
     return;
   }
@@ -123,7 +128,7 @@ Future<void> showParkingPromptDialog(BuildContext context) async {
 
   if (pay != true) return;
 
-  final result = await ParkingService().triggerParking();
+  final result = await parkingServiceFactory().triggerParking();
   final accepted = result.outcome == ParkingTriggerOutcome.accepted;
   await NotificationService().record(
     title: accepted ? 'Parking requested' : 'Parking NOT paid',
@@ -174,7 +179,7 @@ Future<void> _payForParking() async {
 Future<bool> runParkingPurchase() async {
   await _ensureEnvLoaded();
 
-  final result = await ParkingService().triggerParking();
+  final result = await parkingServiceFactory().triggerParking();
   debugPrint('parking: trigger outcome ${result.outcome} (${result.requestId})');
 
   // The app may well be closed, so the only way to report back is a

@@ -169,6 +169,17 @@ void main() {
       expect(result.message, isNot(contains('SocketException')));
     });
 
+    test('the stored error detail is one line and capped at 300 characters', () {
+      expect(ParkingService.describeError(StateError('a  b\n\tc')), 'StateError: Bad state: a b c');
+      // Exactly the cap passes through; one over is truncated to 297 plus an ellipsis.
+      final atCap = 'x' * (300 - 'String: '.length);
+      expect(ParkingService.describeError(atCap), 'String: $atCap');
+      final over = 'y' * (301 - 'String: '.length);
+      final described = ParkingService.describeError(over);
+      expect(described.length, 300);
+      expect(described, endsWith('...'));
+    });
+
     test('carries the trail on a decisive answer too', () async {
       stub.statusSequence.addAll([503, 503]);
 
@@ -196,6 +207,44 @@ void main() {
 
       expect(result.outcome, ParkingTriggerOutcome.failed);
       expect(stub.paths.where((p) => p == '/park').length, 3);
+    });
+
+    test('a 504 is a gateway error, so it is retried too', () async {
+      stub.statusSequence.add(504);
+
+      final result = await service.triggerParking();
+
+      expect(result.outcome, ParkingTriggerOutcome.accepted);
+      expect(stub.paths.where((p) => p == '/park').length, 2);
+    });
+
+    test('numbers the attempts from one, including the decisive one', () async {
+      stub.statusSequence.addAll([503, 503]);
+
+      final result = await service.triggerParking();
+
+      expect(result.detail, startsWith('#1 '));
+      expect(result.detail, contains('; #2 '));
+      expect(result.detail, contains('; #3 '));
+    });
+
+    test('caps a long error rendering so the inbox entry stays small', () async {
+      // A host this long cannot resolve, and the lookup failure quotes it.
+      service.baseUrl = 'http://${'a' * 400}.invalid';
+
+      final result = await service.triggerParking();
+
+      expect(result.outcome, ParkingTriggerOutcome.failed);
+      final first = result.detail!.split('; ').first;
+      expect(first, startsWith('#1 '));
+      expect(first, endsWith('...'));
+      expect(first.length, lessThanOrEqualTo(310));
+    });
+
+    test('retries by default, with a real backoff between attempts', () {
+      final fresh = ParkingService();
+      expect(fresh.retryBackoff, isNotEmpty);
+      expect(fresh.retryBackoff.every((d) => d > Duration.zero), isTrue);
     });
 
     test('a missing token makes no request at all', () async {
