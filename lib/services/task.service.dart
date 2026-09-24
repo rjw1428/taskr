@@ -743,14 +743,23 @@ class TaskService {
   /// This replaces the old save-then-loop path, which cost roughly four serial
   /// round trips per occurrence and left the add-task form open behind a spinner
   /// while it worked through the series.
-  Future<RecurringSeriesWrite> createRecurringSeries(RecurringTask template, Task prototype) async {
+  ///
+  /// [from] clamps the expansion forward. An edit passes today, because
+  /// [updateRecurringTemplate] drops only the series' outstanding occurrences —
+  /// regenerating from the template's original start date would then lay a
+  /// second copy of every past date over the completed history it just kept.
+  Future<RecurringSeriesWrite> createRecurringSeries(
+    RecurringTask template,
+    Task prototype, {
+    DateTime? from,
+  }) async {
     final user = AuthService().user;
     if (user == null) throw "No user logged in when adding recurring task";
 
     final now = DateTime.now();
     // doc() mints the id client-side, so no round trip is needed before the batch.
     final templateRef = recurringTempateCollection(user.uid).doc();
-    final dates = RecurringSeries.occurrencesInHorizon(template, today: now);
+    final dates = RecurringSeries.occurrencesInHorizon(template, today: now, from: from);
     final tasks = _buildOccurrences(
       uid: user.uid,
       prototype: prototype,
@@ -944,7 +953,7 @@ class TaskService {
 
       // A fresh series has no watermark; re-materializing sets it.
       updatedTemplate.lastMaterializedDate = null;
-      final written = await createRecurringSeries(updatedTemplate, prototype);
+      final written = await createRecurringSeries(updatedTemplate, prototype, from: DateTime.now());
       await ReminderService().enqueueDueReminders(written.occurrences);
     } catch (e) {
       debugPrint('Error updating recurring template: $e');

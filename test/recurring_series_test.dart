@@ -103,6 +103,20 @@ void main() {
       expect(dates, isEmpty);
     });
 
+    test('from clamps a series that began in the past to the future', () {
+      final t = daily(start: DateTime.utc(2025, 12, 1), end: DateTime.utc(2026, 12, 31));
+      final dates = RecurringSeries.occurrencesInHorizon(t, today: today, from: today);
+      expect(dates.first, today);
+      expect(dates.every((d) => !d.isBefore(today)), isTrue);
+    });
+
+    test('from still yields the first occurrence of a series beyond the horizon', () {
+      final start = DateTime.utc(2026, 7, 6);
+      final t = weekly(start: start, end: DateTime.utc(2026, 12, 28));
+      // An edit passes `from: today`; it must not wipe the series' only occurrence.
+      expect(RecurringSeries.occurrencesInHorizon(t, today: today, from: today), [start]);
+    });
+
     test('a weekly template with no day selected still produces a series', () {
       final t = weekly(start: today, end: DateTime.utc(2026, 2, 2), days: const {});
       final dates = RecurringSeries.occurrencesInHorizon(t, today: today);

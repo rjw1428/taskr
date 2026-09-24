@@ -133,10 +133,11 @@ class RecurringSeries {
   /// Occurrence dates to materialize: those falling in `[start, today + horizon]`,
   /// bounded by the template's end date.
   ///
-  /// Pass [from] on a top-up to resume after the watermark. When [from] is null
-  /// this is a creation-time expansion, and the first occurrence is always
-  /// included even if the series begins beyond the horizon — otherwise saving a
-  /// series that starts months out would produce no visible task at all.
+  /// Pass [from] to clamp the expansion forward — a top-up resuming from today,
+  /// or an edit that must not regrow the series' past. When the window would
+  /// otherwise be empty the series' first occurrence is included anyway, as long
+  /// as it falls inside the window: saving a series that starts months out has to
+  /// produce a visible task.
   static List<DateTime> occurrencesInHorizon(
     RecurringTask template, {
     required DateTime today,
@@ -157,9 +158,11 @@ class RecurringSeries {
       result.add(instance);
     }
 
-    if (result.isEmpty && from == null) {
+    if (result.isEmpty) {
+      // Only when that first occurrence is inside the window: a top-up resuming
+      // past the horizon must still yield nothing rather than a stray occurrence.
       final first = expanded.take(1).toList();
-      if (first.isNotEmpty) return first;
+      if (first.isNotEmpty && !first.first.isBefore(windowStart)) return first;
     }
     return result;
   }

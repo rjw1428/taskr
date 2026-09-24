@@ -114,7 +114,12 @@ class RecurringSeriesService {
       }
       final existingDates = existing.map((t) => t.dueDate).whereType<String>().toSet();
 
-      final dates = RecurringSeries.occurrencesInHorizon(template, today: today)
+      // `from: today` is what keeps a top-up in the future. Without it the
+      // expansion starts at the template's own start date, so a series that
+      // began weeks ago regrew its entire history on every pass: the dedupe set
+      // above is read from today onwards, occurrence ids are minted fresh, and
+      // nothing else stops a past date from being written again.
+      final dates = RecurringSeries.occurrencesInHorizon(template, today: today, from: today)
           .where((d) => !existingDates.contains(_dates.getString(d)))
           .toList();
 

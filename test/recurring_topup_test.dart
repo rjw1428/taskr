@@ -112,6 +112,22 @@ void main() {
       expect(await occurrenceCount(), after);
     });
 
+    test('a series that started in the past does not regrow its history', () async {
+      // The shape that matters: a long-running series whose start date is well
+      // behind today but which still has upcoming occurrences.
+      final written = await tasks.createRecurringSeries(
+        template(start: DateTime.now().subtract(const Duration(days: 30))),
+        prototype(),
+      );
+      final after = await occurrenceCount();
+
+      await series.ensureInstances(await reloadTemplate(written.templateId));
+      expect(await occurrenceCount(), after);
+
+      await series.ensureInstances(await reloadTemplate(written.templateId));
+      expect(await occurrenceCount(), after);
+    });
+
     test('a template with no id is ignored', () async {
       await series.ensureInstances(template());
       expect(await occurrenceCount(), 0);
@@ -252,6 +268,38 @@ void main() {
       final remaining = await occurrenceCount();
       expect(remaining, lessThanOrEqualTo(4));
       expect(remaining, greaterThan(0));
+    });
+
+    test('editing a long-running series does not duplicate its completed history', () async {
+      final start = DateTime.now().subtract(const Duration(days: 30));
+      final written = await tasks.createRecurringSeries(template(start: start), prototype());
+
+      // Mark the past occurrences complete, the way a series that has been
+      // running for a month actually looks.
+      final past = DateService().getString(DateTime.now());
+      final history = written.occurrences.where((t) => t.dueDate!.compareTo(past) < 0).toList();
+      expect(history, isNotEmpty);
+      for (final t in history) {
+        await fake
+            .collection('todos')
+            .doc(uid)
+            .collection('tasks')
+            .doc(t.dueDate)
+            .collection('items')
+            .doc(t.id)
+            .update({'completed': true});
+      }
+
+      final before = await occurrenceCount();
+      final edited = template(start: start)..reminderTimeOfDay = '19:45';
+      await tasks.updateRecurringTemplate(
+        written.occurrences.last.copyWith(recurringTemplateId: written.templateId),
+        edited,
+      );
+
+      // The edit rewrites the future; completed history is preserved as-is, not
+      // shadowed by a second copy of every past date.
+      expect(await occurrenceCount(), before);
     });
 
     test('a reminder-time change rewrites future occurrences', () async {
