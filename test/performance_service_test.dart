@@ -55,6 +55,44 @@ void main() {
     expect(data['completed']['Other'], isA<int>());
   });
 
+  // Regression: stats were a read-modify-write, so completions issued together
+  // (or against a stale cached doc) overwrote each other and lost points.
+  test('concurrent completions on the same day are all counted', () async {
+    await Future.wait([
+      PerformanceService().updatePerfomanceStats(uid, task(priority: Effort.high), true),
+      PerformanceService().updatePerfomanceStats(uid, task(priority: Effort.medium), true),
+      PerformanceService().updatePerfomanceStats(uid, task(priority: Effort.low), true),
+    ]);
+    final data = (await fake.collection('todos').doc(uid).collection('performance').doc(date).get()).data()!;
+    expect(data['completed']['ALL'], 6);
+  });
+
+  // Regression: removing points from a day with no entry for the key used to
+  // *add* them, because a missing key was seeded with +points regardless.
+  test('un-completing on a day with no tally subtracts', () async {
+    await PerformanceService().updatePerfomanceStats(uid, task(priority: Effort.medium), false);
+    final data = (await fake.collection('todos').doc(uid).collection('performance').doc(date).get()).data()!;
+    expect(data['completed']['ALL'], -2);
+  });
+
+  test('a completed dateless task is scored on the day it was completed', () async {
+    final done = Task(added: 1, title: 'T', priority: Effort.high, completed: true)..completedTime = '2026-08-03 09:15';
+    expect(PerformanceService().statsDate(done), '2026-08-03');
+    // Being completed now (not yet completed) lands on today, ignoring any stale stamp.
+    final open = Task(added: 1, title: 'T')..completedTime = '2026-08-03 09:15';
+    expect(PerformanceService().statsDate(open), DateService().getString(DateTime.now()));
+    expect(PerformanceService().statsDate(task()), date);
+    expect(PerformanceService.completedDayOf(null), isNull);
+    expect(PerformanceService.completedDayOf('bad'), isNull);
+  });
+
+  test('tag ids containing dots stay a single key', () async {
+    final dotted = Task(added: 1, title: 'T', dueDate: date, tags: [Tag(id: 'a.b', label: 'AB')]);
+    await PerformanceService().updatePerfomanceStats(uid, dotted, true);
+    final data = (await fake.collection('todos').doc(uid).collection('performance').doc(date).get()).data()!;
+    expect(data['completed']['a.b'], 1);
+  });
+
   test('recordPush accumulates deferred points', () async {
     await PerformanceService().recordPush(uid, task(priority: Effort.high), date); // +3
     await PerformanceService().recordPush(uid, task(priority: Effort.low), date); // +1

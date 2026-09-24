@@ -307,6 +307,72 @@ void main() {
       expect((await item(TaskService.defaultUnassignedDate, oneId))!['completed'], isTrue);
     });
 
+    group('parent auto-complete scoring', () {
+      final today = DateService().getString(DateTime.now());
+      Future<Map?> completedOn(String day) async =>
+          (await env.col('performance').doc(day).get()).data()?['completed'] as Map?;
+
+      Future<(Task, Task, Task)> parentWithTwo() async {
+        final parent = await parentTask(); // medium effort, untagged: 2 points
+        final oneId = await service.addSubtask(parent, 'one');
+        final twoId = await service.addSubtask(parent.copyWith(childCount: 1), 'two');
+        return (
+          parent.copyWith(childCount: 2),
+          (await reload(TaskService.defaultUnassignedDate, oneId))!,
+          (await reload(TaskService.defaultUnassignedDate, twoId))!,
+        );
+      }
+
+      test('credits the parent when its last subtask completes and debits it on reopen', () async {
+        final (parent, one, two) = await parentWithTwo();
+
+        await service.toggleSubtaskComplete(one, true);
+        expect(await completedOn(today), isNull, reason: 'parent not complete yet, subtasks score nothing');
+
+        await service.toggleSubtaskComplete(two, true);
+        expect((await completedOn(today))!['ALL'], 2);
+        expect((await completedOn(today))!['Other'], 2);
+        final stamped = (await item(TaskService.defaultUnassignedDate, parent.id!))!['completedTime'] as String;
+        expect(stamped.substring(0, 10), today);
+
+        await service.toggleSubtaskComplete(one, false);
+        expect((await completedOn(today))!['ALL'], 0);
+        expect((await item(TaskService.defaultUnassignedDate, parent.id!))!['completedTime'], isNull);
+      });
+
+      test('reopening debits the day the parent completed, not today', () async {
+        final (parent, one, _) = await parentWithTwo();
+        await env.col('tasks').doc(TaskService.defaultUnassignedDate).collection('items').doc(parent.id).update({
+          'childCompletedCount': 2,
+          'completed': true,
+          'completedTime': '2026-08-03 10:00',
+        });
+
+        await service.toggleSubtaskComplete(one.copyWith(completed: true), false);
+
+        expect((await completedOn('2026-08-03'))!['ALL'], -2);
+        expect(await completedOn(today), isNull);
+      });
+
+      test('adding a subtask to a completed parent takes its points back', () async {
+        final (parent, one, two) = await parentWithTwo();
+        await service.toggleSubtaskComplete(one, true);
+        await service.toggleSubtaskComplete(two, true);
+        expect((await completedOn(today))!['ALL'], 2);
+
+        await service.addSubtask(parent, 'three');
+        expect((await completedOn(today))!['ALL'], 0);
+      });
+
+      test('deleting the last open subtask completes and credits the parent', () async {
+        final (_, one, two) = await parentWithTwo();
+        await service.toggleSubtaskComplete(one, true);
+
+        await service.deleteSubtask(two);
+        expect((await completedOn(today))!['ALL'], 2);
+      });
+    });
+
     test('deleteParent with keepChildren orphans the children', () async {
       final parent = await parentTask();
       final oneId = await service.addSubtask(parent, 'one');
@@ -449,9 +515,8 @@ void main() {
       final id = await service.addTask(old);
       await service.updateTask(id, old.copyWith(priority: Effort.high), old);
       final p = await perf('2026-08-01');
-      // low (1) removed, high (3) added, starting from nothing: first write
-      // initialises with the points, then the add applies +3.
-      expect(p!['completed']['ALL'], 4);
+      // low (1) removed, high (3) added, starting from nothing.
+      expect(p!['completed']['ALL'], 2);
     });
 
     test('an incomplete task changing priority moves no points', () async {
@@ -559,9 +624,8 @@ void main() {
       await service.restoreTask(task.copyWith(id: id));
       expect((await item('2026-08-01', id))!['userId'], uid);
       expect(await order('2026-08-01'), contains(id));
-      // The perf doc did not exist when the delete ran, so that write seeded
-      // ALL with the points instead of subtracting; the restore then adds 2.
-      expect((await perf('2026-08-01'))!['completed']['ALL'], 4);
+      // The delete takes the 2 points off, the restore puts them back.
+      expect((await perf('2026-08-01'))!['completed']['ALL'], 0);
     });
 
     test('restoreTask of an incomplete backlog task writes no points', () async {

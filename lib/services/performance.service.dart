@@ -57,60 +57,57 @@ class PerformanceService {
     return score(userId).update({'currentScore': FieldValue.increment(-1 * value)});
   }
 
-  Future<void> updatePerfomanceStats(String userId, Task task, bool shouldAdd) async {
-    final date = task.dueDate ?? DateService().getString(DateTime.now());
-    final currentRef = await score(userId).collection('performance').doc(date).get();
-    // A perf doc can exist with only a `pushed`/`date` field (see recordPush) and
-    // no `completed` map — guard against null so Map.from() doesn't throw, which
-    // would otherwise abort the caller before the task is marked complete.
-    final completed = (currentRef.exists && currentRef.data()!['completed'] != null) ? currentRef.data()!['completed'] : {};
-    final points = getScore(task.priority);
-    var update = Map.from(completed);
-    if (update.containsKey('ALL')) {
-      update['ALL'] += points * (shouldAdd ? 1 : -1);
-    } else {
-      update['ALL'] = points;
-    }
-    if (task.tags.isEmpty) {
-      if (update.containsKey('Other')) {
-        update['Other'] += points * (shouldAdd ? 1 : -1);
-      } else {
-        update['Other'] = points;
-      }
-    }
-    for (final tag in task.tags) {
-      if (update.containsKey(tag.id)) {
-        update[tag.id] += points * (shouldAdd ? 1 : -1);
-      } else {
-        update[tag.id] = points;
-      }
-    }
+  /// The day a task's points belong to: its due date or, for a dateless task,
+  /// the day it was completed — today when it's being completed now, the stored
+  /// completion day when an already-completed task is reversed or re-scored.
+  String statsDate(Task task) {
+    final completedDay = task.completed ? completedDayOf(task.completedTime) : null;
+    return task.dueDate ?? completedDay ?? DateService().getString(DateTime.now());
+  }
 
-    await score(userId)
+  /// The `yyyy-MM-dd` part of a stored `completedTime`, or null if absent.
+  static String? completedDayOf(String? completedTime) =>
+      (completedTime != null && completedTime.length >= 10) ? completedTime.substring(0, 10) : null;
+
+  Future<void> updatePerfomanceStats(String userId, Task task, bool shouldAdd) {
+    return adjustCompleted(userId, statsDate(task), task.priority, task.tags.map((t) => t.id).toList(), shouldAdd);
+  }
+
+  /// Adds (or with [shouldAdd] false, removes) a completion's points on [date]'s
+  /// `completed` tally under ALL plus each tag id (or Other when untagged).
+  ///
+  /// Written as server-side increments in a single merge, never read-modify-write:
+  /// a read could fail offline or return a stale cached doc, and concurrent
+  /// completions would overwrite each other — all of which silently lost points.
+  Future<void> adjustCompleted(String userId, String date, Effort priority, List<String> tagIds, bool shouldAdd) {
+    final points = getScore(priority) * (shouldAdd ? 1 : -1);
+    return score(userId)
         .collection('performance')
         .doc(date)
-        .set({'completed': update, 'date': DateService().getDate(date)}, SetOptions(merge: true));
+        .set({'completed': _increments(points, tagIds), 'date': DateService().getDate(date)}, SetOptions(merge: true));
   }
 
   /// Records the effort points "pushed" off [fromDate] when a task is deferred.
   /// Mirrors the `completed` tally but writes a separate `pushed` map on the
   /// same per-day performance doc (ALL + Other/tag keys). Always additive.
-  Future<void> recordPush(String userId, Task task, String fromDate) async {
-    final ref = await score(userId).collection('performance').doc(fromDate).get();
-    final existing = ref.exists && (ref.data()!['pushed'] != null) ? ref.data()!['pushed'] : {};
-    final points = getScore(task.priority);
-    final update = Map.from(existing);
-    update['ALL'] = (update['ALL'] ?? 0) + points;
-    if (task.tags.isEmpty) {
-      update['Other'] = (update['Other'] ?? 0) + points;
-    }
-    for (final tag in task.tags) {
-      update[tag.id] = (update[tag.id] ?? 0) + points;
-    }
-    await score(userId)
+  Future<void> recordPush(String userId, Task task, String fromDate) {
+    final tagIds = task.tags.map((t) => t.id).toList();
+    return score(userId)
         .collection('performance')
         .doc(fromDate)
-        .set({'pushed': update, 'date': DateService().getDate(fromDate)}, SetOptions(merge: true));
+        .set({'pushed': _increments(getScore(task.priority), tagIds), 'date': DateService().getDate(fromDate)},
+            SetOptions(merge: true));
+  }
+
+  /// Nested map (not dotted paths, so tag ids containing '.' stay one key) that
+  /// a merge-set applies key by key.
+  Map<String, FieldValue> _increments(int points, List<String> tagIds) {
+    final inc = FieldValue.increment(points);
+    return {
+      'ALL': inc,
+      if (tagIds.isEmpty) 'Other': inc,
+      for (final id in tagIds) id: inc,
+    };
   }
 
   int getScore(Effort priority) {

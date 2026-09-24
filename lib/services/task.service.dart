@@ -289,10 +289,13 @@ class TaskService {
         'completed': false,
       });
     } else {
-      await taskCollection(user.uid, defaultUnassignedDate).doc(parent.id!).update({
+      final parentRef = taskCollection(user.uid, defaultUnassignedDate).doc(parent.id!);
+      final before = (await parentRef.get()).data();
+      await parentRef.update({
         'childCount': FieldValue.increment(1),
         'completed': false, // reopen if it had been auto-completed
       });
+      await _scoreParentFlip(user.uid, parentRef, before, false);
     }
     return childId;
   }
@@ -306,9 +309,11 @@ class TaskService {
     final parentRef = taskCollection(user.uid, defaultUnassignedDate).doc(child.parentId!);
     const completeTimeFormat = "${DateService.stringFmt} ${DateService.dbTimeFormat}";
 
+    Map<String, dynamic>? parentBefore;
+    var parentNowComplete = false;
     // A transaction needs a server round trip — the offline queue can't hold it,
     // so `queueable: false`: a timeout here means the change really was lost.
-    await ackWrite(_db.runTransaction((transaction) async {
+    final ack = await ackWrite(_db.runTransaction((transaction) async {
       final parentSnap = await transaction.get(parentRef);
       transaction.update(childRef, {
         'completed': completed,
@@ -319,12 +324,37 @@ class TaskService {
         final count = (data['childCount'] as num?)?.toInt() ?? 0;
         var done = ((data['childCompletedCount'] as num?)?.toInt() ?? 0) + (completed ? 1 : -1);
         done = done.clamp(0, count);
+        parentBefore = data;
+        parentNowComplete = count > 0 && done >= count;
         transaction.update(parentRef, {
           'childCompletedCount': done,
-          'completed': count > 0 && done >= count,
+          'completed': parentNowComplete,
         });
       }
     }), action: "Couldn't update subtask", queueable: false);
+    if (ack == WriteAck.confirmed) {
+      await _scoreParentFlip(user.uid, parentRef, parentBefore, parentNowComplete);
+    }
+  }
+
+  /// Scores a parent whose auto-complete state changed from [before] to
+  /// [nowComplete]. A parent is dateless, so its points land on the day it
+  /// completed: stamped into `completedTime` on completion, and read back to
+  /// debit that same day when it reopens.
+  Future<void> _scoreParentFlip(
+      String uid, DocumentReference<Map<String, dynamic>> parentRef, Map<String, dynamic>? before, bool nowComplete) async {
+    if (before == null || (before['completed'] == true) == nowComplete) return;
+    const completeTimeFormat = "${DateService.stringFmt} ${DateService.dbTimeFormat}";
+    final now = DateTime.now();
+    final day = nowComplete
+        ? DateService().getString(now)
+        : PerformanceService.completedDayOf(before['completedTime'] as String?) ?? DateService().getString(now);
+    final priority = Effort.values.asNameMap()[before['priority']] ?? Effort.low;
+    final tagIds = ((before['tags'] as List?) ?? const []).map((t) => t.toString()).toList();
+    await Future.wait([
+      parentRef.update({'completedTime': nowComplete ? DateFormat(completeTimeFormat).format(now) : null}),
+      PerformanceService().adjustCompleted(uid, day, priority, tagIds, nowComplete),
+    ]);
   }
 
   /// Delete a parent, either removing its children too or orphaning them into
@@ -352,11 +382,15 @@ class TaskService {
     final children = await getSubtasksOf(parentId);
     final count = children.length;
     final done = children.where((c) => c.completed).length;
-    await taskCollection(user.uid, defaultUnassignedDate).doc(parentId).update({
+    final parentRef = taskCollection(user.uid, defaultUnassignedDate).doc(parentId);
+    final before = (await parentRef.get()).data();
+    if (before == null) return;
+    await parentRef.update({
       'childCount': count,
       'childCompletedCount': done,
       'completed': count > 0 && done >= count,
     });
+    await _scoreParentFlip(user.uid, parentRef, before, count > 0 && done >= count);
   }
 
   /// Schedule (or unschedule, with `date == null`) a subtask, preserving its
