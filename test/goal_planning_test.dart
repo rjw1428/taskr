@@ -95,29 +95,6 @@ void main() {
     });
   });
 
-  group('responseText', () {
-    test('digs the first candidate text out of a Gemini body', () {
-      final body = {
-        'candidates': [
-          {
-            'content': {
-              'parts': [
-                {'text': 'hello'}
-              ]
-            }
-          }
-        ]
-      };
-      expect(GoalPlanning.responseText(body), 'hello');
-    });
-    test('is empty when the shape is missing', () {
-      expect(GoalPlanning.responseText({}), '');
-      expect(GoalPlanning.responseText({'candidates': []}), '');
-      expect(GoalPlanning.responseText({'candidates': [{}]}), '');
-      expect(GoalPlanning.responseText({'candidates': [{'content': {'parts': 'nope'}}]}), '');
-      expect(GoalPlanning.responseText({'candidates': [{'content': {'parts': []}}]}), '');
-    });
-  });
 
   group('buildPrompt', () {
     test('first week has no history and asks for an auto plan', () {

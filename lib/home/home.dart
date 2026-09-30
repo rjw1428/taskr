@@ -9,6 +9,7 @@ import 'package:taskr/routing.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/shared/shared.dart';
 import 'package:taskr/task_list/add_task.dart';
+import 'package:taskr/work/work_item_form.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,6 +20,34 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    requestedRoute.addListener(_onRequestedRoute);
+    // A request queued before the shell mounted (cold launch from a shortcut).
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onRequestedRoute());
+  }
+
+  @override
+  void dispose() {
+    requestedRoute.removeListener(_onRequestedRoute);
+    super.dispose();
+  }
+
+  /// Selects the tab a quick action or notification asked for, then clears the
+  /// request so it cannot fire twice. Unknown routes are ignored.
+  void _onRequestedRoute() {
+    final route = requestedRoute.value;
+    if (route == null || !mounted) return;
+    // Before auth resolves there is no inner navigator to push on; leave the
+    // request pending and [build] retries once the shell is up.
+    if (innerNavigatorKey.currentState == null) return;
+    final option = routeConfig[route];
+    requestedRoute.value = null;
+    if (option == null) return;
+    _onItemTapped(option.index);
+  }
 
   void _showDividerDialog(bool isBacklog) async {
     HapticFeedback.mediumImpact();
@@ -120,15 +149,25 @@ class _HomeScreenState extends State<HomeScreen> {
             isScrollControlled: true,
             useSafeArea: true,
             context: context,
-            builder: (BuildContext context) => const AccomplishmentForm(),
+            builder: (BuildContext context) => const WorkItemForm(),
           ),
         );
       case 2:
         return FloatingActionButton(
+          child: const Icon(FontAwesomeIcons.plus, size: 20),
+          onPressed: () => showModalBottomSheet(
+            isScrollControlled: true,
+            useSafeArea: true,
+            context: context,
+            builder: (BuildContext context) => const AccomplishmentForm(),
+          ),
+        );
+      case 3:
+        return FloatingActionButton(
           onPressed: _showGoalsCreateChooser,
           child: const Icon(FontAwesomeIcons.plus, size: 20),
         );
-      case 3:
+      case 4:
         return GestureDetector(
           onLongPress: () => _showDividerDialog(true),
           child: FloatingActionButton(
@@ -141,7 +180,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         );
-      // Index 4 (People) supplies its own FloatingActionButton from within
+      // Index 5 (People) supplies its own FloatingActionButton from within
       // PeopleListPage, so the home shell must not add a second one.
       default:
         return null;
@@ -167,6 +206,9 @@ class _HomeScreenState extends State<HomeScreen> {
           return const LoginScreen();
         }
 
+        if (requestedRoute.value != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => _onRequestedRoute());
+        }
         final currentLabel = routeConfig.values
             .firstWhere((r) => r.index == _selectedIndex, orElse: () => routeConfig['/']!)
             .label;

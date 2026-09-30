@@ -16,6 +16,9 @@ import 'package:taskr/task_list/task_list.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/settings/settings.dart';
 import 'package:taskr/task_list/add_task.dart';
+import 'package:taskr/routing.dart';
+import 'package:taskr/work/work_item_form.dart';
+import 'package:taskr/work/work_page.dart';
 
 import 'helpers/harness.dart';
 
@@ -59,6 +62,7 @@ void main() {
 
     // Each tab must show its own page, not just retitle the app bar.
     final pages = <String, bool Function()>{
+      'Work': () => find.byType(WorkPage).evaluate().isNotEmpty,
       'Performance': () => find.byType(PerformancePage).evaluate().isNotEmpty,
       'Goals': () => find.byType(GoalListPage).evaluate().isNotEmpty,
       'Backlog': () => tester.widget<TaskListScreen>(find.byType(TaskListScreen)).isBacklog,
@@ -127,6 +131,53 @@ void main() {
     await settle(tester);
     final items = (await env.col('tasks').doc('unassigned').collection('items').get()).docs;
     expect(items.single.data()['title'], 'Later');
+  });
+
+  testWidgets('the tabs appear in order with Work second', (tester) async {
+    await mount(tester);
+    final bar = tester.widget<BottomNavigationBar>(find.byType(BottomNavigationBar));
+    expect(bar.items.map((i) => i.label).toList(), ['List', 'Work', 'Performance', 'Goals', 'Backlog', 'People']);
+  });
+
+  testWidgets('the work FAB opens the work item form', (tester) async {
+    await mount(tester);
+    await tester.tap(tab('Work'));
+    await settle(tester);
+    expect(find.byType(WorkPage), findsOneWidget);
+    await tester.tap(find.byType(FloatingActionButton));
+    await settle(tester);
+    expect(find.byType(WorkItemForm), findsOneWidget);
+    expect(find.byType(AccomplishmentForm), findsNothing);
+  });
+
+  testWidgets('a requested route selects that tab and clears the request', (tester) async {
+    await mount(tester);
+    requestedRoute.value = '/work';
+    await settle(tester);
+    expect(find.byType(WorkPage), findsOneWidget);
+    expect(find.descendant(of: find.byType(AppBar), matching: find.text('Work')), findsOneWidget);
+    expect(requestedRoute.value, isNull);
+    // Requesting the current tab is a no-op that still clears.
+    requestedRoute.value = '/work';
+    await settle(tester);
+    expect(requestedRoute.value, isNull);
+    expect(find.byType(WorkPage), findsOneWidget);
+  });
+
+  testWidgets('an unknown requested route is ignored', (tester) async {
+    await mount(tester);
+    requestedRoute.value = '/nope';
+    await settle(tester);
+    expect(requestedRoute.value, isNull);
+    expect(find.descendant(of: find.byType(AppBar), matching: find.text('List')), findsOneWidget);
+  });
+
+  testWidgets('a route requested before the shell mounts is honored on mount', (tester) async {
+    requestedRoute.value = '/work';
+    await mount(tester);
+    await settle(tester);
+    expect(find.byType(WorkPage), findsOneWidget);
+    expect(requestedRoute.value, isNull);
   });
 
   testWidgets('the performance FAB opens the accomplishment form', (tester) async {

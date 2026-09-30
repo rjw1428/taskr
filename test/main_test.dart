@@ -46,7 +46,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.runAsync(() async {
       app.main();
-      // .env is read from the asset bundle, which needs the real event loop.
+      // Firebase and Workmanager bootstrap need the real event loop.
       await Future<void>.delayed(const Duration(seconds: 1));
     });
     await settle(tester);

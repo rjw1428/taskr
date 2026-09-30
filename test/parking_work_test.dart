@@ -48,7 +48,7 @@ void main() {
     final url = await stub.start();
     parkingServiceFactory = () => ParkingService()
       ..baseUrl = url
-      ..token = 'tok'
+      ..idToken = (() async => 'tok')
       ..retryBackoff = const [Duration.zero];
   });
   tearDown(() async {

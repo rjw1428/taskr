@@ -420,3 +420,64 @@ Map<String, dynamic> _$AppNotificationToJson(AppNotification instance) =>
       'sentAt': instance.sentAt,
       'read': instance.read,
     };
+
+NextAction _$NextActionFromJson(Map<String, dynamic> json) => NextAction(
+      id: json['id'] as String,
+      text: json['text'] as String,
+      waitingOn: json['waitingOn'] as String?,
+      createdAt: (json['createdAt'] as num).toInt(),
+      completedAt: (json['completedAt'] as num?)?.toInt(),
+    );
+
+Map<String, dynamic> _$NextActionToJson(NextAction instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'text': instance.text,
+      'waitingOn': instance.waitingOn,
+      'createdAt': instance.createdAt,
+      'completedAt': instance.completedAt,
+    };
+
+WorkUpdate _$WorkUpdateFromJson(Map<String, dynamic> json) => WorkUpdate(
+      id: json['id'] as String,
+      text: json['text'] as String,
+      createdAt: (json['createdAt'] as num).toInt(),
+    );
+
+Map<String, dynamic> _$WorkUpdateToJson(WorkUpdate instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'text': instance.text,
+      'createdAt': instance.createdAt,
+    };
+
+WorkItem _$WorkItemFromJson(Map<String, dynamic> json) => WorkItem(
+      id: json['id'] as String?,
+      title: json['title'] as String,
+      notes: json['notes'] as String? ?? '',
+      position: (json['position'] as num?)?.toInt() ?? 0,
+      nextActions: (json['nextActions'] as List<dynamic>?)
+              ?.map((e) => NextAction.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      updates: (json['updates'] as List<dynamic>?)
+              ?.map((e) => WorkUpdate.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      createdAt: (json['createdAt'] as num?)?.toInt() ?? 0,
+      lastUpdated: (json['lastUpdated'] as num?)?.toInt() ?? 0,
+      archivedAt: (json['archivedAt'] as num?)?.toInt(),
+      restoredAt: (json['restoredAt'] as num?)?.toInt(),
+    );
+
+Map<String, dynamic> _$WorkItemToJson(WorkItem instance) => <String, dynamic>{
+      'title': instance.title,
+      'notes': instance.notes,
+      'position': instance.position,
+      'nextActions': instance.nextActions.map((e) => e.toJson()).toList(),
+      'updates': instance.updates.map((e) => e.toJson()).toList(),
+      'createdAt': instance.createdAt,
+      'lastUpdated': instance.lastUpdated,
+      'archivedAt': instance.archivedAt,
+      'restoredAt': instance.restoredAt,
+    };

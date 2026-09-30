@@ -26,7 +26,7 @@ tearDown(() => env.dispose());
 | `FlutterLocalNotificationsPlatform.instance as FakeLocalNotifications` | records `show` / `cancel` calls |
 | `WorkmanagerPlatform.instance as FakeWorkmanager` | records registered tasks |
 
-`TestEnv.create(signedIn: false)` gives a signed-out session. `env: {'KEY': 'v'}` adds dotenv values.
+`TestEnv.create(signedIn: false)` gives a signed-out session. `env: {'KEY': 'v'}` sets build-time `Env` values (see `lib/shared/env.dart`).
 
 Mount screens with `pumpApp(tester, widget, wrapInScaffold: true)` for anything that in production lives inside a Scaffold body (tabs, list screens, forms shown in bottom sheets). It installs the same providers and theme as production and the `scaffoldMessengerKey` that error snackbars use.
 

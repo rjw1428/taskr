@@ -24,7 +24,6 @@ import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_local_notifications_platform_interface/flutter_local_notifications_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -39,6 +38,7 @@ import 'package:taskr/services/push_gateway.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/services/tag.provider.dart';
 import 'package:taskr/services/theme.provider.dart';
+import 'package:taskr/shared/env.dart';
 import 'package:taskr/shared/error_reporting.dart';
 import 'package:taskr/shared/shared.dart';
 import 'package:taskr/theme.dart';
@@ -96,13 +96,11 @@ class TestEnv {
     Workmanager();
     WorkmanagerPlatform.instance = FakeWorkmanager();
     QuickActionsPlatform.instance = FakeQuickActions();
-    dotenv.testLoad(fileInput: {
+    Env.overrides = {
       'WEB_CLIENT_ID': 'web-client',
       'CALENDAR_WEB_CLIENT_ID': 'cal-client',
-      'GEMINI_API_KEY': 'gemini-key',
-      'PARKING_TRIGGER_TOKEN': 'parking-token',
       ...env,
-    }.entries.map((e) => '${e.key}=${e.value}').join('\n'));
+    };
     GoogleFonts.config.allowRuntimeFetching = false;
     resetErrorSnackDedupe();
 
@@ -119,6 +117,7 @@ class TestEnv {
   CollectionReference<Map<String, dynamic>> col(String name) => db.collection('todos').doc(uid).collection(name);
 
   void dispose() {
+    Env.overrides = null;
     FirebaseRefs.reset();
     PushGateway.override = null;
     GoogleSignInGateway.override = null;

@@ -15,3 +15,4 @@ export 'reminder.service.dart';
 export 'recurring_series.service.dart';
 export 'parking.service.dart';
 export 'parking_notifications.dart';
+export 'work.service.dart';

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:algoliasearch/algoliasearch_lite.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/task_ordering.dart';
@@ -12,6 +11,7 @@ import 'package:rxdart/rxdart.dart';
 import 'package:taskr/shared/shared.dart';
 import 'package:intl/intl.dart';
 import 'package:taskr/services/firebase_refs.dart';
+import 'package:taskr/shared/env.dart';
 
 /// Outcome of materializing a series: the template id, the occurrences actually
 /// written (so the caller can enqueue their reminders), and how the commit landed.
@@ -1130,8 +1130,8 @@ class TaskService {
   }
 
   Future<List<Task>> searchTasks(String query) async {
-    final appId = dotenv.env['ALGOLIA_APP_ID'] ?? '';
-    final apiKey = dotenv.env['ALGOLIA_SEARCH_KEY'] ?? '';
+    final appId = Env.algoliaAppId;
+    final apiKey = Env.algoliaSearchKey;
     if (appId.isEmpty || apiKey.isEmpty) {
       debugPrint('Algolia credentials not configured');
       return [];

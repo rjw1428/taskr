@@ -13,6 +13,12 @@ import {
   localTimeToEpochSeconds,
   parkingPromptDecision,
 } from "./parking.logic";
+import {
+  GEMINI_MODEL_URL,
+  buildGeminiRequest,
+  extractGeminiText,
+  validateGeminiInput,
+} from "./gemini.logic";
 
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 const oauthClientSecret = defineSecret("GOOGLE_OAUTH_CLIENT_SECRET");
@@ -87,6 +93,37 @@ export const trainSchedule = onSchedule("every day 11:00", async () => {
  * and its operator-only test trigger cover every opted-in user; this runs the
  * same lookup and push for exactly one account, so it needs no shared key.
  */
+/**
+ * The app's only route to Gemini. Signed-in users pick a prompt *kind*
+ * (coaching feedback, weekly goal plan); the system instruction and the API
+ * key stay here. Returns `{text}`; an empty model reply is an error so the
+ * client's fallback copy kicks in.
+ */
+export const callGemini = onCall({secrets: [geminiApiKey]}, async (request) => {
+  if (!request.auth?.uid) throw new HttpsError("unauthenticated", "Must be logged in");
+  const input = validateGeminiInput(request.data);
+  if (!input.ok) throw new HttpsError("invalid-argument", input.reason);
+
+  const apiKey = geminiApiKey.value();
+  if (!apiKey) {
+    logger.error("GEMINI_API_KEY secret not set");
+    throw new HttpsError("failed-precondition", "Gemini is not configured");
+  }
+
+  const response = await fetch(`${GEMINI_MODEL_URL}?key=${apiKey}`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(buildGeminiRequest(input.kind, input.prompt)),
+  });
+  if (!response.ok) {
+    logger.error("Gemini error", {status: response.status, uid: request.auth.uid, kind: input.kind});
+    throw new HttpsError("unavailable", `Gemini API error ${response.status}`);
+  }
+  const text = extractGeminiText(await response.json());
+  if (!text) throw new HttpsError("internal", "Empty LLM response");
+  return {text};
+});
+
 export const checkTrainStatus = onCall(async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "Must be logged in");

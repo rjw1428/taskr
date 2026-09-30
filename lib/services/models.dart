@@ -616,3 +616,129 @@ class AppNotification {
   factory AppNotification.fromJson(Map<String, dynamic> json) => _$AppNotificationFromJson(json);
   Map<String, dynamic> toJson() => _$AppNotificationToJson(this);
 }
+
+// ---------------------------------------------------------------------------
+// Work board (see openspec change add-work-page). Work items are deliberately
+// unrelated to Task: no effort, points, dates, or recurrence, and nothing in
+// the performance pipeline ever sees them.
+// ---------------------------------------------------------------------------
+
+@JsonSerializable()
+class NextAction {
+  String id;
+  String text;
+  /// Non-null means this action is waiting on someone or something; the value
+  /// is the label shown ("Waiting on Sam"). Timing details live in item notes.
+  String? waitingOn;
+  int createdAt;
+  /// Null while open. Set on complete, cleared on undo. Completed actions are
+  /// retained so the item's timeline can show every step taken.
+  int? completedAt;
+
+  NextAction({
+    required this.id,
+    required this.text,
+    this.waitingOn,
+    required this.createdAt,
+    this.completedAt,
+  });
+
+  bool get isOpen => completedAt == null;
+  bool get isWaiting => waitingOn != null && waitingOn!.trim().isNotEmpty;
+
+  NextAction copyWith({
+    String? text,
+    Object? waitingOn = _unset,
+    Object? completedAt = _unset,
+  }) =>
+      NextAction(
+        id: id,
+        text: text ?? this.text,
+        waitingOn: identical(waitingOn, _unset) ? this.waitingOn : waitingOn as String?,
+        createdAt: createdAt,
+        completedAt: identical(completedAt, _unset) ? this.completedAt : completedAt as int?,
+      );
+
+  factory NextAction.fromJson(Map<String, dynamic> json) => _$NextActionFromJson(json);
+  Map<String, dynamic> toJson() => _$NextActionToJson(this);
+}
+
+const Object _unset = Object();
+
+@JsonSerializable()
+class WorkUpdate {
+  String id;
+  String text;
+  int createdAt;
+
+  WorkUpdate({required this.id, required this.text, required this.createdAt});
+
+  factory WorkUpdate.fromJson(Map<String, dynamic> json) => _$WorkUpdateFromJson(json);
+  Map<String, dynamic> toJson() => _$WorkUpdateToJson(this);
+}
+
+// explicitToJson so the nested lists serialize to maps Firestore accepts.
+@JsonSerializable(explicitToJson: true)
+class WorkItem {
+  /// The Firestore document id. Never written as a field.
+  @JsonKey(includeToJson: false)
+  String? id;
+  String title;
+  @JsonKey(defaultValue: '')
+  String notes;
+  @JsonKey(defaultValue: 0)
+  int position;
+  @JsonKey(defaultValue: [])
+  List<NextAction> nextActions;
+  @JsonKey(defaultValue: [])
+  List<WorkUpdate> updates;
+  @JsonKey(defaultValue: 0)
+  int createdAt;
+  @JsonKey(defaultValue: 0)
+  int lastUpdated;
+  int? archivedAt;
+  int? restoredAt;
+
+  WorkItem({
+    this.id,
+    required this.title,
+    this.notes = '',
+    this.position = 0,
+    this.nextActions = const [],
+    this.updates = const [],
+    this.createdAt = 0,
+    this.lastUpdated = 0,
+    this.archivedAt,
+    this.restoredAt,
+  });
+
+  bool get isArchived => archivedAt != null;
+  List<NextAction> get openActions => nextActions.where((a) => a.isOpen).toList();
+
+  WorkItem copyWith({
+    String? title,
+    String? notes,
+    int? position,
+    List<NextAction>? nextActions,
+    List<WorkUpdate>? updates,
+    int? createdAt,
+    int? lastUpdated,
+    Object? archivedAt = _unset,
+    Object? restoredAt = _unset,
+  }) =>
+      WorkItem(
+        id: id,
+        title: title ?? this.title,
+        notes: notes ?? this.notes,
+        position: position ?? this.position,
+        nextActions: nextActions ?? this.nextActions,
+        updates: updates ?? this.updates,
+        createdAt: createdAt ?? this.createdAt,
+        lastUpdated: lastUpdated ?? this.lastUpdated,
+        archivedAt: identical(archivedAt, _unset) ? this.archivedAt : archivedAt as int?,
+        restoredAt: identical(restoredAt, _unset) ? this.restoredAt : restoredAt as int?,
+      );
+
+  factory WorkItem.fromJson(Map<String, dynamic> json) => _$WorkItemFromJson(json);
+  Map<String, dynamic> toJson() => _$WorkItemToJson(this);
+}

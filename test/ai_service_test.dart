@@ -1,6 +1,3 @@
-import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taskr/services/ai.service.dart';
@@ -8,54 +5,26 @@ import 'package:taskr/services/models.dart';
 
 import 'helpers/harness.dart';
 
-/// Stands in for the Gemini generateContent endpoint.
-class _StubGemini {
-  late HttpServer _server;
-  final List<({String query, Map<String, dynamic> body})> requests = [];
-  int status = 200;
-  String text = '  Great work today!  ';
-  String? rawBody;
-
-  Future<String> start() async {
-    _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    unawaited(_server.forEach((request) async {
-      final raw = await utf8.decoder.bind(request).join();
-      requests.add((query: request.uri.query, body: jsonDecode(raw) as Map<String, dynamic>));
-      request.response.statusCode = status;
-      request.response.write(rawBody ??
-          jsonEncode({
-            'candidates': [
-              {
-                'content': {
-                  'parts': [
-                    {'text': text}
-                  ]
-                }
-              }
-            ]
-          }));
-      await request.response.close();
-    }));
-    return 'http://${_server.address.host}:${_server.port}/generate';
-  }
-
-  Future<void> stop() => _server.close(force: true);
-}
-
 void main() {
   late TestEnv env;
-  late _StubGemini stub;
   const fallback = 'Good Job!!! Nothing for you today...';
+
+  /// What the `callGemini` callable hands back, or an exception to throw.
+  final requests = <Map<String, dynamic>>[];
+  late Object? reply;
 
   setUp(() async {
     env = await TestEnv.create();
-    stub = _StubGemini();
-    AIService.geminiEndpoint = await stub.start();
+    requests.clear();
+    reply = {'text': '  Great work today!  '};
+    env.functions['callGemini'] = (payload) {
+      requests.add(Map<String, dynamic>.from(payload as Map));
+      final r = reply;
+      if (r is Exception) throw r;
+      return r;
+    };
   });
-  tearDown(() async {
-    await stub.stop();
-    env.dispose();
-  });
+  tearDown(() => env.dispose());
 
   Task task(String title, {required bool completed, List<Tag> tags = const []}) =>
       Task(added: 1, title: title, description: 'desc', completed: completed, tags: tags);
@@ -69,42 +38,37 @@ void main() {
       ]);
       expect(reply, 'Great work today!');
 
-      final req = stub.requests.single;
-      expect(req.query, 'key=gemini-key');
-      expect(req.body['system_instruction']['parts'][0]['text'], contains('personal coach'));
-      final prompt = req.body['contents'][0]['parts'][0]['text'] as String;
+      final req = requests.single;
+      expect(req['kind'], 'coach');
+      expect(req.keys, unorderedEquals(['kind', 'prompt']), reason: 'no key or instruction leaves the client');
+      final prompt = req['prompt'] as String;
       expect(prompt, contains('I completed the following tasks today: Ship it - desc relating to my Work,Home'));
       expect(prompt, contains('I was unable to do the following tasks today: Gym - desc'));
     });
 
     test('says so when everything is done', () async {
       await AIService().giveFeedback([task('a', completed: true)]);
-      final prompt = stub.requests.single.body['contents'][0]['parts'][0]['text'] as String;
+      final prompt = requests.single['prompt'] as String;
       expect(prompt, contains('I completed all my tasks today!'));
     });
 
-    test('falls back on a non-200 answer', () async {
-      stub.status = 500;
+    test('falls back when the callable fails', () async {
+      reply = Exception('Gemini API error 500');
       expect(await AIService().giveFeedback([task('a', completed: true)]), fallback);
     });
 
-    test('falls back on an empty reply', () async {
-      stub.text = '';
+    test('falls back on an empty or malformed reply', () async {
+      reply = {'text': ''};
       expect(await AIService().giveFeedback([task('a', completed: true)]), fallback);
-      stub.rawBody = '{}';
+      reply = {};
       expect(await AIService().giveFeedback([task('a', completed: true)]), fallback);
-    });
-
-    test('falls back when the server is unreachable', () async {
-      await stub.stop();
+      reply = 'not a map';
       expect(await AIService().giveFeedback([task('a', completed: true)]), fallback);
     });
 
-    test('falls back without an API key', () async {
-      env.dispose();
-      env = await TestEnv.create(env: {'GEMINI_API_KEY': ''});
+    test('falls back when the callable is not wired', () async {
+      env.functions.remove('callGemini');
       expect(await AIService().giveFeedback([task('a', completed: true)]), fallback);
-      expect(stub.requests, isEmpty);
     });
   });
 

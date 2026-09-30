@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'package:taskr/shared/error_reporting.dart';
@@ -43,24 +42,11 @@ final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin(
 @visibleForTesting
 ParkingService Function() parkingServiceFactory = ParkingService.new;
 
-/// Loads `.env` if this isolate has not already. The background isolate starts
-/// cold, so the token would otherwise be missing exactly when the user taps Yes.
-Future<void> _ensureEnvLoaded() async {
-  if (dotenv.isInitialized) return;
-  try {
-    await dotenv.load(fileName: '.env');
-  } catch (e) {
-    debugPrint('parking: could not load .env: $e');
-  }
-}
-
 /// Displays the parking prompt, unless parking is already covered.
 ///
 /// The push is data-only — a `notification` block would make Android draw its
 /// own buttonless copy alongside this one — so nothing appears unless this runs.
 Future<void> showParkingPrompt([Map<String, dynamic>? data]) async {
-  await _ensureEnvLoaded();
-
   // Skip a prompt that could not do anything useful. This fails open: only an
   // unambiguous "yes, a session is active" suppresses it, because a swallowed
   // prompt costs a day of unpaid parking while a redundant one costs a tap.
@@ -177,8 +163,6 @@ Future<void> _payForParking() async {
 /// Returns false when the attempt is worth retrying, which is what makes a tap
 /// with no signal still pay once signal returns.
 Future<bool> runParkingPurchase() async {
-  await _ensureEnvLoaded();
-
   final result = await parkingServiceFactory().triggerParking();
   debugPrint('parking: trigger outcome ${result.outcome} (${result.requestId})');
 

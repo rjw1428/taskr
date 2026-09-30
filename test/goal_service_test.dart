@@ -1,12 +1,9 @@
-import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:taskr/services/firebase_refs.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/shared/constants.dart';
@@ -357,44 +354,23 @@ void main() {
   });
 
   group('the real model call', () {
-    late HttpServer server;
     final requests = <Map<String, dynamic>>[];
-    late int status;
-    late String body;
-    late String savedEndpoint;
+    late Object? reply;
 
-    setUp(() async {
+    setUp(() {
       requests.clear();
-      status = 200;
-      body = jsonEncode({
-        'candidates': [
-          {
-            'content': {
-              'parts': [
-                {'text': '```json\n[{"title":"From Gemini","dayOffset":6,"effort":"high"}]\n```'}
-              ]
-            }
-          }
-        ]
+      reply = {'text': '```json\n[{"title":"From Gemini","dayOffset":6,"effort":"high"}]\n```'};
+      FirebaseRefs.override(callFunction: (name, payload) async {
+        expect(name, 'callGemini');
+        requests.add(Map<String, dynamic>.from(payload as Map));
+        final r = reply;
+        if (r is Exception) throw r;
+        return r;
       });
-      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      unawaited(server.forEach((req) async {
-        requests.add(jsonDecode(await utf8.decoder.bind(req).join()) as Map<String, dynamic>);
-        req.response.statusCode = status;
-        req.response.write(body);
-        await req.response.close();
-      }));
-      savedEndpoint = GoalService.geminiEndpoint;
-      GoalService.geminiEndpoint = 'http://${server.address.host}:${server.port}/generate';
-      dotenv.testLoad(fileInput: 'GEMINI_API_KEY=secret');
     });
+    tearDown(FirebaseRefs.reset);
 
-    tearDown(() async {
-      GoalService.geminiEndpoint = savedEndpoint;
-      await server.close(force: true);
-    });
-
-    test('posts the system instruction and prompt, and parses the fenced JSON reply', () async {
+    test('sends the goalPlan kind and prompt to the callable and parses the fenced JSON reply', () async {
       final created = await service.generateTasksForGoal(goal());
 
       expect(created.single.title, 'From Gemini');
@@ -402,24 +378,23 @@ void main() {
       expect(created.single.dueDate, '2026-09-20');
 
       final req = requests.single;
-      expect(req['system_instruction']['parts'][0]['text'], contains('personal development coach'));
-      expect(req['contents'][0]['parts'][0]['text'], contains('Goal: Run more'));
-      expect(req['generationConfig']['responseMimeType'], 'application/json');
+      expect(req['kind'], 'goalPlan');
+      expect(req['prompt'], contains('Goal: Run more'));
+      expect(req.keys, unorderedEquals(['kind', 'prompt']), reason: 'no key or instruction leaves the client');
     });
 
-    test('a non-200 reply is an error on both attempts', () async {
-      status = 500;
-      body = 'boom';
+    test('a callable failure is an error on both attempts', () async {
+      reply = Exception('Gemini API error 500');
       await expectLater(service.generateTasksForGoal(goal()), throwsA(predicate((e) => '$e'.contains('500'))));
       expect(requests, hasLength(2), reason: 'first attempt plus the stricter retry');
-      expect(requests.last['contents'][0]['parts'][0]['text'], contains('IMPORTANT: Return ONLY'));
+      expect(requests.last['prompt'], contains('IMPORTANT: Return ONLY'));
     });
 
-    test('a missing API key fails before any request is made', () async {
-      dotenv.testLoad(fileInput: '');
-      await expectLater(service.generateTasksForGoal(goal()),
-          throwsA(predicate((e) => '$e'.contains('GEMINI_API_KEY not set'))));
-      expect(requests, isEmpty);
+    test('an empty or malformed reply is an error', () async {
+      reply = {'text': ''};
+      await expectLater(service.generateTasksForGoal(goal()), throwsA(anything));
+      reply = 'not a map';
+      await expectLater(service.generateTasksForGoal(goal()), throwsA(anything));
     });
   });
 }

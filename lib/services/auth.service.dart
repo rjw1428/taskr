@@ -1,11 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:taskr/shared/constants.dart';
 import 'package:taskr/services/firebase_refs.dart';
+import 'package:taskr/shared/env.dart';
 
 const _calendarScope = 'https://www.googleapis.com/auth/calendar';
 
@@ -51,10 +51,10 @@ class _PluginGoogleSignIn implements GoogleSignInGateway {
   GoogleSignIn _client(GoogleSignInProfile profile) => _clients.putIfAbsent(profile, () {
         switch (profile) {
           case GoogleSignInProfile.login:
-            return GoogleSignIn(serverClientId: dotenv.env['WEB_CLIENT_ID']);
+            return GoogleSignIn(serverClientId: Env.webClientId);
           case GoogleSignInProfile.calendar:
             return GoogleSignIn(
-              serverClientId: dotenv.env['CALENDAR_WEB_CLIENT_ID'],
+              serverClientId: Env.calendarWebClientId,
               scopes: [_calendarScope],
             );
         }

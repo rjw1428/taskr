@@ -5,7 +5,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:taskr/app.dart';
 import 'package:taskr/firebase_options.dart';
@@ -74,7 +73,6 @@ Future<void> _bootstrap() async {
     reportError(error, stack);
     return true;
   };
-  await dotenv.load(fileName: ".env");
   await Workmanager().initialize(parkingCallbackDispatcher);
   try {
     await Firebase.initializeApp(

@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:taskr/services/firebase_refs.dart';
 
 /// Base URL of the SEPTA Park auto-pay service. The public route strips the
 /// `/parking` prefix before the request reaches the service, so `/parking/park`
@@ -69,18 +69,39 @@ class ParkingService {
   /// is resolved on first read, never at construction.
   late String baseUrl = parkingBaseUrl;
 
-  /// The bearer token, copied from the automation project's `.env`. Late so a
-  /// background isolate can load `.env` before this is first read, and so tests
-  /// can inject one without a dotenv fixture.
-  late String token = dotenv.env['PARKING_TRIGGER_TOKEN'] ?? '';
+  /// Produces the bearer token for the parking API: the signed-in user's
+  /// Firebase ID token, which the API verifies against the owner's uid. No
+  /// shared secret ships in the app. Tests inject a fixed value.
+  Future<String?> Function() idToken = firebaseIdToken;
+
+  /// The token used by the attempt in flight, resolved once per public call.
+  String _bearer = '';
+
+  /// The current user's ID token, waiting briefly for auth to restore its
+  /// session when called from a cold background isolate.
+  static Future<String?> firebaseIdToken() async {
+    try {
+      var user = FirebaseRefs.auth.currentUser;
+      user ??= await FirebaseRefs.auth
+          .authStateChanges()
+          .firstWhere((u) => u != null)
+          .timeout(const Duration(seconds: 5), onTimeout: () => null);
+      return await user?.getIdToken();
+    } catch (e) {
+      debugPrint('parking: could not get ID token: $e');
+      return null;
+    }
+  }
 
   /// Waits between attempts. Overridden in tests so they exercise the retry
   /// logic without actually sleeping through the backoff.
   List<Duration> retryBackoff = _parkingRetryBackoff;
 
-  String get _token => token;
-
-  bool get isConfigured => _token.isNotEmpty;
+  Future<bool> _resolveBearer() async {
+    final token = (await idToken())?.trim() ?? '';
+    _bearer = token;
+    return token.isNotEmpty;
+  }
 
   /// Whether the service still has a working upstream session.
   ///
@@ -110,10 +131,10 @@ class ParkingService {
   /// the plate it reports `skipped` and buys nothing — so a double-tap cannot
   /// double-charge.
   Future<ParkingTriggerResult> triggerParking() async {
-    if (!isConfigured) {
+    if (!await _resolveBearer()) {
       return const ParkingTriggerResult(
         ParkingTriggerOutcome.unconfigured,
-        'Parking is not set up on this device.',
+        'Sign in to Taskr to use parking.',
       );
     }
 
@@ -162,7 +183,7 @@ class ParkingService {
           .then((request) {
             // The token goes in the header, never the query string, so it stays
             // out of access logs, proxy logs and browser history.
-            request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $_token');
+            request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $_bearer');
             return request.close();
           })
           .timeout(_parkingTimeout);
@@ -246,14 +267,14 @@ class ParkingService {
   /// failure would risk a day of unpaid parking, which is far worse than one
   /// unnecessary notification.
   Future<bool> hasActiveSession() async {
-    if (!isConfigured) return false;
+    if (!await _resolveBearer()) return false;
 
     try {
       final url = Uri.parse('$baseUrl/status');
       final response = await HttpClient()
           .getUrl(url)
           .then((request) {
-            request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $_token');
+            request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $_bearer');
             return request.close();
           })
           .timeout(_parkingTimeout);

@@ -9,6 +9,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart'
     as local_notifications;
 import 'package:provider/provider.dart';
 import 'package:quick_actions/quick_actions.dart';
+import 'package:taskr/routing.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:taskr/firebase_options.dart';
 import 'package:taskr/home/home.dart';
@@ -95,6 +96,7 @@ Future<void> _onNotificationResponse(
 const addTaskShortcutType = 'add_task';
 const addBacklogShortcutType = 'add_backlog';
 const notificationsShortcutType = 'notifications';
+const workShortcutType = 'work';
 
 /// Runs [action] once the user is signed in and a route exists to host it. A
 /// cold launch from a shortcut fires before auth has resolved, so this waits
@@ -135,6 +137,9 @@ void _handleShortcut(String type) {
     case notificationsShortcutType:
       _whenReadyForShortcut(
           (context) => Navigator.of(context).pushNamed('/notifications'));
+    case workShortcutType:
+      // The home shell owns tab selection; hand it the route once it is up.
+      _whenReadyForShortcut((_) => requestedRoute.value = '/work');
   }
 }
 
@@ -310,6 +315,11 @@ class _MyAppState extends State<MyApp> {
       ShortcutItem(
         type: notificationsShortcutType,
         localizedTitle: 'Notifications',
+        icon: 'ic_launcher',
+      ),
+      ShortcutItem(
+        type: workShortcutType,
+        localizedTitle: 'Work',
         icon: 'ic_launcher',
       ),
     ]);

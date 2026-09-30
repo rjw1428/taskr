@@ -4,6 +4,7 @@ import 'package:taskr/goals/goal_list.dart';
 import 'package:taskr/performance/performance_page.dart';
 import 'package:taskr/task_list/task_list.dart';
 import 'package:taskr/people/people_list.dart';
+import 'package:taskr/work/work_page.dart';
 
 class RouteOption {
   final int index;
@@ -20,20 +21,26 @@ final Map<String, RouteOption> routeConfig = {
     page: TaskListScreen(),
     icon: FontAwesomeIcons.listCheck,
   ),
-  '/performance': const RouteOption(
+  '/work': const RouteOption(
     index: 1,
+    label: "Work",
+    page: WorkPage(),
+    icon: Icons.corporate_fare,
+  ),
+  '/performance': const RouteOption(
+    index: 2,
     label: "Performance",
     page: PerformancePage(),
     icon: FontAwesomeIcons.gaugeHigh,
   ),
   '/goals': const RouteOption(
-    index: 2,
+    index: 3,
     label: 'Goals',
     page: GoalListPage(),
     icon: FontAwesomeIcons.medal,
   ),
   '/backlog': const RouteOption(
-    index: 3,
+    index: 4,
     label: "Backlog",
     page: TaskListScreen(
       isBacklog: true,
@@ -41,7 +48,7 @@ final Map<String, RouteOption> routeConfig = {
     icon: FontAwesomeIcons.tableColumns,
   ),
   '/people': const RouteOption(
-    index: 4,
+    index: 5,
     label: "People",
     page: PeopleListPage(),
     icon: FontAwesomeIcons.users,
@@ -49,3 +56,8 @@ final Map<String, RouteOption> routeConfig = {
 };
 
 final GlobalKey<NavigatorState> innerNavigatorKey = GlobalKey<NavigatorState>();
+
+/// A request from outside the home shell (a quick action, a notification) to
+/// select a bottom-navigation tab by its route. [HomeScreen] listens, selects
+/// the tab as if tapped, and clears it. Unknown routes are ignored.
+final ValueNotifier<String?> requestedRoute = ValueNotifier<String?>(null);

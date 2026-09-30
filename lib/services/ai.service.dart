@@ -1,10 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/firebase_refs.dart';
 
@@ -20,17 +17,6 @@ class AIService {
   /// Drops all state so the next `AIService()` starts fresh.
   @visibleForTesting
   static void resetInstance() => _instance = AIService._internal();
-
-  /// Mutable so a test can point the call at a local stub server.
-  @visibleForTesting
-  static String geminiEndpoint =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
-
-  static const _systemInstruction =
-      "You are a personal coach, helping this person grow and become better. "
-      "A user is keeping track of their tasks in order to help manage, schedule, and complete these tasks. "
-      "You should provide substantial praise when all tasks are complete. "
-      "You should provide either a strategy to improve when there are tasks still left, a motivational quote, or encouragement to complete the last remaining tasks if they seem achievable.";
 
   factory AIService() {
     return _instance;
@@ -80,35 +66,12 @@ class AIService {
     }
   }
 
+  /// Asks the `callGemini` callable for coaching feedback. The API key and the
+  /// system instruction live server-side; see firebase/functions/src/gemini.logic.ts.
   Future<String> _callLLM(String prompt) async {
-    final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
-    if (apiKey.isEmpty) throw Exception('GEMINI_API_KEY not set in .env');
-
-    final url = Uri.parse('$geminiEndpoint?key=$apiKey');
-
-    final body = jsonEncode({
-      'system_instruction': {
-        'parts': [{'text': _systemInstruction}],
-      },
-      'contents': [
-        {'role': 'user', 'parts': [{'text': prompt}]},
-      ],
-    });
-
-    final httpResponse = await HttpClient().postUrl(url).then((request) {
-      request.headers.contentType = ContentType.json;
-      request.write(body);
-      return request.close();
-    });
-
-    final responseBody = await httpResponse.transform(utf8.decoder).join();
-    if (httpResponse.statusCode != 200) {
-      throw Exception('Gemini API error ${httpResponse.statusCode}: $responseBody');
-    }
-
-    final data = jsonDecode(responseBody) as Map<String, dynamic>;
-    final text = data['candidates']?[0]?['content']?['parts']?[0]?['text'] as String? ?? '';
-    if (text.isEmpty) throw Exception('Empty LLM response');
+    final result = await FirebaseRefs.callFunction('callGemini', {'kind': 'coach', 'prompt': prompt});
+    final text = (result is Map ? result['text'] : null) as String? ?? '';
+    if (text.trim().isEmpty) throw Exception('Empty LLM response');
     return text.trim();
   }
 

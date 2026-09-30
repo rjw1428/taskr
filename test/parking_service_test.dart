@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taskr/services/parking.service.dart';
 
+import 'helpers/harness.dart';
+
 /// A stand-in for the parking service. Real HTTP, so the bearer header and the
 /// status-code handling are genuinely exercised rather than mocked away.
 class _StubServer {
@@ -60,7 +62,7 @@ void main() {
     final url = await stub.start();
     service = ParkingService()
       ..baseUrl = url
-      ..token = 'test-token'
+      ..idToken = (() async => 'test-token')
       ..retryBackoff = const [Duration.zero, Duration.zero];
   });
 
@@ -248,12 +250,35 @@ void main() {
     });
 
     test('a missing token makes no request at all', () async {
-      service.token = '';
+      service.idToken = () async => null;
 
       final result = await service.triggerParking();
 
       expect(result.outcome, ParkingTriggerOutcome.unconfigured);
       expect(stub.paths, isEmpty);
+      expect(await service.hasActiveSession(), isFalse);
+    });
+
+    test('a blank or throwing token provider is treated as signed out', () async {
+      service.idToken = () async => '   ';
+      expect((await service.triggerParking()).outcome, ParkingTriggerOutcome.unconfigured);
+      service.idToken = () async => throw StateError('no auth');
+      await expectLater(service.triggerParking(), throwsStateError);
+      expect(stub.paths, isEmpty);
+    });
+
+    test('the default provider reads the signed-in Firebase user', () async {
+      final env = await TestEnv.create();
+      addTearDown(env.dispose);
+      final token = await ParkingService.firebaseIdToken();
+      expect(token, isNotNull);
+      expect(token, isNotEmpty);
+    });
+
+    test('the default provider is null when nobody is signed in', () async {
+      final env = await TestEnv.create(signedIn: false);
+      addTearDown(env.dispose);
+      expect(await ParkingService.firebaseIdToken(), isNull);
     });
   });
 

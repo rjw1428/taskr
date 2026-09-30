@@ -1,9 +1,7 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:taskr/services/goal_planning.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/services.dart';
@@ -30,21 +28,6 @@ class GoalService with ChangeNotifier {
   /// Clock, swappable so week targeting and task lookups are deterministic.
   @visibleForTesting
   DateTime Function() clock = DateTime.now;
-
-  /// Mutable so a test can point the call at a local stub server.
-  @visibleForTesting
-  static String geminiEndpoint =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
-
-  static const _systemInstruction =
-    "You are a personal development coach. Given a user's goal, generate a list of concrete, actionable tasks for the coming week. "
-    "Each task should be specific and achievable in a single session. "
-    "Return ONLY a JSON array of objects with these fields: "
-    '"title" (string, concise task name), '
-    '"description" (string, brief details on what to do), '
-    '"dayOffset" (int, 0=Monday through 6=Sunday, which day of the week to schedule this task), '
-    '"effort" (string, one of "low", "medium", "high"). '
-    "Do not include any text outside the JSON array.";
 
   CollectionReference<Map<String, dynamic>> _goalCollection(String userId) {
     return _db.collection('todos').doc(userId).collection('goals');
@@ -306,39 +289,12 @@ class GoalService with ChangeNotifier {
 
   // --- Private Helpers ---
 
+  /// Asks the `callGemini` callable for a weekly plan. The API key and the
+  /// system instruction live server-side; see firebase/functions/src/gemini.logic.ts.
   Future<List<Map<String, dynamic>>> _callLLM(String prompt) async {
-    final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
-    if (apiKey.isEmpty) throw Exception('GEMINI_API_KEY not set in .env');
-
-    final url = Uri.parse('$geminiEndpoint?key=$apiKey');
-
-    final body = jsonEncode({
-      'system_instruction': {
-        'parts': [{'text': _systemInstruction}],
-      },
-      'contents': [
-        {'role': 'user', 'parts': [{'text': prompt}]},
-      ],
-      'generationConfig': {
-        'responseMimeType': 'application/json',
-      },
-    });
-
-    final httpResponse = await HttpClient()
-        .postUrl(url)
-        .then((request) {
-          request.headers.contentType = ContentType.json;
-          request.write(body);
-          return request.close();
-        });
-
-    final responseBody = await httpResponse.transform(utf8.decoder).join();
-    if (httpResponse.statusCode != 200) {
-      throw Exception('Gemini API error ${httpResponse.statusCode}: $responseBody');
-    }
-
-    final data = jsonDecode(responseBody) as Map<String, dynamic>;
-    return GoalPlanning.parseTaskList(GoalPlanning.responseText(data));
+    final result = await FirebaseRefs.callFunction('callGemini', {'kind': 'goalPlan', 'prompt': prompt});
+    final text = (result is Map ? result['text'] : null) as String? ?? '';
+    return GoalPlanning.parseTaskList(text);
   }
 
   Future<void> _deleteUncompletedGoalTasks(String userId, String goalId) async {

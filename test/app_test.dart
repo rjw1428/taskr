@@ -16,6 +16,7 @@ import 'package:taskr/services/services.dart';
 import 'package:taskr/settings/settings.dart';
 import 'package:taskr/task_list/add_task.dart';
 import 'package:taskr/about/about.dart';
+import 'package:taskr/work/work_page.dart';
 import 'package:workmanager_platform_interface/workmanager_platform_interface.dart';
 
 import 'helpers/android_notifications.dart';
@@ -40,10 +41,10 @@ void main() {
   }
 
   group('home-screen shortcuts', () {
-    testWidgets('the three shortcuts are registered with the launcher', (tester) async {
+    testWidgets('the four shortcuts are registered with the launcher', (tester) async {
       await mount(tester);
       expect(FakeQuickActions.current.items.map((i) => i.type),
-          [addTaskShortcutType, addBacklogShortcutType, notificationsShortcutType]);
+          [addTaskShortcutType, addBacklogShortcutType, notificationsShortcutType, workShortcutType]);
       expect(FakeQuickActions.current.handler, isNotNull);
     });
 
@@ -65,6 +66,14 @@ void main() {
       FakeQuickActions.current.fire(notificationsShortcutType);
       await settle(tester);
       expect(find.byType(NotificationCenterPage), findsOneWidget);
+    });
+
+    testWidgets('the work shortcut lands on the Work tab', (tester) async {
+      await mount(tester);
+      FakeQuickActions.current.fire(workShortcutType);
+      await settle(tester);
+      expect(find.byType(WorkPage), findsOneWidget);
+      expect(find.descendant(of: find.byType(AppBar), matching: find.text('Work')), findsOneWidget);
     });
 
     testWidgets('an unknown shortcut type does nothing', (tester) async {

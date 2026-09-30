@@ -16,7 +16,6 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.6
-  flutter_dotenv: ^5.1.0
   firebase_core: ^2.32.0
   firebase_messaging: ^14.9.4
   firebase_auth: ^4.19.5
@@ -38,6 +37,7 @@ dependencies:
   algoliasearch: ^1.4.0
   workmanager: ^0.10.9
   quick_actions: ^1.1.1
+  url_launcher: ^6.3.2
 
 
 dev_dependencies:
@@ -60,4 +60,3 @@ flutter:
 
   assets:
     - assets/images/logo.png
-    - .env

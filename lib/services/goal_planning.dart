@@ -61,13 +61,6 @@ class GoalPlanning {
   }
 
   /// Pulls the reply text out of a Gemini generateContent response body.
-  static String responseText(Map<String, dynamic> data) {
-    final candidates = data['candidates'];
-    if (candidates is! List || candidates.isEmpty) return '';
-    final parts = candidates.first?['content']?['parts'];
-    if (parts is! List || parts.isEmpty) return '';
-    return parts.first?['text'] as String? ?? '';
-  }
 
   static String buildPrompt(Goal goal, List<Generation> generations) {
     final buffer = StringBuffer();
