@@ -27,16 +27,6 @@ class WorkLogic {
 
   static List<NextAction> openActions(WorkItem item) => item.nextActions.where((a) => a.isOpen).toList();
 
-  /// Moves the action with [id] to the last position, keeping every other
-  /// action (open or completed) in its relative order.
-  static List<NextAction> sendNextActionToEnd(List<NextAction> actions, String id) {
-    final index = actions.indexWhere((a) => a.id == id);
-    if (index < 0) return List.of(actions);
-    final out = List<NextAction>.from(actions);
-    out.add(out.removeAt(index));
-    return out;
-  }
-
   static List<NextAction> completeNextAction(List<NextAction> actions, String id, int now) =>
       [for (final a in actions) a.id == id ? a.copyWith(completedAt: now) : a];
 

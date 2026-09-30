@@ -37,9 +37,6 @@ class WorkActions {
     );
   }
 
-  Future<void> sendToEnd(String itemId, String actionId) =>
-      guard(() => _mutateActions(itemId, (a) => WorkLogic.sendNextActionToEnd(a, actionId)), 'Send to end');
-
   /// Completes and offers Undo. Copy is deliberately neutral: this is not a
   /// task and earns nothing.
   Future<void> complete(BuildContext context, String itemId, NextAction action) async {

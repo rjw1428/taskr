@@ -147,7 +147,6 @@ class _WorkDetailPageState extends State<WorkDetailPage> {
                     key: Key('detail-action-${a.id}'),
                     action: a,
                     onComplete: () => _actions.complete(context, item.id!, a),
-                    onSendToEnd: () => _actions.sendToEnd(item.id!, a.id),
                     onEdit: () => _actions.editNextAction(context, item.id!, a),
                   ),
               const SectionHeader('Timeline'),

@@ -90,13 +90,6 @@ The system SHALL treat a next action with a non-null `waitingOn` as waiting, ren
 - **WHEN** an item has a waiting action followed by an actionable action
 - **THEN** the card SHALL keep that insertion order and SHALL NOT move the waiting action
 
-### Requirement: Send next action to end
-The system SHALL provide a per-row "send to end" control on every open next action that moves it to the last position within its item in a single write.
-
-#### Scenario: Send to end
-- **WHEN** the user taps "send to end" on the first of three open next actions
-- **THEN** it SHALL become the third and the item's `nextActions` list SHALL be rewritten once
-
 ### Requirement: Add next action
 The system SHALL provide an inline "add next action" row on each card that opens a sheet with a text field and an optional "waiting on" field, and appends the new next action to the item.
 

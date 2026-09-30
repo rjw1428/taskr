@@ -2,7 +2,7 @@
 
 - [x] 1.1 Add `WorkItem`, `NextAction`, and `WorkUpdate` models to `lib/services/models.dart` per design D2 (`explicitToJson: true`, list and string defaults for missing fields, `id` excluded from JSON) and regenerate `models.g.dart` with build_runner
 - [x] 1.2 Add `test/work_models_test.dart` covering round-trip serialization, defaults when `notes`/`updates`/`nextActions` are absent, and that `id` is not emitted
-- [x] 1.3 Create `lib/work/work_logic.dart` with pure helpers: `sendNextActionToEnd`, `completeNextAction`/`undoComplete`, `appendUpdate`, `buildTimeline(WorkItem)` returning typed events sorted oldest first, and `openActions(WorkItem)`
+- [x] 1.3 Create `lib/work/work_logic.dart` with pure helpers: `completeNextAction`/`undoComplete`, `appendUpdate`, `buildTimeline(WorkItem)` returning typed events sorted oldest first, and `openActions(WorkItem)`
 - [x] 1.4 Add `test/work_logic_test.dart` for every helper in 1.3, including timeline ordering with archive and restore events and stability of next-action ids across edits
 - [x] 1.5 Create `lib/shared/link_parser.dart` with the pure URL tokenizer (http, https, bare `www.`, trailing punctuation trimmed) and `test/link_parser_test.dart` covering the four scenarios in the work-links spec
 
@@ -26,7 +26,7 @@
 - [x] 4.2 Create `lib/work/next_action_form.dart` (text required, optional "waiting on") and `lib/work/work_update_form.dart` (single multiline text, required)
 - [x] 4.3 Create `lib/work/work_item_card.dart`: title via `LinkText`, two-line notes preview, "No next action" badge, open next-action rows (checkbox or hourglass for waiting, "Waiting on X" line, send-to-end button, overflow for completing waiting actions), inline add-next-action row, detail chevron, `ReorderableDragStartListener` handle, and overflow menu with Edit, Add update, Send to bottom, Archive, Delete (confirm)
 - [x] 4.4 Create `lib/work/work_page.dart`: streams active items, `ReorderableListView` with `buildDefaultDragHandles: false`, optimistic reorder using `TaskListLogic.reorder` then `WorkService.reorder`, complete-with-undo snackbar, empty state, and app-bar actions for Archived and "Copy all as Markdown"
-- [x] 4.5 Add `test/work_page_test.dart` with `pumpApp` and `settle`: items render in position order, multiple open actions visible, completed hidden, badge shown/hidden, waiting row rendering, no auto-sort, send to end, send to bottom, drag reorder persists position-only, complete then undo restores the action, empty state, copy-all writes clipboard
+- [x] 4.5 Add `test/work_page_test.dart` with `pumpApp` and `settle`: items render in position order, multiple open actions visible, completed hidden, badge shown/hidden, waiting row rendering, no auto-sort, send to bottom, drag reorder persists position-only, complete then undo restores the action, empty state, copy-all writes clipboard
 - [x] 4.6 Add `test/work_forms_test.dart`: title required, empty next action rejected, empty update rejected, create with first next action yields one open action, edit leaves next actions and updates untouched
 
 ## 5. Detail, archive, and history UI

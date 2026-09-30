@@ -87,7 +87,7 @@ Alternative considered: a `workOrder` array on the user document, matching `task
 
 The Work page calls `TaskListLogic.reorder(ids, oldIndex, newIndex)` rather than reimplementing the `ReorderableListView` index-shift quirk, and passes the result to `WorkService.reorder`. The page applies the new order optimistically via `setState` so the drop does not flicker while Firestore round-trips; the next stream emission is authoritative.
 
-Next-action "send to end" is a list rotation inside the item, written as a single `update` of `nextActions`. Waiting actions are never auto-sorted.
+Next actions are not reorderable; they keep insertion order and waiting actions are never auto-sorted.
 
 ### D5. Navigation: insert at index 1, renumber, and add a tab-request hook
 
@@ -106,7 +106,6 @@ Alternative considered: keying the FAB switch on route path instead of index. Wo
 - **Item overflow menu:** every card has a three-dot menu with Edit, Add update, Send to bottom, Archive, and Delete. Delete confirms first and is the only destructive action; Archive moves the item per D1.
 - **Add next action:** an inline "add next action" row at the bottom of each card opens a small sheet with text and an optional "waiting on" field.
 - **Complete next action:** a checkbox on the row sets `completedAt` and shows a snackbar with Undo. Copy says "Done" with no points or confetti, so it does not resemble task completion.
-- **Send to end:** a per-row button rotates the action to the last position.
 - **Toggle waiting:** editing the action and clearing or filling "waiting on" flips the state.
 - **Add update:** a sheet with a single multiline field appends a `WorkUpdate` stamped now.
 - **Detail page:** opened from a card via a chevron or the overflow menu; shows title, notes, open next actions, and the derived timeline (D2). Archived items open the same page in read-mostly mode with a Restore button.

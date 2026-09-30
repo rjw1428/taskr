@@ -7,18 +7,6 @@ NextAction a(String id, {int at = 1, int? done, String? waiting}) =>
 
 void main() {
   group('WorkLogic next actions', () {
-    test('sendNextActionToEnd moves the target and keeps order', () {
-      final out = WorkLogic.sendNextActionToEnd([a('1'), a('2'), a('3')], '1');
-      expect(out.map((x) => x.id), ['2', '3', '1']);
-    });
-
-    test('sendNextActionToEnd with unknown id is a no-op copy', () {
-      final input = [a('1'), a('2')];
-      final out = WorkLogic.sendNextActionToEnd(input, 'zz');
-      expect(out.map((x) => x.id), ['1', '2']);
-      expect(identical(out, input), isFalse);
-    });
-
     test('complete and undo keep ids and positions', () {
       final done = WorkLogic.completeNextAction([a('1'), a('2')], '1', 99);
       expect(done[0].completedAt, 99);

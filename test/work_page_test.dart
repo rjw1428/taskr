@@ -62,16 +62,6 @@ void main() {
     expect(tester.getTopLeft(find.text('Numbers')).dy < tester.getTopLeft(find.text('Draft')).dy, isTrue);
   });
 
-  testWidgets('send to end moves a next action last in one write', (tester) async {
-    final id = await service.add(WorkItem(title: 'P', nextActions: [act('1', 'One'), act('2', 'Two'), act('3', 'Three')]));
-    await pump(tester);
-    await tester.tap(find.byKey(const Key('send-to-end-1')));
-    await settle(tester);
-    final ids = ((await stored(id))!['nextActions'] as List).map((m) => m['id']).toList();
-    expect(ids, ['2', '3', '1']);
-    expect(tester.getTopLeft(find.text('One')).dy > tester.getTopLeft(find.text('Three')).dy, isTrue);
-  });
-
   testWidgets('complete hides the action and undo restores it in place', (tester) async {
     final id = await service.add(WorkItem(title: 'P', nextActions: [act('1', 'One'), act('2', 'Two')]));
     await pump(tester);

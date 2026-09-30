@@ -10,14 +10,12 @@ import 'package:taskr/shared/shared.dart';
 class NextActionRow extends StatelessWidget {
   final NextAction action;
   final VoidCallback onComplete;
-  final VoidCallback onSendToEnd;
   final VoidCallback onEdit;
 
   const NextActionRow({
     super.key,
     required this.action,
     required this.onComplete,
-    required this.onSendToEnd,
     required this.onEdit,
   });
 
@@ -65,14 +63,6 @@ class NextActionRow extends StatelessWidget {
                 ],
               ),
             ),
-          ),
-          IconButton(
-            key: Key('send-to-end-${action.id}'),
-            tooltip: 'Send to end',
-            visualDensity: VisualDensity.compact,
-            iconSize: 14,
-            icon: Icon(FontAwesomeIcons.arrowDownLong, color: t.textFaint),
-            onPressed: onSendToEnd,
           ),
           if (waiting)
             SizedBox(

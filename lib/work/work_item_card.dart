@@ -134,7 +134,6 @@ class WorkItemCard extends StatelessWidget {
                 key: Key('action-${a.id}'),
                 action: a,
                 onComplete: () => actions.complete(context, item.id!, a),
-                onSendToEnd: () => actions.sendToEnd(item.id!, a.id),
                 onEdit: () => actions.editNextAction(context, item.id!, a),
               ),
           ],
