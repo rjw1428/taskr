@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/task_ordering.dart';
+import 'package:taskr/services/parking_schedule.dart';
 import 'package:taskr/services/recurring_series.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:taskr/shared/shared.dart';
@@ -525,7 +526,8 @@ class TaskService {
     }
 
     writes.add(_syncCountdownIndex(user.uid, task.copyWith(id: id)));
-    await ackWrite(Future.wait(writes), action: "Couldn't save task");
+    final ack = await ackWrite(Future.wait(writes), action: "Couldn't save task");
+    if (ack == WriteAck.confirmed) _requestParkingPrompt(null, task.copyWith(id: id));
     return id;
   }
 
@@ -551,7 +553,8 @@ class TaskService {
         await PerformanceService().updatePerfomanceStats(user.uid, newTask, true);
       }));
     }
-    await ackWrite(Future.wait(writes), action: "Couldn't save task");
+    final ack = await ackWrite(Future.wait(writes), action: "Couldn't save task");
+    if (ack == WriteAck.confirmed) _requestParkingPrompt(oldTask, newTask.copyWith(id: id));
   }
 
   Future<void> updateTaskByKey(Map<String, dynamic> update, Task task) async {
@@ -762,6 +765,22 @@ class TaskService {
     }
   }
 
+  /// Asks the server to schedule today's parking prompt for a Work Train task
+  /// saved after the morning cron ran. Only called once the write is confirmed:
+  /// the server reads the task back, so a write still queued offline would be
+  /// invisible to it. Not awaited — the save must not wait on it.
+  void _requestParkingPrompt(Task? before, Task after) {
+    final today = DateService().getString(DateTime.now());
+    if (!ParkingSchedule.shouldRequest(before: before, after: after, today: today)) return;
+    unawaited(FirebaseRefs.callFunction('scheduleParkingPromptForTask', {
+      'taskId': after.id,
+      'taskDate': after.dueDate,
+    }).catchError((Object e, StackTrace s) {
+      reportError(e, s, "Couldn't schedule the parking prompt");
+      return null;
+    }));
+  }
+
   Future<void> callRemoteMethod(String name, dynamic payload) async {
     try {
       final result = await FirebaseRefs.callFunction(name, payload);
@@ -820,6 +839,11 @@ class TaskService {
       templateData: templateData,
       action: "Couldn't save recurring task",
     );
+    if (ack == WriteAck.confirmed) {
+      for (final occurrence in tasks) {
+        _requestParkingPrompt(null, occurrence);
+      }
+    }
     return RecurringSeriesWrite(templateId: templateRef.id, occurrences: tasks, ack: ack);
   }
 

@@ -12,6 +12,9 @@ import {
   localDateIn,
   localTimeToEpochSeconds,
   parkingPromptDecision,
+  parkingTaskId,
+  parkingScheduleDecision,
+  WORK_TRAIN_TITLE,
 } from "./parking.logic";
 import {
   GEMINI_MODEL_URL,
@@ -140,8 +143,6 @@ export const trainScheduleTest = onRequest({cors: false, secrets: [internalKey]}
   }
 });
 
-
-const WORK_TRAIN_TITLE = "Work Train";
 
 /**
  * Finds today's "Work Train" task for a user. Returns null when there is no such
@@ -1291,58 +1292,104 @@ async function scheduleParkingPrompt(userId: string) {
       return {error: `Document ${doc.id} did not have a start time`};
     }
 
-    const scheduleSeconds = localTimeToEpochSeconds(
-      date, todo.startTime, COMMUTE_TIMEZONE
-    );
-
-    const queuePath = tasksClient.queuePath(
-      CLOUD_TASKS_PROJECT,
-      CLOUD_TASKS_LOCATION,
-      CLOUD_TASKS_QUEUE
-    );
-
-    const deliverUrl = `https://${CLOUD_TASKS_LOCATION}-${CLOUD_TASKS_PROJECT}.cloudfunctions.net/deliverParkingPrompt`;
-    const payload = JSON.stringify({uid: userId, taskId: doc.id, taskDate: date});
-
-    // A deterministic name is what makes this idempotent: a second scheduling
-    // run on the same day collides here instead of enqueuing a second prompt.
-    // Two prompts would mean two chances to tap Yes.
-    const taskName = `${queuePath}/tasks/parking-${userId}-${date.replace(/-/g, "")}`;
-
-    try {
-      await tasksClient.createTask({
-        parent: queuePath,
-        task: {
-          name: taskName,
-          httpRequest: {
-            httpMethod: "POST",
-            url: deliverUrl,
-            headers: {"Content-Type": "application/json"},
-            body: Buffer.from(payload).toString("base64"),
-          },
-          // A startTime earlier than this run is not an error — Cloud Tasks
-          // dispatches a past schedule time promptly rather than rejecting it.
-          scheduleTime: {seconds: scheduleSeconds},
-        },
-      });
-    } catch (e: any) {
-      // 6 = ALREADY_EXISTS. The prompt is already scheduled; nothing to do.
-      if (e.code === 6) {
-        logger.info(`Parking prompt already scheduled for ${userId} on ${date}`);
-        return {skipped: "already scheduled"};
-      }
-      throw e;
-    }
-
-    logger.info(
-      `Scheduled parking prompt for ${userId} at ${todo.startTime} ${COMMUTE_TIMEZONE}`
-    );
-    return {scheduled: scheduleSeconds, taskId: doc.id};
+    return await enqueueParkingPrompt(userId, date, doc.id, todo.startTime);
   } catch (e) {
     logger.error("Error scheduling parking prompt", e);
     return {error: String(e)};
   }
 }
+
+/**
+ * Creates the Cloud Task that delivers the parking prompt at `startTime` on
+ * `date`. Shared by the morning cron and the on-demand callable.
+ */
+async function enqueueParkingPrompt(
+  userId: string, date: string, taskId: string, startTime: string
+) {
+  const scheduleSeconds = localTimeToEpochSeconds(
+    date, startTime, COMMUTE_TIMEZONE
+  );
+
+  const queuePath = tasksClient.queuePath(
+    CLOUD_TASKS_PROJECT,
+    CLOUD_TASKS_LOCATION,
+    CLOUD_TASKS_QUEUE
+  );
+
+  const deliverUrl = `https://${CLOUD_TASKS_LOCATION}-${CLOUD_TASKS_PROJECT}.cloudfunctions.net/deliverParkingPrompt`;
+  const payload = JSON.stringify({uid: userId, taskId, taskDate: date, startTime});
+
+  // A deterministic name is what makes this idempotent: the cron and the
+  // on-demand request (or two runs of either) collide here instead of enqueuing a
+  // second prompt. Two prompts would mean two chances to tap Yes.
+  const taskName = `${queuePath}/tasks/${parkingTaskId(userId, date, startTime)}`;
+
+  try {
+    await tasksClient.createTask({
+      parent: queuePath,
+      task: {
+        name: taskName,
+        httpRequest: {
+          httpMethod: "POST",
+          url: deliverUrl,
+          headers: {"Content-Type": "application/json"},
+          body: Buffer.from(payload).toString("base64"),
+        },
+        // A startTime earlier than this run is not an error — Cloud Tasks
+        // dispatches a past schedule time promptly rather than rejecting it.
+        scheduleTime: {seconds: scheduleSeconds},
+      },
+    });
+  } catch (e: any) {
+    // 6 = ALREADY_EXISTS. The prompt is already scheduled; nothing to do.
+    if (e.code === 6) {
+      logger.info(`Parking prompt already scheduled for ${userId} on ${date}`);
+      return {skipped: "already scheduled"};
+    }
+    throw e;
+  }
+
+  logger.info(
+    `Scheduled parking prompt for ${userId} at ${startTime} ${COMMUTE_TIMEZONE}`
+  );
+  return {scheduled: scheduleSeconds, taskId};
+}
+
+/**
+ * Schedules the parking prompt for a Work Train task added or retimed after
+ * the morning cron has already run. Called by the app only when it saves
+ * today's timed Work Train task — a Firestore trigger would run on every task
+ * write instead.
+ */
+export const scheduleParkingPromptForTask = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Must be logged in");
+  const {taskId, taskDate} = request.data ?? {};
+  if (typeof taskId !== "string" || !taskId ||
+      typeof taskDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(taskDate)) {
+    throw new HttpsError("invalid-argument", "taskId and taskDate are required");
+  }
+
+  // Read back rather than trusting the payload: the prompt must match what is
+  // actually stored, and only the caller's own tasks are reachable.
+  const taskDoc = await admin.firestore()
+    .collection("todos").doc(uid)
+    .collection("tasks").doc(taskDate)
+    .collection("items").doc(taskId)
+    .get();
+  const decision = parkingScheduleDecision({
+    task: taskDoc.data(),
+    taskDate,
+    today: localDateIn(COMMUTE_TIMEZONE),
+    nowSeconds: Math.floor(Date.now() / 1000),
+  });
+  if (!decision.schedule || !decision.startTime) return {skipped: decision.reason};
+
+  const userDoc = await admin.firestore().collection("todos").doc(uid).get();
+  if (userDoc.data()?.parkingAlert !== true) return {skipped: "Opted out"};
+
+  return enqueueParkingPrompt(uid, taskDate, taskId, decision.startTime);
+});
 
 export const cancelReminder = onCall(async (request) => {
   const uid = request.auth?.uid;
@@ -1449,7 +1496,7 @@ export const deliverReminder = onRequest(async (req, res) => {
 
 export const deliverParkingPrompt = onRequest(async (req, res) => {
   try {
-    const {uid, taskId, taskDate} = req.body;
+    const {uid, taskId, taskDate, startTime} = req.body;
     if (!uid || !taskId || !taskDate) {
       res.status(400).send("Missing required fields");
       return;
@@ -1469,6 +1516,8 @@ export const deliverParkingPrompt = onRequest(async (req, res) => {
       taskExists: taskDoc.exists,
       parkingAlert: userDoc.data()?.parkingAlert,
       fcmToken,
+      scheduledStartTime: startTime,
+      currentStartTime: taskDoc.data()?.startTime,
     });
 
     if (!decision.send) {

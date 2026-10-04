@@ -21,6 +21,9 @@ class DateService {
   @visibleForTesting
   DateTime Function() clock = DateTime.now;
 
+  /// The current instant.
+  DateTime now() => clock();
+
   /// The current wall-clock time of day.
   TimeOfDay nowTime() => TimeOfDay.fromDateTime(clock());
 

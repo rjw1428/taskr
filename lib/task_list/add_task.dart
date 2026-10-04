@@ -317,18 +317,18 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
         _dueDate = DateService().getString(initialDueDate!);
       }
     } else {
-      initialDueDate = DateTime.now();
+      initialDueDate = DateService().now();
     }
   }
 
   Future<DateTime?> _selectDate(BuildContext context, DateTime initial) async {
-    final now = DateTime.now();
+    final now = DateService().now();
     final DateTime? selectedDate = await showDatePicker(
       context: context,
       initialDate: initial,
       initialDatePickerMode: DatePickerMode.day,
       firstDate: DateTime(now.year - 1),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      lastDate: now.add(const Duration(days: 365)),
     );
     return selectedDate;
   }
@@ -558,7 +558,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                                   placeholder: 'Set date & time',
                                   onTap: () async {
                                     final defaultDate =
-                                        _dueDate != null ? DateService().getDate(_dueDate!) : DateTime.now();
+                                        _dueDate != null ? DateService().getDate(_dueDate!) : DateService().now();
                                     final date = await _selectDate(
                                         context,
                                         _reminderTime != null

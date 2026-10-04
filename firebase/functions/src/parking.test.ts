@@ -12,6 +12,8 @@ import {
   localDateIn,
   localTimeToEpochSeconds,
   parkingPromptDecision,
+  parkingTaskId,
+  parkingScheduleDecision,
 } from "./parking.logic";
 
 const TZ = "America/New_York";
@@ -106,4 +108,96 @@ test("skips when the user has no FCM token", () => {
   });
   assert.strictEqual(decision.send, false);
   assert.match(decision.reason, /token/i);
+});
+
+test("skips a prompt whose task has since been retimed", () => {
+  const decision = parkingPromptDecision({
+    taskExists: true, parkingAlert: true, fcmToken: "tok",
+    scheduledStartTime: "07:10", currentStartTime: "09:40",
+  });
+  assert.strictEqual(decision.send, false);
+  assert.match(decision.reason, /start time changed/i);
+});
+
+test("sends when the scheduled start time still matches", () => {
+  const decision = parkingPromptDecision({
+    taskExists: true, parkingAlert: true, fcmToken: "tok",
+    scheduledStartTime: "09:40", currentStartTime: "09:40",
+  });
+  assert.strictEqual(decision.send, true);
+});
+
+test("sends a prompt enqueued before the start time was recorded", () => {
+  // Cloud Tasks already in the queue at deploy time carry no startTime.
+  const decision = parkingPromptDecision({
+    taskExists: true, parkingAlert: true, fcmToken: "tok",
+    currentStartTime: "09:40",
+  });
+  assert.strictEqual(decision.send, true);
+});
+
+test("task name is stable for the same departure and differs when retimed", () => {
+  assert.strictEqual(
+    parkingTaskId("u1", "2026-10-02", "09:40"),
+    "parking-u1-20261002-0940"
+  );
+  assert.notStrictEqual(
+    parkingTaskId("u1", "2026-10-02", "09:40"),
+    parkingTaskId("u1", "2026-10-02", "07:10")
+  );
+});
+
+// 2026-10-02 08:00 EDT — after the 07:00 cron, which is the case that was missed.
+const AFTER_CRON = Math.floor(Date.parse("2026-10-02T12:00:00Z") / 1000);
+const TODAY = "2026-10-02";
+const train = (startTime?: string) => ({title: "Work Train", startTime});
+
+const decide = (task: any, taskDate = TODAY) => parkingScheduleDecision({
+  task, taskDate, today: TODAY, nowSeconds: AFTER_CRON,
+});
+
+test("schedules a Work Train added after the morning cron", () => {
+  assert.deepStrictEqual(
+    decide(train("09:40")),
+    {schedule: true, startTime: "09:40", reason: "Schedule"}
+  );
+});
+
+test("schedules a retimed Work Train at its new time", () => {
+  // The old prompt stands down at delivery; see parkingPromptDecision.
+  assert.strictEqual(decide(train("10:15")).startTime, "10:15");
+});
+
+test("skips a task that no longer exists", () => {
+  assert.strictEqual(decide(undefined).schedule, false);
+});
+
+test("skips other tasks and untimed Work Trains", () => {
+  for (const task of [{title: "Gym", startTime: "09:40"}, train(undefined), train("")]) {
+    assert.strictEqual(decide(task).schedule, false);
+  }
+});
+
+test("matches the title exactly, as the cron does", () => {
+  assert.strictEqual(decide({title: "work train", startTime: "09:40"}).schedule, false);
+});
+
+test("leaves other days to that day's cron", () => {
+  const d = decide(train("09:40"), "2026-10-03");
+  assert.strictEqual(d.schedule, false);
+  assert.match(d.reason, /today/i);
+});
+
+test("still prompts for a train logged shortly after boarding", () => {
+  assert.strictEqual(decide(train("07:45")).schedule, true);
+});
+
+test("does not prompt for a departure well in the past", () => {
+  const d = decide(train("07:15"));
+  assert.strictEqual(d.schedule, false);
+  assert.match(d.reason, /passed/i);
+});
+
+test("does not throw on a malformed start time", () => {
+  assert.strictEqual(decide(train("soon")).schedule, false);
 });

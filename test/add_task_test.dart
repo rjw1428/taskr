@@ -105,7 +105,7 @@ void main() {
     return {'id': id, ...data};
   }
 
-  String inDays(int days) => DateTime.now().toUtc().add(Duration(days: days)).toIso8601String();
+  String inDays(int days) => anchor.toUtc().add(Duration(days: days)).toIso8601String();
 
   group('new task', () {
     testWidgets('saves a task on the selected day with effort and description', (tester) async {
