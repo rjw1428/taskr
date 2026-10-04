@@ -5,10 +5,8 @@ import 'package:taskr/shared/shared.dart';
 class WorkUpdateForm extends StatefulWidget {
   const WorkUpdateForm({super.key});
 
-  static Future<String?> show(BuildContext context) => showModalBottomSheet<String>(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
+  static Future<String?> show(BuildContext context) => showAppSheet<String>(
+        context,
         builder: (_) => const WorkUpdateForm(),
       );
 

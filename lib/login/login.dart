@@ -8,7 +8,7 @@ class LoginScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ContentColumn(child: Scaffold(
       appBar: AppBar(
         title: const Text('Login'),
       ),
@@ -29,7 +29,7 @@ class LoginScreen extends StatelessWidget {
           ],
         ),
       )),
-    );
+    ));
   }
 }
 

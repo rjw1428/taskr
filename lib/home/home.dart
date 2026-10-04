@@ -92,8 +92,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showGoalsCreateChooser() {
-    showModalBottomSheet(
-      context: context,
+    showAppSheet(
+      context,
+      isScrollControlled: false,
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -104,10 +105,8 @@ class _HomeScreenState extends State<HomeScreen> {
               subtitle: const Text('AI-generated tasks toward a target'),
               onTap: () {
                 Navigator.pop(ctx);
-                showModalBottomSheet(
-                  isScrollControlled: true,
-                  useSafeArea: true,
-                  context: context,
+                showAppSheet(
+                  context,
                   builder: (_) => const GoalForm(),
                 );
               },
@@ -134,10 +133,8 @@ class _HomeScreenState extends State<HomeScreen> {
           onLongPress: () => _showDividerDialog(false),
           child: FloatingActionButton(
             child: const Icon(FontAwesomeIcons.plus, size: 20),
-            onPressed: () => showModalBottomSheet(
-              isScrollControlled: true,
-              useSafeArea: true,
-              context: context,
+            onPressed: () => showAppSheet(
+              context,
               builder: (BuildContext context) => const AddTaskScreen(isBacklog: false),
             ),
           ),
@@ -145,20 +142,16 @@ class _HomeScreenState extends State<HomeScreen> {
       case 1:
         return FloatingActionButton(
           child: const Icon(FontAwesomeIcons.plus, size: 20),
-          onPressed: () => showModalBottomSheet(
-            isScrollControlled: true,
-            useSafeArea: true,
-            context: context,
+          onPressed: () => showAppSheet(
+            context,
             builder: (BuildContext context) => const WorkItemForm(),
           ),
         );
       case 2:
         return FloatingActionButton(
           child: const Icon(FontAwesomeIcons.plus, size: 20),
-          onPressed: () => showModalBottomSheet(
-            isScrollControlled: true,
-            useSafeArea: true,
-            context: context,
+          onPressed: () => showAppSheet(
+            context,
             builder: (BuildContext context) => const AccomplishmentForm(),
           ),
         );
@@ -172,10 +165,8 @@ class _HomeScreenState extends State<HomeScreen> {
           onLongPress: () => _showDividerDialog(true),
           child: FloatingActionButton(
             child: const Icon(FontAwesomeIcons.plus, size: 20),
-            onPressed: () => showModalBottomSheet(
-              isScrollControlled: true,
-              useSafeArea: true,
-              context: context,
+            onPressed: () => showAppSheet(
+              context,
               builder: (BuildContext context) => const AddTaskScreen(isBacklog: true),
             ),
           ),
@@ -185,6 +176,151 @@ class _HomeScreenState extends State<HomeScreen> {
       default:
         return null;
     }
+  }
+
+  /// The phone tab bar.
+  Widget _buildBottomNav(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: Theme.of(context).appTokens.hairline)),
+      ),
+      child: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed,
+        currentIndex: _selectedIndex,
+        items: routeConfig.values.map((route) {
+          return BottomNavigationBarItem(
+            icon: Padding(
+              padding: const EdgeInsets.only(bottom: 3),
+              child: Icon(route.icon, size: 19),
+            ),
+            label: route.label,
+            tooltip: route.label,
+          );
+        }).toList(),
+        onTap: _onItemTapped,
+      ),
+    );
+  }
+
+  /// The wide-screen navigation rail. Same destinations, same order, same
+  /// handler as the tab bar; [extended] adds labels beside the icons.
+  Widget _buildRail(BuildContext context, {required bool extended}) {
+    final theme = Theme.of(context);
+    return NavigationRail(
+      key: const Key('home-rail'),
+      extended: extended,
+      minExtendedWidth: 208,
+      labelType: extended ? NavigationRailLabelType.none : NavigationRailLabelType.all,
+      groupAlignment: -1,
+      backgroundColor: theme.scaffoldBackgroundColor,
+      selectedIndex: _selectedIndex,
+      onDestinationSelected: _onItemTapped,
+      leading: Padding(
+        padding: const EdgeInsets.fromLTRB(Insets.sm, Insets.md, Insets.sm, Insets.xl),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(Corners.sm),
+              child: Image.asset('assets/images/logo.png', height: 36, width: 36),
+            ),
+            if (extended) ...[
+              const SizedBox(width: Insets.md),
+              Text('Taskr', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+            ],
+          ],
+        ),
+      ),
+      destinations: routeConfig.values
+          .map((route) => NavigationRailDestination(
+                icon: Icon(route.icon, size: 19),
+                label: Text(route.label),
+                padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+              ))
+          .toList(),
+    );
+  }
+
+  /// Wide screens have room to surface the two everyday destinations as
+  /// buttons; the rest stay in the overflow menu.
+  List<Widget> _buildWideActions(BuildContext context) {
+    return [
+      IconButton(
+        key: const Key('home-notifications'),
+        tooltip: 'Notifications',
+        icon: StreamBuilder<int>(
+          stream: NotificationService().unreadCount(),
+          builder: (context, snap) {
+            final count = snap.data ?? 0;
+            return Badge(
+              isLabelVisible: count > 0,
+              label: Text('$count'),
+              child: const Icon(FontAwesomeIcons.bell, size: 18),
+            );
+          },
+        ),
+        onPressed: () => Navigator.pushNamed(context, '/notifications'),
+      ),
+      IconButton(
+        key: const Key('home-settings'),
+        tooltip: 'Settings',
+        icon: const Icon(FontAwesomeIcons.gear, size: 18),
+        onPressed: () => Navigator.pushNamed(context, '/settings'),
+      ),
+      _buildOverflowMenu(context, withBadge: false),
+      const SizedBox(width: Insets.sm),
+    ];
+  }
+
+  /// The hamburger menu. On a phone it holds every destination and carries
+  /// the unread badge; on wide screens only what the app bar buttons do not.
+  Widget _buildOverflowMenu(BuildContext context, {required bool withBadge}) {
+    return PopupMenuButton<String>(
+      onSelected: (value) {
+        if (value == 'notifications') {
+          Navigator.pushNamed(context, '/notifications');
+        } else if (value == 'settings') {
+          Navigator.pushNamed(context, '/settings');
+        } else if (value == 'about') {
+          Navigator.pushNamed(context, '/about');
+        } else if (value == 'logout') {
+          AuthService().signOut();
+        }
+      },
+      itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+        if (withBadge) ...const [
+          PopupMenuItem<String>(
+            value: 'notifications',
+            child: Text('Notifications'),
+          ),
+          PopupMenuItem<String>(
+            value: 'settings',
+            child: Text('Settings'),
+          ),
+        ],
+        const PopupMenuItem<String>(
+          value: 'about',
+          child: Text('About'),
+        ),
+        const PopupMenuItem<String>(
+          value: 'logout',
+          child: Text('Logout'),
+        ),
+      ],
+      icon: withBadge
+          ? StreamBuilder<int>(
+              stream: NotificationService().unreadCount(),
+              builder: (context, snap) {
+                final count = snap.data ?? 0;
+                return Badge(
+                  isLabelVisible: count > 0,
+                  label: Text('$count'),
+                  child: const Icon(FontAwesomeIcons.bars),
+                );
+              },
+            )
+          : const Icon(FontAwesomeIcons.bars),
+    );
   }
 
   @override
@@ -212,53 +348,13 @@ class _HomeScreenState extends State<HomeScreen> {
         final currentLabel = routeConfig.values
             .firstWhere((r) => r.index == _selectedIndex, orElse: () => routeConfig['/']!)
             .label;
-        return Scaffold(
+        final layout = layoutSizeOf(context);
+        final page = Scaffold(
           appBar: AppBar(
             title: Text(currentLabel),
-            actions: [
-              PopupMenuButton<String>(
-                onSelected: (value) {
-                  if (value == 'notifications') {
-                    Navigator.pushNamed(context, '/notifications');
-                  } else if (value == 'settings') {
-                    Navigator.pushNamed(context, '/settings');
-                  } else if (value == 'about') {
-                    Navigator.pushNamed(context, '/about');
-                  } else if (value == 'logout') {
-                    AuthService().signOut();
-                  }
-                },
-                itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                  const PopupMenuItem<String>(
-                    value: 'notifications',
-                    child: Text('Notifications'),
-                  ),
-                  const PopupMenuItem<String>(
-                    value: 'settings',
-                    child: Text('Settings'),
-                  ),
-                  const PopupMenuItem<String>(
-                    value: 'about',
-                    child: Text('About'),
-                  ),
-                  const PopupMenuItem<String>(
-                    value: 'logout',
-                    child: Text('Logout'),
-                  ),
-                ],
-                icon: StreamBuilder<int>(
-                  stream: NotificationService().unreadCount(),
-                  builder: (context, snap) {
-                    final count = snap.data ?? 0;
-                    return Badge(
-                      isLabelVisible: count > 0,
-                      label: Text('$count'),
-                      child: const Icon(FontAwesomeIcons.bars),
-                    );
-                  },
-                ),
-              ),
-            ],
+            actions: layout.isCompact
+                ? [_buildOverflowMenu(context, withBadge: true)]
+                : _buildWideActions(context),
           ),
           body: Navigator(
             key: innerNavigatorKey,
@@ -272,27 +368,28 @@ class _HomeScreenState extends State<HomeScreen> {
               return fadeThroughRoute((_) => page, settings: setting);
             },
           ),
-          bottomNavigationBar: DecoratedBox(
-            decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: Theme.of(context).appTokens.hairline)),
-            ),
-            child: BottomNavigationBar(
-              type: BottomNavigationBarType.fixed,
-              currentIndex: _selectedIndex,
-              items: routeConfig.values.map((route) {
-                return BottomNavigationBarItem(
-                  icon: Padding(
-                    padding: const EdgeInsets.only(bottom: 3),
-                    child: Icon(route.icon, size: 19),
-                  ),
-                  label: route.label,
-                  tooltip: route.label,
-                );
-              }).toList(),
-              onTap: _onItemTapped,
-            ),
-          ),
+          bottomNavigationBar: layout.isCompact ? _buildBottomNav(context) : null,
           floatingActionButton: _buildFloatingActionButton(),
+        );
+        if (layout.isCompact) return page;
+
+        // Wide layout: a rail on the left, the page (app bar, content and its
+        // FAB) in a centered column so nothing stretches across the window.
+        return Scaffold(
+          body: Row(
+            children: [
+              _buildRail(context, extended: layout == LayoutSize.expanded),
+              VerticalDivider(width: 1, thickness: 1, color: Theme.of(context).appTokens.hairline),
+              Expanded(
+                child: ContentColumn(
+                  maxWidth: _selectedIndex == routeConfig['/performance']!.index
+                      ? ContentWidths.dashboard
+                      : ContentWidths.reading,
+                  child: page,
+                ),
+              ),
+            ],
+          ),
         );
       },
     );

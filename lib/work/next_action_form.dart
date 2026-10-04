@@ -12,10 +12,8 @@ class NextActionForm extends StatefulWidget {
   const NextActionForm({super.key, this.existing});
 
   static Future<NextActionInput?> show(BuildContext context, {NextAction? existing}) =>
-      showModalBottomSheet<NextActionInput>(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
+      showAppSheet<NextActionInput>(
+        context,
         builder: (_) => NextActionForm(existing: existing),
       );
 

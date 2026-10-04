@@ -29,13 +29,13 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
         );
 
         if (person.name == 'Person not found') {
-          return Scaffold(
+          return ContentColumn(child: Scaffold(
             appBar: AppBar(title: const Text('Person')),
             body: const Center(child: Text('Person not found')),
-          );
+          ));
         }
 
-        return Scaffold(
+        return ContentColumn(child: Scaffold(
           appBar: AppBar(
             title: Text(person.name),
             actions: [
@@ -79,7 +79,7 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
               );
             },
           ),
-        );
+        ));
       },
     );
   }

@@ -10,7 +10,7 @@ class NotificationCenterPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final service = NotificationService();
-    return Scaffold(
+    return ContentColumn(child: Scaffold(
       appBar: AppBar(
         title: const Text('Notifications'),
         actions: [
@@ -59,7 +59,7 @@ class NotificationCenterPage extends StatelessWidget {
           );
         },
       ),
-    );
+    ));
   }
 }
 

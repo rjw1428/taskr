@@ -10,7 +10,7 @@ class HealthPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ContentColumn(child: Scaffold(
       appBar: AppBar(title: Text('Health — $date')),
       body: StreamBuilder<HealthEntry?>(
         stream: HealthService().streamEntry(date),
@@ -39,7 +39,7 @@ class HealthPage extends StatelessWidget {
           );
         },
       ),
-    );
+    ));
   }
 
   static String _duration(int? seconds) {

@@ -31,8 +31,10 @@ Running local environment:
 
 Deploying the web build (Firebase Hosting):
 - `flutter build web --release --dart-define-from-file=.env`, then from the
-  `firebase` directory `firebase deploy --only hosting`. Hosting serves
-  `build/web` at the site root with an SPA rewrite to `index.html`.
+  `firebase` directory `firebase deploy --only hosting`. A predeploy hook
+  copies `build/web` into `firebase/public` (gitignored) because Hosting only
+  serves from inside the `firebase` directory. The site root has an SPA
+  rewrite to `index.html`.
 - The Flutter entry points (`index.html`, `flutter_bootstrap.js`,
   `flutter_service_worker.js`, `main.dart.js`, `version.json`) are served
   with no-cache headers so browsers pick up a new build instead of a stale

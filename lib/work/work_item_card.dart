@@ -24,10 +24,8 @@ class WorkItemCard extends StatelessWidget {
     required this.onSendToBottom,
   });
 
-  Future<void> _openEdit(BuildContext context) => showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
+  Future<void> _openEdit(BuildContext context) => showAppSheet(
+        context,
         builder: (_) => WorkItemForm(item: item, service: actions.service),
       );
 

@@ -53,7 +53,7 @@ class _AccomplishmentDetailView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final t = theme.appTokens;
-    return Scaffold(
+    return ContentColumn(child: Scaffold(
       appBar: AppBar(
         title: Text(accomplishment.title),
         actions: const [],
@@ -154,6 +154,6 @@ class _AccomplishmentDetailView extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ));
   }
 }

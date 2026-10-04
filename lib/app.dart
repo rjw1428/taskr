@@ -127,10 +127,8 @@ void _handleShortcut(String type) {
   switch (type) {
     case addTaskShortcutType:
     case addBacklogShortcutType:
-      _whenReadyForShortcut((context) => showModalBottomSheet(
-            isScrollControlled: true,
-            useSafeArea: true,
-            context: context,
+      _whenReadyForShortcut((context) => showAppSheet(
+            context,
             builder: (_) =>
                 AddTaskScreen(isBacklog: type == addBacklogShortcutType),
           ));

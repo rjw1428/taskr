@@ -36,10 +36,8 @@ class _WorkDetailPageState extends State<WorkDetailPage> {
       case 'copy':
         await _actions.copyItem(context, item);
       case 'edit':
-        await showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          useSafeArea: true,
+        await showAppSheet(
+          context,
           builder: (_) => WorkItemForm(item: item, service: _service),
         );
       case 'update':
@@ -81,7 +79,7 @@ class _WorkDetailPageState extends State<WorkDetailPage> {
         }
         final open = item.openActions;
         final timeline = WorkLogic.buildTimeline(item);
-        return Scaffold(
+        return ContentColumn(child: Scaffold(
           appBar: AppBar(
             title: Text(widget.archived ? 'Archived work' : 'Work item'),
             actions: [
@@ -154,7 +152,7 @@ class _WorkDetailPageState extends State<WorkDetailPage> {
               const SizedBox(height: Insets.xxl),
             ],
           ),
-        );
+        ));
       },
     );
   }

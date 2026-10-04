@@ -96,7 +96,7 @@ class _HabitFormState extends State<HabitForm> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final t = theme.appTokens;
-    return Scaffold(
+    return ContentColumn(child: Scaffold(
       appBar: AppBar(
         title: Text(widget.habit == null ? 'New Habit' : 'Edit Habit'),
         actions: [
@@ -156,6 +156,6 @@ class _HabitFormState extends State<HabitForm> {
           ),
         ),
       ),
-    );
+    ));
   }
 }

@@ -55,3 +55,4 @@ service-account-key.json
 # Test tooling output
 /coverage/
 /tool/mutation/report/
+firebase/public/

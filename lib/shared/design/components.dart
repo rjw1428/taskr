@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:taskr/shared/design/layout.dart';
 import 'package:taskr/shared/design/tokens.dart';
 
 /// Reusable, themed building blocks for the redesign. Screens compose from
@@ -52,7 +53,10 @@ class SectionHeader extends StatelessWidget {
   final Widget? trailing;
   final EdgeInsetsGeometry padding;
 
-  const SectionHeader(this.title, {super.key, this.trailing, this.padding = const EdgeInsets.fromLTRB(Insets.xs, Insets.lg, Insets.xs, Insets.sm)});
+  const SectionHeader(this.title,
+      {super.key,
+      this.trailing,
+      this.padding = const EdgeInsets.fromLTRB(Insets.xs, Insets.lg, Insets.xs, Insets.sm)});
 
   @override
   Widget build(BuildContext context) {
@@ -116,7 +120,8 @@ class SecondaryButton extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Corners.md)),
     );
     final btn = icon != null
-        ? OutlinedButton.icon(onPressed: onPressed, icon: Icon(icon, size: 18), label: Text(label), style: style)
+        ? OutlinedButton.icon(
+            onPressed: onPressed, icon: Icon(icon, size: 18), label: Text(label), style: style)
         : OutlinedButton(onPressed: onPressed, style: style, child: Text(label));
     return expand ? SizedBox(width: double.infinity, child: btn) : btn;
   }
@@ -173,6 +178,9 @@ class AppBottomSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    // Inside a dialog (wide layouts) there is nothing to drag, so the grab
+    // handle goes and the title carries the top padding instead.
+    final inDialog = layoutSizeOf(context).isWide;
     return SafeArea(
       top: false,
       child: Padding(
@@ -180,23 +188,26 @@ class AppBottomSheet extends StatelessWidget {
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: theme.colorScheme.surface,
-            borderRadius: const BorderRadius.vertical(top: Corners.rMd),
+            borderRadius: inDialog
+                ? const BorderRadius.all(Corners.rLg)
+                : const BorderRadius.vertical(top: Corners.rMd),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                margin: const EdgeInsets.only(top: Insets.md, bottom: Insets.xs),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: theme.appTokens.textFaint.withAlpha(90),
-                  borderRadius: BorderRadius.circular(2),
+              if (!inDialog)
+                Container(
+                  margin: const EdgeInsets.only(top: Insets.md, bottom: Insets.xs),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: theme.appTokens.textFaint.withAlpha(90),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
-              ),
               if (title != null)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(Insets.lg, Insets.sm, Insets.lg, 0),
+                  padding: EdgeInsets.fromLTRB(Insets.lg, inDialog ? Insets.xl : Insets.sm, Insets.lg, 0),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text(title!, style: theme.textTheme.titleLarge),

@@ -24,7 +24,7 @@ class _WorkArchivePageState extends State<WorkArchivePage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final t = theme.appTokens;
-    return Scaffold(
+    return ContentColumn(child: Scaffold(
       appBar: AppBar(title: const Text('Archived work')),
       body: StreamBuilder<List<WorkItem>>(
         stream: _stream,
@@ -71,6 +71,6 @@ class _WorkArchivePageState extends State<WorkArchivePage> {
           );
         },
       ),
-    );
+    ));
   }
 }

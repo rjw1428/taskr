@@ -204,10 +204,8 @@ class _SubtaskGroupCardState extends State<SubtaskGroupCard> {
       icon: Icon(FontAwesomeIcons.ellipsisVertical, size: 15, color: Theme.of(context).appTokens.textFaint),
       onSelected: (v) {
         if (v == 'edit') {
-          showModalBottomSheet(
-            useSafeArea: true,
-            isScrollControlled: true,
-            context: context,
+          showAppSheet(
+            context,
             builder: (_) => AddTaskScreen(task: widget.parent, isBacklog: true),
           );
         } else if (v == 'assign') {

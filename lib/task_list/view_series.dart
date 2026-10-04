@@ -128,7 +128,7 @@ class _ViewSeriesState extends State<ViewSeries> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ContentColumn(child: Scaffold(
       appBar: AppBar(
         title: const Text('View Recurring Task'),
       ),
@@ -188,6 +188,6 @@ class _ViewSeriesState extends State<ViewSeries> {
           }
         },
       ),
-    );
+    ));
   }
 }

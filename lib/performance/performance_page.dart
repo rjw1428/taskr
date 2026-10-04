@@ -71,6 +71,9 @@ class CurrentScore extends StatefulWidget {
 }
 
 class CurrentScoreState extends State<CurrentScore> {
+  /// Content width at which the dashboard splits into two columns.
+  static const double twoColumnMinWidth = 900;
+
   bool isShowingAll = true;
 
   @override
@@ -133,138 +136,196 @@ class CurrentScoreState extends State<CurrentScore> {
     final pushedValues = pushedDayKeys.map((k) => pushedByDate[k] ?? 0).toList();
     final pushedLabels = pushedDays.map((d) => DateFormat('E').format(d)).toList();
 
+    final header = AppCard(child: PerformanceAverageHeader(userId: widget.userId));
+    final dailyScore = AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Daily score', style: theme.textTheme.titleMedium),
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(value: true, label: Text('Total')),
+                  ButtonSegment(value: false, label: Text('Breakdown')),
+                ],
+                selected: {isShowingAll},
+                showSelectedIcon: false,
+                onSelectionChanged: (s) => setState(() => isShowingAll = s.first),
+                style: const ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: Insets.lg),
+          SizedBox(
+            height: 180,
+            child: LineChart(
+              LineChartData(
+                lineTouchData: LineTouchData(
+                  handleBuiltInTouches: true,
+                  touchTooltipData: LineTouchTooltipData(
+                    fitInsideHorizontally: true,
+                    fitInsideVertically: true,
+                    getTooltipColor: (touchedSpot) => t.surfaceRaised.withValues(alpha: 0.95),
+                    getTooltipItems: (data) => data.map((spot) {
+                      return LineTooltipItem(
+                          spot.y.toString(), TextStyle(color: theme.colorScheme.onSurface));
+                    }).toList(),
+                  ),
+                ),
+                gridData: const FlGridData(show: false),
+                titlesData: FlTitlesData(
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 32,
+                        interval: 1,
+                        getTitlesWidget: (double value, TitleMeta meta) =>
+                            bottomTitleWidgets(value, meta, chartData.length, t.textMuted)),
+                  ),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                        getTitlesWidget: (v, m) => leftTitleWidgets(v, m, t.textMuted),
+                        showTitles: true,
+                        interval: 2),
+                  ),
+                ),
+                borderData: FlBorderData(
+                  show: true,
+                  border: Border(
+                    bottom: BorderSide(color: t.hairline, width: 2),
+                    left: const BorderSide(color: Colors.transparent),
+                    right: const BorderSide(color: Colors.transparent),
+                    top: const BorderSide(color: Colors.transparent),
+                  ),
+                ),
+                lineBarsData: seriesToBars(chartSeries, isShowingAll),
+                maxY: maxYAxis.toDouble(),
+                minY: 0,
+              ),
+            ),
+          ),
+          // Breakdown legend: identify which line is which tag.
+          if (!isShowingAll)
+            Padding(
+              padding: const EdgeInsets.only(top: Insets.md),
+              child: Wrap(
+                spacing: Insets.lg,
+                runSpacing: Insets.sm,
+                children: chartSeries
+                    .where((s) => s.shown)
+                    .map((s) => _LegendDot(color: s.color, label: tagNames[s.key] ?? s.key))
+                    .toList(),
+              ),
+            ),
+        ],
+      ),
+    );
+    final heatmap = AppCard(child: PerformanceHeatmap(userId: widget.userId));
+    final pushed = _PushedChartCard(
+      values: pushedValues,
+      labels: pushedLabels,
+      // The last entry is today; a day's leftovers aren't "missed" until
+      // it's over, so today contributes no missed points.
+      dayKeys: pushedDayKeys.sublist(0, pushedDayKeys.length - 1),
+      userId: widget.userId,
+    );
+    final accomplishments = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: Insets.xs, bottom: Insets.sm),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Latest accomplishments', style: theme.textTheme.titleMedium),
+              TextButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const AccomplishmentListPage()),
+                ),
+                child: const Text('See all'),
+              ),
+            ],
+          ),
+        ),
+        const _AccomplishmentsSummary(),
+      ],
+    );
+    final records = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: Insets.xs, bottom: Insets.sm),
+          child: Text('Records', style: theme.textTheme.titleMedium),
+        ),
+        _RecordsCard(userId: widget.userId),
+      ],
+    );
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(Insets.lg, Insets.md, Insets.lg, Insets.xxl),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          AppCard(child: PerformanceAverageHeader(userId: widget.userId)),
-          const SizedBox(height: Insets.lg),
-          AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Two columns once the page is wide enough for the charts to keep
+          // their proportions: the score story on the left, history and
+          // records on the right. Below that, the phone's single column.
+          if (constraints.maxWidth < twoColumnMinWidth) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                header,
+                const SizedBox(height: Insets.lg),
+                dailyScore,
+                const SizedBox(height: Insets.lg),
+                heatmap,
+                const SizedBox(height: Insets.lg),
+                pushed,
+                const SizedBox(height: Insets.lg),
+                accomplishments,
+                const SizedBox(height: Insets.lg),
+                records,
+              ],
+            );
+          }
+          return Row(
+            key: const Key('performance-two-column'),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text('Daily score', style: theme.textTheme.titleMedium),
-                    SegmentedButton<bool>(
-                      segments: const [
-                        ButtonSegment(value: true, label: Text('Total')),
-                        ButtonSegment(value: false, label: Text('Breakdown')),
-                      ],
-                      selected: {isShowingAll},
-                      showSelectedIcon: false,
-                      onSelectionChanged: (s) => setState(() => isShowingAll = s.first),
-                      style: const ButtonStyle(
-                        visualDensity: VisualDensity.compact,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                    ),
+                    header,
+                    const SizedBox(height: Insets.lg),
+                    dailyScore,
+                    const SizedBox(height: Insets.lg),
+                    pushed,
                   ],
                 ),
-                const SizedBox(height: Insets.lg),
-                SizedBox(
-                  height: 180,
-                  child: LineChart(
-                    LineChartData(
-                      lineTouchData: LineTouchData(
-                        handleBuiltInTouches: true,
-                        touchTooltipData: LineTouchTooltipData(
-                          fitInsideHorizontally: true,
-                          fitInsideVertically: true,
-                          getTooltipColor: (touchedSpot) => t.surfaceRaised.withValues(alpha: 0.95),
-                          getTooltipItems: (data) => data.map((spot) {
-                            return LineTooltipItem(spot.y.toString(), TextStyle(color: theme.colorScheme.onSurface));
-                          }).toList(),
-                        ),
-                      ),
-                      gridData: const FlGridData(show: false),
-                      titlesData: FlTitlesData(
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 32,
-                              interval: 1,
-                              getTitlesWidget: (double value, TitleMeta meta) =>
-                                  bottomTitleWidgets(value, meta, chartData.length, t.textMuted)),
-                        ),
-                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        leftTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                              getTitlesWidget: (v, m) => leftTitleWidgets(v, m, t.textMuted),
-                              showTitles: true,
-                              interval: 2),
-                        ),
-                      ),
-                      borderData: FlBorderData(
-                        show: true,
-                        border: Border(
-                          bottom: BorderSide(color: t.hairline, width: 2),
-                          left: const BorderSide(color: Colors.transparent),
-                          right: const BorderSide(color: Colors.transparent),
-                          top: const BorderSide(color: Colors.transparent),
-                        ),
-                      ),
-                      lineBarsData: seriesToBars(chartSeries, isShowingAll),
-                      maxY: maxYAxis.toDouble(),
-                      minY: 0,
-                    ),
-                  ),
+              ),
+              const SizedBox(width: Insets.lg),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    heatmap,
+                    const SizedBox(height: Insets.lg),
+                    accomplishments,
+                    const SizedBox(height: Insets.lg),
+                    records,
+                  ],
                 ),
-                // Breakdown legend: identify which line is which tag.
-                if (!isShowingAll)
-                  Padding(
-                    padding: const EdgeInsets.only(top: Insets.md),
-                    child: Wrap(
-                      spacing: Insets.lg,
-                      runSpacing: Insets.sm,
-                      children: chartSeries
-                          .where((s) => s.shown)
-                          .map((s) => _LegendDot(color: s.color, label: tagNames[s.key] ?? s.key))
-                          .toList(),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: Insets.lg),
-          AppCard(child: PerformanceHeatmap(userId: widget.userId)),
-          const SizedBox(height: Insets.lg),
-          _PushedChartCard(
-            values: pushedValues,
-            labels: pushedLabels,
-            // The last entry is today; a day's leftovers aren't "missed" until
-            // it's over, so today contributes no missed points.
-            dayKeys: pushedDayKeys.sublist(0, pushedDayKeys.length - 1),
-            userId: widget.userId,
-          ),
-          const SizedBox(height: Insets.lg),
-          Padding(
-            padding: const EdgeInsets.only(left: Insets.xs, bottom: Insets.sm),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Latest accomplishments', style: theme.textTheme.titleMedium),
-                TextButton(
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const AccomplishmentListPage()),
-                  ),
-                  child: const Text('See all'),
-                ),
-              ],
-            ),
-          ),
-          const _AccomplishmentsSummary(),
-          const SizedBox(height: Insets.lg),
-          Padding(
-            padding: const EdgeInsets.only(left: Insets.xs, bottom: Insets.sm),
-            child: Text('Records', style: theme.textTheme.titleMedium),
-          ),
-          _RecordsCard(userId: widget.userId),
-        ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -307,10 +368,13 @@ class _RecordsCardState extends State<_RecordsCard> {
             style: theme.textTheme.labelSmall?.copyWith(color: t.textFaint, letterSpacing: 1.2)),
         const SizedBox(height: 4),
         Text(value,
-            style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w800, fontFeatures: const [FontFeature.tabularFigures()])),
+            style: theme.textTheme.headlineSmall
+                ?.copyWith(fontWeight: FontWeight.w800, fontFeatures: const [FontFeature.tabularFigures()])),
         const SizedBox(height: 2),
-        Text(sub, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: t.textMuted)),
+        Text(sub,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(color: t.textMuted)),
       ],
     );
   }
@@ -472,6 +536,7 @@ class _LegendDot extends StatelessWidget {
 class _PushedChartCard extends StatefulWidget {
   final List<int> values; // pushed, oldest -> today
   final List<String> labels;
+
   /// Day strings for the past days only (i.e. `labels` minus today), used to
   /// look up missed points; index i lines up with bar i.
   final List<String> dayKeys;
@@ -592,7 +657,8 @@ class _PushedChartCardState extends State<_PushedChartCard> {
                           axisSide: m.axisSide,
                           space: 8,
                           child: Text(label,
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: t.textMuted)),
+                              style:
+                                  TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: t.textMuted)),
                         );
                       },
                     ),

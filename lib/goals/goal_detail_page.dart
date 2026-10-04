@@ -122,10 +122,10 @@ class _GoalDetailPageState extends State<GoalDetailPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return Scaffold(
+      return ContentColumn(child: Scaffold(
         appBar: AppBar(title: const Text('Goal')),
         body: const Center(child: CircularProgressIndicator()),
-      );
+      ));
     }
 
     final theme = Theme.of(context);
@@ -146,7 +146,7 @@ class _GoalDetailPageState extends State<GoalDetailPage> {
     final elapsedDays = now.difference(start).inDays;
     final progress = totalDays > 0 ? (elapsedDays / totalDays).clamp(0.0, 1.0) : 1.0;
 
-    return Scaffold(
+    return ContentColumn(child: Scaffold(
       appBar: AppBar(
         title: Text(goal.title),
         actions: [
@@ -160,10 +160,8 @@ class _GoalDetailPageState extends State<GoalDetailPage> {
             IconButton(
               icon: const Icon(FontAwesomeIcons.penToSquare),
               onPressed: () async {
-                await showModalBottomSheet(
-                  isScrollControlled: true,
-                  useSafeArea: true,
-                  context: context,
+                await showAppSheet(
+                  context,
                   builder: (_) => GoalForm(goal: goal),
                 );
                 _loadGoal();
@@ -292,7 +290,7 @@ class _GoalDetailPageState extends State<GoalDetailPage> {
           ],
         ),
       ),
-    );
+    ));
   }
 
   Widget _infoRow(String label, String value) {

@@ -397,10 +397,8 @@ class TaskItemState extends State<TaskItem> {
           if (value == "PUSH") {
             widget.taskService.pushTask(widget.task);
           } else if (value == "EDIT") {
-            showModalBottomSheet(
-                useSafeArea: true,
-                isScrollControlled: true,
-                context: context,
+            showAppSheet(
+                context,
                 builder: (BuildContext context) => AddTaskScreen(task: widget.task, isBacklog: isBacklog));
           } else if (value == "REMOVE") {
             widget.onDelete(widget.task);

@@ -50,7 +50,7 @@ class SettingsPageState extends State<SettingsForm> {
     final theme = Theme.of(context);
     var tagProvider = Provider.of<TagProvider>(context);
     var tags = tagProvider.tags;
-    return Scaffold(
+    return ContentColumn(child: Scaffold(
         appBar: AppBar(
           title: const Text('Settings'),
         ),
@@ -106,7 +106,7 @@ class SettingsPageState extends State<SettingsForm> {
             ),
             const SizedBox(height: Insets.xl),
           ],
-        ));
+        )));
   }
 
   void _editTag([Tag? tag]) {
