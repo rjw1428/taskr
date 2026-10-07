@@ -12,7 +12,12 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
-flutter build web --release --dart-define-from-file=.env
+flutter build web --release --pwa-strategy=none --dart-define-from-file=.env
+
+# --pwa-strategy=none stops the bootstrap from registering a service worker, but
+# a previous build may have left the script behind in build/web. Drop it so the
+# URL 404s: a browser still holding an old registration unregisters on that.
+rm -f build/web/flutter_service_worker.js
 
 # The predeploy hook in firebase/firebase.json copies build/web into
 # firebase/public, so no manual copy here.

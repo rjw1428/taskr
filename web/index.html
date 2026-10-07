@@ -39,6 +39,32 @@
   </style>
 </head>
 <body>
+  <!--
+    The app is built with --pwa-strategy=none (see deploy-web.sh), so nothing
+    registers a service worker any more. Browsers that visited an older build
+    still have one, and it keeps serving that build's cached assets - including
+    a stale, icon-tree-shaken font that is missing glyphs added since. Tear any
+    survivor down and reload once so the page comes back from the network.
+  -->
+  <script>
+    (function () {
+      if (!('serviceWorker' in navigator)) return;
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        if (!regs.length) return;
+        var done = regs.map(function (r) { return r.unregister(); });
+        if (window.caches) {
+          done.push(caches.keys().then(function (keys) {
+            return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+          }));
+        }
+        Promise.all(done).then(function () {
+          if (sessionStorage.getItem('sw-purged')) return;
+          sessionStorage.setItem('sw-purged', '1');
+          location.reload();
+        });
+      }).catch(function () {});
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

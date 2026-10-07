@@ -56,3 +56,4 @@ service-account-key.json
 /coverage/
 /tool/mutation/report/
 firebase/public/
+.playwright-mcp/
