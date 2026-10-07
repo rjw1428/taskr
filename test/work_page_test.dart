@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/work.service.dart';
+import 'package:taskr/shared/design/tokens.dart';
 import 'package:taskr/work/work_page.dart';
 
 import 'helpers/clipboard.dart';
@@ -26,8 +27,8 @@ void main() {
     await settle(tester);
   }
 
-  NextAction act(String id, String text, {String? waiting, int? done}) =>
-      NextAction(id: id, text: text, createdAt: 1, waitingOn: waiting, completedAt: done);
+  NextAction act(String id, String text, {String? waiting, int? done, int? pinned}) =>
+      NextAction(id: id, text: text, createdAt: 1, waitingOn: waiting, completedAt: done, pinnedAt: pinned);
 
   testWidgets('empty state', (tester) async {
     await pump(tester);
@@ -242,5 +243,115 @@ void main() {
     await service.add(WorkItem(title: 'Alpha', notes: 'See https://jira.test/ABC-1 soon'));
     await pump(tester);
     expect(find.byWidgetPredicate((w) => w is Text && (w.textSpan?.toPlainText().contains('jira.test') ?? false)), findsOneWidget);
+  });
+
+  group('pinned actions', () {
+    Color pinIconColor(WidgetTester tester, Key key) =>
+        (tester.widget<IconButton>(find.byKey(key)).icon as Icon).color!;
+
+    testWidgets('section hidden with no pins; thumbtack pins and unpins from the card', (tester) async {
+      final a = await service.add(WorkItem(title: 'Alpha', nextActions: [act('1', 'Do one')]));
+      await pump(tester);
+      expect(find.byKey(const Key('pinned-section')), findsNothing);
+
+      final theme = Theme.of(tester.element(find.text('Alpha')));
+      expect(pinIconColor(tester, const Key('pin-1')), isNot(theme.appTokens.pinned.accent));
+      await tester.tap(find.byKey(const Key('pin-1')));
+      await settle(tester);
+      expect(find.byKey(const Key('pinned-section')), findsOneWidget);
+      expect(((await stored(a))!['nextActions'] as List).single['pinnedAt'], isA<int>());
+      // The card's row now shows the filled accent thumbtack.
+      expect(pinIconColor(tester, const Key('pin-1')), theme.appTokens.pinned.accent);
+
+      await tester.tap(find.byKey(const Key('pin-1')));
+      await settle(tester);
+      expect(find.byKey(const Key('pinned-section')), findsNothing);
+      expect(((await stored(a))!['nextActions'] as List).single['pinnedAt'], isNull);
+      expect(find.text('Do one'), findsOneWidget);
+    });
+
+    testWidgets('lists pins across priorities ordered by pin time with source titles', (tester) async {
+      await service.add(WorkItem(title: 'Alpha', nextActions: [act('1', 'Late pin', pinned: 30)]));
+      await service.add(WorkItem(title: 'Beta', nextActions: [act('2', 'First pin', pinned: 10), act('3', 'Unpinned')]));
+      await pump(tester);
+      final section = find.byKey(const Key('pinned-section'));
+      expect(section, findsOneWidget);
+      expect(find.descendant(of: section, matching: find.text('First pin')), findsOneWidget);
+      expect(find.descendant(of: section, matching: find.text('Late pin')), findsOneWidget);
+      expect(find.descendant(of: section, matching: find.text('Unpinned')), findsNothing);
+      // Source priority titles appear as secondary lines.
+      expect(find.descendant(of: section, matching: find.text('Alpha')), findsOneWidget);
+      expect(find.descendant(of: section, matching: find.text('Beta')), findsOneWidget);
+      // Oldest pin first.
+      final first = tester.getTopLeft(find.descendant(of: section, matching: find.text('First pin'))).dy;
+      final late_ = tester.getTopLeft(find.descendant(of: section, matching: find.text('Late pin'))).dy;
+      expect(first < late_, isTrue);
+    });
+
+    testWidgets('checking in the section completes everywhere and Undo restores both, still pinned', (tester) async {
+      final a = await service.add(WorkItem(title: 'Alpha', nextActions: [act('1', 'Do one', pinned: 5)]));
+      await pump(tester);
+      expect(find.text('Do one'), findsNWidgets(2)); // pinned row + card row
+      await tester.tap(find.byKey(const Key('pinned-complete-1')));
+      await settle(tester);
+      expect(find.text('Do one'), findsNothing);
+      expect(find.byKey(const Key('pinned-section')), findsNothing);
+      final done = ((await stored(a))!['nextActions'] as List).single;
+      expect(done['completedAt'], isA<int>());
+      expect(done['pinnedAt'], 5);
+      await tester.tap(find.text('Undo'));
+      await settle(tester);
+      expect(find.text('Do one'), findsNWidgets(2));
+      expect(find.byKey(const Key('pinned-section')), findsOneWidget);
+      final undone = ((await stored(a))!['nextActions'] as List).single;
+      expect(undone['completedAt'], isNull);
+      expect(undone['pinnedAt'], 5);
+    });
+
+    testWidgets('completing from the card also clears the pinned list', (tester) async {
+      await service.add(WorkItem(title: 'Alpha', nextActions: [act('1', 'Do one', pinned: 5)]));
+      await pump(tester);
+      await tester.tap(find.byKey(const Key('complete-1')));
+      await settle(tester);
+      expect(find.byKey(const Key('pinned-section')), findsNothing);
+    });
+
+    testWidgets('unpinning from the section leaves the action open on its card', (tester) async {
+      final a = await service.add(WorkItem(title: 'Alpha', nextActions: [act('1', 'Do one', pinned: 5)]));
+      await pump(tester);
+      await tester.tap(find.byKey(const Key('pinned-pin-1')));
+      await settle(tester);
+      expect(find.byKey(const Key('pinned-section')), findsNothing);
+      expect(find.text('Do one'), findsOneWidget);
+      final action = ((await stored(a))!['nextActions'] as List).single;
+      expect(action['pinnedAt'], isNull);
+      expect(action['completedAt'], isNull);
+    });
+
+    testWidgets('pinned waiting row keeps hourglass and completes via its menu', (tester) async {
+      final a = await service.add(WorkItem(title: 'Alpha', nextActions: [act('w', 'Numbers', waiting: 'Sam', pinned: 5)]));
+      await pump(tester);
+      expect(find.byKey(const Key('pinned-waiting-w')), findsOneWidget);
+      expect(find.byKey(const Key('pinned-complete-w')), findsNothing);
+      await tester.tap(find.byKey(const Key('pinned-menu-w')));
+      await settle(tester);
+      await tester.tap(find.text('Mark done').last);
+      await settle(tester);
+      expect(find.byKey(const Key('pinned-section')), findsNothing);
+      expect(((await stored(a))!['nextActions'] as List).single['completedAt'], isA<int>());
+    });
+
+    testWidgets('archiving an item removes its actions from the section', (tester) async {
+      final a = await service.add(WorkItem(title: 'Alpha', nextActions: [act('1', 'Do one', pinned: 5)]));
+      await service.add(WorkItem(title: 'Beta', nextActions: [act('2', 'Keep', pinned: 6)]));
+      await pump(tester);
+      await tester.tap(find.byKey(Key('item-menu-$a')));
+      await settle(tester);
+      await tester.tap(find.text('Archive'));
+      await settle(tester);
+      final section = find.byKey(const Key('pinned-section'));
+      expect(find.descendant(of: section, matching: find.text('Do one')), findsNothing);
+      expect(find.descendant(of: section, matching: find.text('Keep')), findsOneWidget);
+    });
   });
 }

@@ -2,8 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/work/work_logic.dart';
 
-NextAction a(String id, {int at = 1, int? done, String? waiting}) =>
-    NextAction(id: id, text: 'text $id', createdAt: at, completedAt: done, waitingOn: waiting);
+NextAction a(String id, {int at = 1, int? done, String? waiting, int? pinned}) =>
+    NextAction(id: id, text: 'text $id', createdAt: at, completedAt: done, waitingOn: waiting, pinnedAt: pinned);
 
 void main() {
   group('WorkLogic next actions', () {
@@ -38,6 +38,46 @@ void main() {
     test('openActions filters completed', () {
       final item = WorkItem(title: 't', nextActions: [a('1'), a('2', done: 5)]);
       expect(WorkLogic.openActions(item).map((x) => x.id), ['1']);
+    });
+
+    test('setPinned pins only the matching action', () {
+      final out = WorkLogic.setPinned([a('1'), a('2')], '1', 99);
+      expect(out[0].pinnedAt, 99);
+      expect(out[1].pinnedAt, isNull);
+      final cleared = WorkLogic.setPinned(out, '1', null);
+      expect(cleared[0].pinnedAt, isNull);
+      expect(cleared.map((x) => x.id), ['1', '2']);
+    });
+
+    test('complete and undo leave pinnedAt untouched', () {
+      final done = WorkLogic.completeNextAction([a('1', pinned: 7)], '1', 99);
+      expect(done.single.pinnedAt, 7);
+      final undone = WorkLogic.undoComplete(done, '1');
+      expect(undone.single.pinnedAt, 7);
+      expect(undone.single.completedAt, isNull);
+    });
+  });
+
+  group('WorkLogic.pinnedActions', () {
+    test('excludes completed and unpinned actions', () {
+      final items = [
+        WorkItem(id: 'i1', title: 'A', nextActions: [a('1', pinned: 10), a('2'), a('3', pinned: 5, done: 99)]),
+      ];
+      expect(WorkLogic.pinnedActions(items).map((p) => p.$2.id), ['1']);
+    });
+
+    test('spans items and orders by pin time, oldest first', () {
+      final items = [
+        WorkItem(id: 'i1', title: 'A', nextActions: [a('1', pinned: 30)]),
+        WorkItem(id: 'i2', title: 'B', nextActions: [a('2', pinned: 10), a('3', pinned: 20)]),
+      ];
+      final pairs = WorkLogic.pinnedActions(items);
+      expect(pairs.map((p) => p.$2.id), ['2', '3', '1']);
+      expect(pairs.map((p) => p.$1.title), ['B', 'B', 'A']);
+    });
+
+    test('empty when nothing is pinned', () {
+      expect(WorkLogic.pinnedActions([WorkItem(title: 'A', nextActions: [a('1')])]), isEmpty);
     });
   });
 

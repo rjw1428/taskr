@@ -71,5 +71,32 @@ void main() {
       expect(NextAction(id: 'a', text: 't', createdAt: 1, waitingOn: '  ').isWaiting, isFalse);
       expect(NextAction(id: 'a', text: 't', createdAt: 1, waitingOn: 'Bob').isWaiting, isTrue);
     });
+
+    test('pinnedAt round-trips through JSON', () {
+      final json = NextAction(id: 'a', text: 't', createdAt: 1, pinnedAt: 99).toJson();
+      expect(json['pinnedAt'], 99);
+      final back = NextAction.fromJson(json);
+      expect(back.pinnedAt, 99);
+      expect(back.isPinned, isTrue);
+    });
+
+    test('missing pinnedAt parses as unpinned', () {
+      final action = NextAction.fromJson({'id': 'a', 'text': 't', 'createdAt': 1});
+      expect(action.pinnedAt, isNull);
+      expect(action.isPinned, isFalse);
+    });
+
+    test('copyWith can set and clear pinnedAt', () {
+      final a = NextAction(id: 'a', text: 't', createdAt: 1);
+      expect(a.copyWith(pinnedAt: 7).pinnedAt, 7);
+      expect(a.copyWith(pinnedAt: 7).copyWith(pinnedAt: null).pinnedAt, isNull);
+    });
+
+    test('unrelated copyWith preserves pinnedAt', () {
+      final a = NextAction(id: 'a', text: 't', createdAt: 1, pinnedAt: 7);
+      expect(a.copyWith(text: 'new').pinnedAt, 7);
+      expect(a.copyWith(completedAt: 5).pinnedAt, 7);
+      expect(a.copyWith(waitingOn: 'Sam').pinnedAt, 7);
+    });
   });
 }

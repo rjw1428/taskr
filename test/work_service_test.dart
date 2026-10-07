@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taskr/services/models.dart';
 import 'package:taskr/services/work.service.dart';
+import 'package:taskr/work/work_actions.dart';
 import 'package:taskr/work/work_logic.dart';
 
 import 'helpers/harness.dart';
@@ -126,6 +127,49 @@ void main() {
 
     test('newId is unique', () {
       expect(service.newId(), isNot(service.newId()));
+    });
+  });
+
+  group('togglePin', () {
+    test('pins with the clock time and unpins back to null', () async {
+      final actions = WorkActions(service);
+      final a = await service.add(WorkItem(title: 'A'));
+      await service.setNextActions(a, [NextAction(id: 'x', text: 't', createdAt: 1)]);
+      final open = (await service.getActive(a))!.nextActions.single;
+      final beforePin = clock;
+      await actions.togglePin(a, open);
+      final pinned = (await active(a))!['nextActions'] as List;
+      expect(pinned.single['pinnedAt'], greaterThan(beforePin));
+      await actions.togglePin(a, NextAction.fromJson(Map<String, dynamic>.from(pinned.single as Map)));
+      final unpinned = (await active(a))!['nextActions'] as List;
+      expect(unpinned.single['pinnedAt'], isNull);
+    });
+
+    test('re-reads the latest item and touches only the target action', () async {
+      final actions = WorkActions(service);
+      final a = await service.add(WorkItem(title: 'A', notes: 'keep'));
+      await service.setNextActions(a, [
+        NextAction(id: 'x', text: 'first', createdAt: 1),
+        NextAction(id: 'y', text: 'second', createdAt: 2, waitingOn: 'Sam'),
+      ]);
+      final stale = (await service.getActive(a))!.nextActions.first;
+      // Concurrent edit lands after our copy was taken; the pin must not undo it.
+      await service.setNextActions(a, WorkLogic.updateNextAction(
+          (await service.getActive(a))!.nextActions, 'x', text: 'renamed'));
+      await actions.togglePin(a, stale);
+      final doc = (await active(a))!;
+      final stored = doc['nextActions'] as List;
+      expect(stored[0]['text'], 'renamed');
+      expect(stored[0]['pinnedAt'], isA<int>());
+      expect(stored[1]['pinnedAt'], isNull);
+      expect(stored[1]['waitingOn'], 'Sam');
+      expect(doc['notes'], 'keep');
+    });
+
+    test('unknown item is a no-op', () async {
+      final actions = WorkActions(service);
+      await actions.togglePin('missing', NextAction(id: 'x', text: 't', createdAt: 1));
+      expect(await active('missing'), isNull);
     });
   });
 

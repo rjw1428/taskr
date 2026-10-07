@@ -152,6 +152,14 @@ const Map<Effort, PriorityColor> _priorityLight = {
       fill: Color(0xFFE9EDF2), border: Color(0x4D6B7583), ink: Color(0xFF3A4250), accent: Color(0xFF8C95A2)),
 };
 
+// Pinned work actions — violet, deliberately outside the semantic
+// red/amber/green priority hues, the teal accent, and the gold goal token.
+const PriorityColor _pinnedDark = PriorityColor(
+    fill: Color(0xFF2E2547), border: Color(0x809B7FD4), ink: Color(0xFFE2D9F7), accent: Color(0xFFA98BE0));
+
+const PriorityColor _pinnedLight = PriorityColor(
+    fill: Color(0xFFEDE4FB), border: Color(0x807A4FC0), ink: Color(0xFF4A2E7E), accent: Color(0xFF7E52C4));
+
 // ─────────────────────────────────────────────────────────────────────────
 // AppTokens — theme extension carrying app-specific tokens that Material's
 // ColorScheme has no slot for. Read via Theme.of(context).appTokens.
@@ -172,6 +180,9 @@ class AppTokens extends ThemeExtension<AppTokens> {
   /// Semantic accent for goal-linked affordances (deliberately quiet gold).
   final Color goal;
 
+  /// Pinned work actions — the pinned list's cards and the thumbtack toggle.
+  final PriorityColor pinned;
+
   const AppTokens({
     required this.brightness,
     required this.priority,
@@ -180,6 +191,7 @@ class AppTokens extends ThemeExtension<AppTokens> {
     required this.textMuted,
     required this.textFaint,
     required this.goal,
+    required this.pinned,
   });
 
   static const AppTokens dark = AppTokens(
@@ -190,6 +202,7 @@ class AppTokens extends ThemeExtension<AppTokens> {
     textMuted: Brand.dMuted,
     textFaint: Brand.dFaint,
     goal: Brand.dGoal,
+    pinned: _pinnedDark,
   );
 
   static const AppTokens light = AppTokens(
@@ -200,6 +213,7 @@ class AppTokens extends ThemeExtension<AppTokens> {
     textMuted: Brand.lMuted,
     textFaint: Brand.lFaint,
     goal: Brand.lGoal,
+    pinned: _pinnedLight,
   );
 
   PriorityColor of(Effort e) => priority[e] ?? priority[Effort.info]!;
@@ -215,6 +229,7 @@ class AppTokens extends ThemeExtension<AppTokens> {
     Color? textMuted,
     Color? textFaint,
     Color? goal,
+    PriorityColor? pinned,
   }) =>
       AppTokens(
         brightness: brightness ?? this.brightness,
@@ -224,6 +239,7 @@ class AppTokens extends ThemeExtension<AppTokens> {
         textMuted: textMuted ?? this.textMuted,
         textFaint: textFaint ?? this.textFaint,
         goal: goal ?? this.goal,
+        pinned: pinned ?? this.pinned,
       );
 
   @override
@@ -240,6 +256,7 @@ class AppTokens extends ThemeExtension<AppTokens> {
       textMuted: Color.lerp(textMuted, other.textMuted, t)!,
       textFaint: Color.lerp(textFaint, other.textFaint, t)!,
       goal: Color.lerp(goal, other.goal, t)!,
+      pinned: PriorityColor.lerp(pinned, other.pinned, t),
     );
   }
 }

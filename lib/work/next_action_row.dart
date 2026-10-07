@@ -6,17 +6,21 @@ import 'package:taskr/shared/shared.dart';
 
 /// One open next action. Actionable rows get a checkbox; waiting rows get an
 /// hourglass, muted ink, and a "Waiting on X" line, and complete via the
-/// overflow instead so a waiting step is not ticked off by accident.
+/// overflow instead so a waiting step is not ticked off by accident. A
+/// trailing thumbtack pins the action to the top of the Work page when
+/// [onTogglePin] is provided.
 class NextActionRow extends StatelessWidget {
   final NextAction action;
   final VoidCallback onComplete;
   final VoidCallback onEdit;
+  final VoidCallback? onTogglePin;
 
   const NextActionRow({
     super.key,
     required this.action,
     required this.onComplete,
     required this.onEdit,
+    this.onTogglePin,
   });
 
   @override
@@ -64,6 +68,22 @@ class NextActionRow extends StatelessWidget {
               ),
             ),
           ),
+          if (onTogglePin != null)
+            SizedBox(
+              width: 28,
+              height: 28,
+              child: IconButton(
+                key: Key('pin-${action.id}'),
+                padding: EdgeInsets.zero,
+                iconSize: 14,
+                tooltip: action.isPinned ? 'Unpin' : 'Pin to top',
+                icon: Icon(
+                  FontAwesomeIcons.thumbtack,
+                  color: action.isPinned ? t.pinned.accent : t.textFaint.withValues(alpha: 0.5),
+                ),
+                onPressed: onTogglePin,
+              ),
+            ),
           if (waiting)
             SizedBox(
               width: 28,

@@ -37,6 +37,13 @@ class WorkActions {
     );
   }
 
+  /// Pins an unpinned action (stamping now) or unpins a pinned one. Completion
+  /// state is untouched; the pinned list derives from open ∧ pinned.
+  Future<void> togglePin(String itemId, NextAction action) => guard(
+        () => _mutateActions(itemId, (a) => WorkLogic.setPinned(a, action.id, action.isPinned ? null : service.now())),
+        action.isPinned ? 'Unpin' : 'Pin',
+      );
+
   /// Completes and offers Undo. Copy is deliberately neutral: this is not a
   /// task and earns nothing.
   Future<void> complete(BuildContext context, String itemId, NextAction action) async {

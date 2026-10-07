@@ -14,6 +14,7 @@ void main() {
         textMuted: Colors.grey,
         textFaint: Colors.grey,
         goal: Colors.amber,
+        pinned: PriorityColor(fill: Colors.white, border: Colors.black, ink: Colors.black, accent: Colors.purple),
       );
       expect(tokens.of(Effort.high), same(tokens.priority[Effort.info]));
       expect(AppTokens.light.of(Effort.high), same(AppTokens.light.priority[Effort.high]));
@@ -56,6 +57,23 @@ void main() {
       expect(end.textMuted, AppTokens.dark.textMuted);
       expect(start.of(Effort.low).ink, AppTokens.light.of(Effort.low).ink);
       expect(end.of(Effort.low).ink, AppTokens.dark.of(Effort.low).ink);
+    });
+
+    test('pinned token is defined per brightness and distinct from priorities', () {
+      expect(AppTokens.dark.pinned.fill, isNot(AppTokens.light.pinned.fill));
+      for (final e in Effort.values) {
+        expect(AppTokens.dark.pinned.accent, isNot(AppTokens.dark.of(e).accent));
+        expect(AppTokens.light.pinned.accent, isNot(AppTokens.light.of(e).accent));
+      }
+    });
+
+    test('copyWith and lerp carry the pinned token', () {
+      const custom = PriorityColor(fill: Colors.white, border: Colors.black, ink: Colors.black, accent: Colors.purple);
+      expect(AppTokens.light.copyWith(pinned: custom).pinned, same(custom));
+      expect(AppTokens.light.copyWith().pinned, same(AppTokens.light.pinned));
+      final mid = AppTokens.light.lerp(AppTokens.dark, 0.5);
+      expect(mid.pinned.fill, Color.lerp(AppTokens.light.pinned.fill, AppTokens.dark.pinned.fill, 0.5));
+      expect(AppTokens.light.lerp(AppTokens.dark, 1).pinned.accent, AppTokens.dark.pinned.accent);
     });
 
     test('PriorityColor.lerp blends every channel', () {

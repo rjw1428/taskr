@@ -133,6 +133,7 @@ class WorkItemCard extends StatelessWidget {
                 action: a,
                 onComplete: () => actions.complete(context, item.id!, a),
                 onEdit: () => actions.editNextAction(context, item.id!, a),
+                onTogglePin: () => actions.togglePin(item.id!, a),
               ),
           ],
           Align(

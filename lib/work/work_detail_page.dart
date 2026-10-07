@@ -146,6 +146,7 @@ class _WorkDetailPageState extends State<WorkDetailPage> {
                     action: a,
                     onComplete: () => _actions.complete(context, item.id!, a),
                     onEdit: () => _actions.editNextAction(context, item.id!, a),
+                    onTogglePin: () => _actions.togglePin(item.id!, a),
                   ),
               const SectionHeader('Timeline'),
               for (final e in timeline) _TimelineRow(event: e, stamp: _stamp),

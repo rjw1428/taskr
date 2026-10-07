@@ -38,7 +38,10 @@ Deploying the web build (Firebase Hosting):
 - The Flutter entry points (`index.html`, `flutter_bootstrap.js`,
   `flutter_service_worker.js`, `main.dart.js`, `version.json`) are served
   with no-cache headers so browsers pick up a new build instead of a stale
-  service worker. Other static assets are cached for a year.
+  service worker. Other static assets (fonts, images, wasm) are also no-cache:
+  Flutter keeps their file names across builds (tree-shaken icon fonts change
+  contents but not name), so they must be revalidated, never cached as
+  immutable. Revalidation is a cheap 304 via ETag.
 - Preview before going live: `firebase hosting:channel:deploy preview` from
   `firebase` gives a temporary shareable URL.
 - The default `taskr-1428.web.app` / `.firebaseapp.com` domains are already

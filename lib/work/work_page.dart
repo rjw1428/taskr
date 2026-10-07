@@ -4,6 +4,7 @@ import 'package:taskr/services/models.dart';
 import 'package:taskr/services/work.service.dart';
 import 'package:taskr/shared/shared.dart';
 import 'package:taskr/task_list/task_list_logic.dart';
+import 'package:taskr/work/pinned_actions_section.dart';
 import 'package:taskr/work/work_actions.dart';
 import 'package:taskr/work/work_archive_page.dart';
 import 'package:taskr/work/work_item_card.dart';
@@ -94,6 +95,7 @@ class _WorkPageState extends State<WorkPage> {
                 ],
               ),
             ),
+            PinnedActionsSection(items: items, actions: _actions),
             Expanded(
               child: items.isEmpty
                   ? const EmptyState(

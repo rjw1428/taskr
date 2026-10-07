@@ -634,6 +634,10 @@ class NextAction {
   /// Null while open. Set on complete, cleared on undo. Completed actions are
   /// retained so the item's timeline can show every step taken.
   int? completedAt;
+  /// Non-null while pinned to the top of the Work page; the value orders the
+  /// pinned list. Completion leaves this untouched — pinned visibility is
+  /// derived from open ∧ pinned, so Undo restores the row to the pinned list.
+  int? pinnedAt;
 
   NextAction({
     required this.id,
@@ -641,15 +645,18 @@ class NextAction {
     this.waitingOn,
     required this.createdAt,
     this.completedAt,
+    this.pinnedAt,
   });
 
   bool get isOpen => completedAt == null;
   bool get isWaiting => waitingOn != null && waitingOn!.trim().isNotEmpty;
+  bool get isPinned => pinnedAt != null;
 
   NextAction copyWith({
     String? text,
     Object? waitingOn = _unset,
     Object? completedAt = _unset,
+    Object? pinnedAt = _unset,
   }) =>
       NextAction(
         id: id,
@@ -657,6 +664,7 @@ class NextAction {
         waitingOn: identical(waitingOn, _unset) ? this.waitingOn : waitingOn as String?,
         createdAt: createdAt,
         completedAt: identical(completedAt, _unset) ? this.completedAt : completedAt as int?,
+        pinnedAt: identical(pinnedAt, _unset) ? this.pinnedAt : pinnedAt as int?,
       );
 
   factory NextAction.fromJson(Map<String, dynamic> json) => _$NextActionFromJson(json);

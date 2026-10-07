@@ -427,6 +427,7 @@ NextAction _$NextActionFromJson(Map<String, dynamic> json) => NextAction(
       waitingOn: json['waitingOn'] as String?,
       createdAt: (json['createdAt'] as num).toInt(),
       completedAt: (json['completedAt'] as num?)?.toInt(),
+      pinnedAt: (json['pinnedAt'] as num?)?.toInt(),
     );
 
 Map<String, dynamic> _$NextActionToJson(NextAction instance) =>
@@ -436,6 +437,7 @@ Map<String, dynamic> _$NextActionToJson(NextAction instance) =>
       'waitingOn': instance.waitingOn,
       'createdAt': instance.createdAt,
       'completedAt': instance.completedAt,
+      'pinnedAt': instance.pinnedAt,
     };
 
 WorkUpdate _$WorkUpdateFromJson(Map<String, dynamic> json) => WorkUpdate(

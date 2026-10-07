@@ -38,6 +38,21 @@ class WorkLogic {
 
   static List<NextAction> addNextAction(List<NextAction> actions, NextAction action) => [...actions, action];
 
+  static List<NextAction> setPinned(List<NextAction> actions, String id, int? pinnedAt) =>
+      [for (final a in actions) a.id == id ? a.copyWith(pinnedAt: pinnedAt) : a];
+
+  /// Every open pinned action across [items], oldest pin first, paired with
+  /// its owning item so the pinned list can name the source priority.
+  static List<(WorkItem, NextAction)> pinnedActions(List<WorkItem> items) {
+    final pairs = [
+      for (final item in items)
+        for (final a in item.nextActions)
+          if (a.isOpen && a.isPinned) (item, a),
+    ];
+    pairs.sort((x, y) => x.$2.pinnedAt!.compareTo(y.$2.pinnedAt!));
+    return pairs;
+  }
+
   static List<WorkUpdate> appendUpdate(List<WorkUpdate> updates, WorkUpdate update) => [...updates, update];
 
   static String? _normalize(String? s) {
