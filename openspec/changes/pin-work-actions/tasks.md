@@ -19,7 +19,7 @@
 
 ## 4. Design token
 
-- [x] 4.1 Add a `pinned` `PriorityColor` (fill/border/ink/accent) to `AppTokens` in `lib/shared/design/tokens.dart` — violet/indigo family, tuned per brightness, distinct from priority/accent/goal hues; wire through constructor, `dark`/`light` presets, `copyWith`, and `lerp`
+- [x] 4.1 Add a `pinned` `PriorityColor` (fill/border/ink/accent) to `AppTokens` in `lib/shared/design/tokens.dart` — brand aqua family (built on `Brand.accentDark`/`Brand.accentLight`), tuned per brightness, distinct from priority/goal hues; wire through constructor, `dark`/`light` presets, `copyWith`, and `lerp`
 - [x] 4.2 Extend `test/design_components_test.dart` (or tokens coverage): both brightnesses define the pinned token and `lerp` interpolates it
 
 ## 5. Row toggle UI

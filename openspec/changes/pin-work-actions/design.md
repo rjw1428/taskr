@@ -50,9 +50,9 @@ No second query. `WorkPage` already holds `List<WorkItem>`; a pure helper `WorkL
 - **Why not pin via a long-press or overflow menu only?** Discoverability — the feature's whole point is fast triage; one tap to pin/unpin. The icon-button pattern already exists in these rows (waiting overflow).
 - `WorkActions.togglePin(itemId, action)` uses the existing `_mutateActions` read-latest-then-write pattern with a new pure `WorkLogic.setPinned(actions, id, pinnedAt)`.
 
-### 5. New `pinned` token on `AppTokens`, violet, defined for both brightnesses
+### 5. New `pinned` token on `AppTokens`, brand aqua, defined for both brightnesses
 
-Add `PriorityColor pinned` to `AppTokens` (fill/border/ink/accent), a violet/indigo family — visually distinct from the semantic red/amber/green, the info neutral, the teal brand accent, and the gold goal token. Used for: pinned-section card backgrounds/borders, the filled thumbtack, and a pinned tint on the action row within its source card.
+Add `PriorityColor pinned` to `AppTokens` (fill/border/ink/accent), built on the existing aqua/teal brand accent (`Brand.accentDark`/`Brand.accentLight`) — pinned surfaces read as the app's own accent color while staying visually distinct from the semantic red/amber/green, the info neutral, and the gold goal token. Used for: pinned-section card backgrounds/borders, the filled thumbtack, and a pinned tint on the action row within its source card.
 
 - **Why a full `PriorityColor` instead of one Color?** The pinned list draws cards (needs fill/border/ink), matching how every other colored surface in the app is specified; `lerp`/`copyWith` extend mechanically.
 

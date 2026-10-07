@@ -152,13 +152,13 @@ const Map<Effort, PriorityColor> _priorityLight = {
       fill: Color(0xFFE9EDF2), border: Color(0x4D6B7583), ink: Color(0xFF3A4250), accent: Color(0xFF8C95A2)),
 };
 
-// Pinned work actions — violet, deliberately outside the semantic
-// red/amber/green priority hues, the teal accent, and the gold goal token.
+// Pinned work actions — the brand aqua, so pinned surfaces read as "the app's
+// own accent" while staying outside the semantic red/amber/green priority hues.
 const PriorityColor _pinnedDark = PriorityColor(
-    fill: Color(0xFF2E2547), border: Color(0x809B7FD4), ink: Color(0xFFE2D9F7), accent: Color(0xFFA98BE0));
+    fill: Color(0xFF16342F), border: Color(0x8058C4B4), ink: Color(0xFFCFEEE8), accent: Brand.accentDark);
 
 const PriorityColor _pinnedLight = PriorityColor(
-    fill: Color(0xFFEDE4FB), border: Color(0x807A4FC0), ink: Color(0xFF4A2E7E), accent: Color(0xFF7E52C4));
+    fill: Color(0xFFD9EFEB), border: Color(0x800E8C7E), ink: Color(0xFF0D4A42), accent: Brand.accentLight);
 
 // ─────────────────────────────────────────────────────────────────────────
 // AppTokens — theme extension carrying app-specific tokens that Material's
