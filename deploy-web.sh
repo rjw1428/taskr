@@ -14,10 +14,13 @@ fi
 
 flutter build web --release --pwa-strategy=none --dart-define-from-file=.env
 
-# --pwa-strategy=none stops the bootstrap from registering a service worker, but
-# a previous build may have left the script behind in build/web. Drop it so the
-# URL 404s: a browser still holding an old registration unregisters on that.
-rm -f build/web/flutter_service_worker.js
+# --pwa-strategy=none stops the bootstrap from registering a service worker, so
+# nothing new is cached, and it leaves an empty flutter_service_worker.js in
+# build/web. Clients that loaded an older build still hold a registration for
+# that URL, so overwrite the empty file with the kill switch, which unregisters
+# itself and clears their caches. See tool/sw-kill-switch.js for why neither
+# deleting the file nor the empty one Flutter emits does the job.
+cp tool/sw-kill-switch.js build/web/flutter_service_worker.js
 
 # The predeploy hook in firebase/firebase.json copies build/web into
 # firebase/public, so no manual copy here.

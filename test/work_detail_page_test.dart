@@ -96,6 +96,40 @@ void main() {
     expect(find.textContaining('Update ·'), findsOneWidget);
   });
 
+  testWidgets('remove a next action from the edit sheet, then undo', (tester) async {
+    final id = await service.add(WorkItem(title: 'P', nextActions: [
+      NextAction(id: 'a', text: 'First', createdAt: 1),
+      NextAction(id: 'b', text: 'Second', createdAt: 2),
+    ]));
+    await pump(tester, id);
+
+    // Scoped to the row: the timeline shows the same text for "action added".
+    await tester.tap(find.descendant(of: find.byKey(const Key('detail-action-a')), matching: find.text('First')));
+    await settle(tester);
+    expect(find.text('Edit next action'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('next-action-remove')));
+    await settle(tester);
+
+    expect(find.byKey(const Key('detail-action-a')), findsNothing);
+    expect((await service.getActive(id))!.nextActions.map((x) => x.id), ['b']);
+    expect(find.text('Removed: First'), findsOneWidget);
+
+    await tester.tap(find.text('Undo'));
+    await settle(tester);
+    // Restored where it was, not appended after 'Second'.
+    expect((await service.getActive(id))!.nextActions.map((x) => x.id), ['a', 'b']);
+    expect(find.byKey(const Key('detail-action-a')), findsOneWidget);
+  });
+
+  testWidgets('the add sheet offers no remove', (tester) async {
+    final id = await service.add(WorkItem(title: 'P'));
+    await pump(tester, id);
+    await tester.tap(find.byKey(const Key('detail-add-action')));
+    await settle(tester);
+    expect(find.text('Next action'), findsWidgets);
+    expect(find.byKey(const Key('next-action-remove')), findsNothing);
+  });
+
   testWidgets('archive from detail pops and moves the item', (tester) async {
     final id = await service.add(WorkItem(title: 'P'));
     await pumpApp(

@@ -38,6 +38,14 @@ class WorkLogic {
 
   static List<NextAction> addNextAction(List<NextAction> actions, NextAction action) => [...actions, action];
 
+  static List<NextAction> removeNextAction(List<NextAction> actions, String id) =>
+      [for (final a in actions) if (a.id != id) a];
+
+  /// Puts [action] back at [index] so Undo after a remove restores the row
+  /// where it was instead of at the end. An out-of-range index clamps.
+  static List<NextAction> insertNextAction(List<NextAction> actions, int index, NextAction action) =>
+      [...actions.take(index.clamp(0, actions.length)), action, ...actions.skip(index.clamp(0, actions.length))];
+
   static List<NextAction> setPinned(List<NextAction> actions, String id, int? pinnedAt) =>
       [for (final a in actions) a.id == id ? a.copyWith(pinnedAt: pinnedAt) : a];
 

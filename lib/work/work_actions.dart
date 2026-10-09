@@ -29,12 +29,44 @@ class WorkActions {
   }
 
   Future<void> editNextAction(BuildContext context, String itemId, NextAction existing) async {
+    // Captured before the sheet so Remove's Undo survives the async gap.
+    final messenger = ScaffoldMessenger.maybeOf(context);
     final input = await NextActionForm.show(context, existing: existing);
     if (input == null) return;
+    if (input.remove) return _removeWithUndo(messenger, itemId, existing);
     await guard(
       () => _mutateActions(itemId, (a) => WorkLogic.updateNextAction(a, existing.id, text: input.text, waitingOn: input.waitingOn)),
       'Edit next action',
     );
+  }
+
+  /// Deletes an action outright and offers Undo, which restores it at the index
+  /// it held. Unlike [complete] this leaves nothing behind: a removed action is
+  /// not in the item's history and earns nothing.
+  Future<void> removeNextAction(BuildContext context, String itemId, NextAction action) =>
+      _removeWithUndo(ScaffoldMessenger.maybeOf(context), itemId, action);
+
+  Future<void> _removeWithUndo(ScaffoldMessengerState? messenger, String itemId, NextAction action) async {
+    var index = 0;
+    await guard(
+      () => _mutateActions(itemId, (a) {
+        final found = a.indexWhere((x) => x.id == action.id);
+        if (found >= 0) index = found;
+        return WorkLogic.removeNextAction(a, action.id);
+      }),
+      'Remove',
+    );
+    messenger?.hideCurrentSnackBar();
+    messenger?.showSnackBar(SnackBar(
+      content: Text('Removed: ${action.text}', maxLines: 1, overflow: TextOverflow.ellipsis),
+      action: SnackBarAction(
+        label: 'Undo',
+        onPressed: () => guard(
+          () => _mutateActions(itemId, (a) => WorkLogic.insertNextAction(a, index, action)),
+          'Undo',
+        ),
+      ),
+    ));
   }
 
   /// Pins an unpinned action (stamping now) or unpins a pinned one. Completion

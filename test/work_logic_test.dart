@@ -40,6 +40,27 @@ void main() {
       expect(WorkLogic.openActions(item).map((x) => x.id), ['1']);
     });
 
+    test('removeNextAction drops only the matching action', () {
+      final actions = [a('1'), a('2'), a('3')];
+      final out = WorkLogic.removeNextAction(actions, '2');
+      expect(out.map((x) => x.id), ['1', '3']);
+      expect(actions.length, 3); // pure
+      expect(WorkLogic.removeNextAction(out, 'nope').map((x) => x.id), ['1', '3']);
+    });
+
+    test('insertNextAction restores the removed action at its old index', () {
+      final actions = [a('1'), a('2'), a('3')];
+      final out = WorkLogic.insertNextAction(WorkLogic.removeNextAction(actions, '2'), 1, a('2'));
+      expect(out.map((x) => x.id), ['1', '2', '3']);
+      expect(WorkLogic.insertNextAction([a('1')], 0, a('0')).map((x) => x.id), ['0', '1']);
+    });
+
+    test('insertNextAction clamps an out-of-range index', () {
+      expect(WorkLogic.insertNextAction([a('1')], 9, a('2')).map((x) => x.id), ['1', '2']);
+      expect(WorkLogic.insertNextAction([a('1')], -3, a('2')).map((x) => x.id), ['2', '1']);
+      expect(WorkLogic.insertNextAction(<NextAction>[], 4, a('1')).map((x) => x.id), ['1']);
+    });
+
     test('setPinned pins only the matching action', () {
       final out = WorkLogic.setPinned([a('1'), a('2')], '1', 99);
       expect(out[0].pinnedAt, 99);
