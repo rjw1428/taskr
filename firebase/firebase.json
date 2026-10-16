@@ -58,6 +58,7 @@
     }
   ],
   "hosting": {
+    "site": "taskr-1428",
     "public": "public",
     "ignore": [
       "firebase.json",
@@ -72,11 +73,29 @@
     ],
     "headers": [
       {
+        "source": "/",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
         "source": "/@(index.html|flutter_bootstrap.js|flutter_service_worker.js|flutter.js|version.json|main.dart.js)",
         "headers": [
           {
             "key": "Cache-Control",
             "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/assets/FontManifest.json",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
           }
         ]
       },

@@ -22,6 +22,10 @@ flutter build web --release --pwa-strategy=none --dart-define-from-file=.env
 # deleting the file nor the empty one Flutter emits does the job.
 cp tool/sw-kill-switch.js build/web/flutter_service_worker.js
 
+# Give each font a content-hashed URL so browsers still holding a font cached
+# as immutable fetch the current one. See tool/bust-font-cache.mjs.
+node tool/bust-font-cache.mjs build/web
+
 # The predeploy hook in firebase/firebase.json copies build/web into
 # firebase/public, so no manual copy here.
 cd firebase
