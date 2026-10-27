@@ -23,6 +23,32 @@ class GoogleAuthResult {
   const GoogleAuthResult({this.accessToken, this.idToken, this.serverAuthCode, required this.email});
 }
 
+/// What a sign-up attempt produced.
+///
+/// Google is the only provider, and Firebase has no separate "create account"
+/// call for it: `signInWithCredential` provisions the user on first use and
+/// signs into the existing one afterwards. So "new account" is decided by
+/// whether the `todos/{uid}` doc had to be created — which is the app's own
+/// notion of an account anyway, since a Firebase user without that doc cannot
+/// store a score or an FCM token.
+enum SignUpOutcome {
+  /// A brand-new account; its user doc was just provisioned.
+  created,
+
+  /// That Google account was already signed up, so this signed them back in.
+  alreadyExisted,
+
+  /// The user dismissed the Google account picker.
+  cancelled,
+
+  /// Google or Firebase rejected the attempt; [SignUpResult.error] says why.
+  failed,
+}
+
+/// The outcome of [AuthService.signUpWithGoogle], carrying the underlying error
+/// so the caller can render a real message instead of "something went wrong".
+typedef SignUpResult = ({SignUpOutcome outcome, Object? error});
+
 /// The Google sign-in plugin behind an interface. [instance] resolves to the
 /// real plugin unless a test installs a fake.
 abstract class GoogleSignInGateway {
@@ -135,28 +161,46 @@ class AuthService {
     }
   }
 
-  Future<void> googleLogin() async {
+  /// Signs in with Google, creating the account if this is a first visit.
+  /// Reports what happened so a sign-up screen can distinguish a new account
+  /// from a returning user, a dismissed picker, and a real failure.
+  Future<SignUpResult> signUpWithGoogle() async {
     try {
-      if (kIsWeb) {
-        final googleProvider = GoogleAuthProvider();
-        googleProvider.addScope('https://www.googleapis.com/auth/contacts.readonly');
-        googleProvider.setCustomParameters({'login_hint': 'user@example.com'});
-        await FirebaseRefs.auth.signInWithPopup(googleProvider);
-      } else {
-        final googleUser = await _google.signIn(GoogleSignInProfile.login);
-        if (googleUser == null) return;
-        final credential = GoogleAuthProvider.credential(
-          accessToken: googleUser.accessToken,
-          idToken: googleUser.idToken,
-        );
-        await FirebaseRefs.auth.signInWithCredential(credential);
+      if (!await _authenticateWithGoogle()) {
+        return (outcome: SignUpOutcome.cancelled, error: null);
       }
       user = FirebaseRefs.auth.currentUser;
-      await ensureUserDoc();
+      final created = await ensureUserDoc();
+      return (
+        outcome: created ? SignUpOutcome.created : SignUpOutcome.alreadyExisted,
+        error: null,
+      );
     } catch (e) {
       debugPrint('Google sign-in error: $e');
+      return (outcome: SignUpOutcome.failed, error: e);
     }
   }
+
+  /// Runs the Google credential exchange. False when the picker was dismissed.
+  Future<bool> _authenticateWithGoogle() async {
+    if (kIsWeb) {
+      final googleProvider = GoogleAuthProvider();
+      googleProvider.addScope('https://www.googleapis.com/auth/contacts.readonly');
+      await FirebaseRefs.auth.signInWithPopup(googleProvider);
+      return true;
+    }
+    final googleUser = await _google.signIn(GoogleSignInProfile.login);
+    if (googleUser == null) return false;
+    final credential = GoogleAuthProvider.credential(
+      accessToken: googleUser.accessToken,
+      idToken: googleUser.idToken,
+    );
+    await FirebaseRefs.auth.signInWithCredential(credential);
+    return true;
+  }
+
+  /// Sign-in for the login screen, which has nothing to say about the outcome.
+  Future<void> googleLogin() async => signUpWithGoogle();
 
   /// Whether the signed-in user is the app owner. Features backed by the
   /// owner's personal integrations (Garmin health sync, journaling) are
@@ -166,18 +210,20 @@ class AuthService {
   /// Provision a first-time user's root document. New accounts have no
   /// `todos/{uid}` doc, which breaks score updates (`.update()` throws
   /// `not-found`) and FCM-token storage. Create it once, without touching an
-  /// existing user's data.
-  Future<void> ensureUserDoc() async {
+  /// existing user's data. Returns true when the doc had to be created, i.e.
+  /// this account is new.
+  Future<bool> ensureUserDoc() async {
     final uid = user?.uid;
-    if (uid == null) return;
+    if (uid == null) return false;
     final ref = _db.collection('todos').doc(uid);
     final snap = await ref.get();
-    if (snap.exists) return;
+    if (snap.exists) return false;
     await ref.set({
       'currentScore': 0,
       'email': user?.email,
       'createdAt': FieldValue.serverTimestamp(),
     });
+    return true;
   }
 
   Future<Map<String, dynamic>?> getUserProfile(userId) async {

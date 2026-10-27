@@ -143,7 +143,7 @@ class TestEnv {
 
 /// Mounts [child] the way production does: providers, theme, scaffold
 /// messenger key. Pass [wrapInScaffold] for bare widgets that need a Material
-/// ancestor.
+/// ancestor, and [routes] for a screen that navigates by name.
 Future<void> pumpApp(
   WidgetTester tester,
   Widget child, {
@@ -151,6 +151,7 @@ Future<void> pumpApp(
   Size size = const Size(400, 800),
   List<SingleChildWidget> extraProviders = const [],
   ThemeMode themeMode = ThemeMode.light,
+  Map<String, WidgetBuilder> routes = const {},
 }) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -169,6 +170,7 @@ Future<void> pumpApp(
         theme: lightTheme,
         darkTheme: darkTheme,
         themeMode: themeMode,
+        routes: routes,
         home: wrapInScaffold ? Scaffold(body: child) : child,
       ),
     ),

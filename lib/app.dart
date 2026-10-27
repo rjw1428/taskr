@@ -13,6 +13,7 @@ import 'package:taskr/routing.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:taskr/firebase_options.dart';
 import 'package:taskr/home/home.dart';
+import 'package:taskr/login/create_account.dart';
 import 'package:taskr/services/accomplishment.provider.dart';
 import 'package:taskr/services/auth.service.dart';
 import 'package:taskr/services/goal.service.dart';
@@ -435,6 +436,8 @@ class _MyAppState extends State<MyApp> {
                 return MaterialPageRoute(builder: (_) => const AboutPage());
               case '/notifications':
                 return MaterialPageRoute(builder: (_) => const NotificationCenterPage());
+              case createAccountRoute:
+                return MaterialPageRoute(builder: (_) => const CreateAccount());
               default:
                 return MaterialPageRoute(builder: (_) => const Text("Unknown main route"));
             }
