@@ -198,7 +198,7 @@ class GoalService with ChangeNotifier {
     final today = DateTime(now.year, now.month, now.day);
     final monday = GoalPlanning.targetMonday(now);
     final weekStart = DateService().getString(monday);
-    final weekEnd = DateService().getString(monday.add(const Duration(days: 6)));
+    final weekEnd = DateService().getString(DateService.shiftDays(monday, 6));
 
     if (isRegeneration) {
       await _deleteUncompletedGoalTasksForWeek(user.uid, goal.id!, weekStart, weekEnd);
@@ -322,7 +322,7 @@ class GoalService with ChangeNotifier {
     const daysToCheck = 14;
 
     for (int i = -7; i < daysToCheck; i++) {
-      final date = DateService().getString(now.add(Duration(days: i)));
+      final date = DateService().getString(DateService.shiftDays(now, i));
       try {
         final doc = await _db
             .collection('todos')

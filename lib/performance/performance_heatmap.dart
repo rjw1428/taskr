@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:taskr/performance/performance_history.dart';
 import 'package:taskr/shared/shared.dart';
+import 'package:taskr/services/date.service.dart';
 
 const int _weekCount = 13;
 const double _cellSize = 14.0;
@@ -18,7 +19,7 @@ class PerformanceHeatmap extends StatefulWidget {
 class _PerformanceHeatmapState extends State<PerformanceHeatmap> {
   static DateTime _mondayOf(DateTime d) {
     final dateOnly = DateTime(d.year, d.month, d.day);
-    return dateOnly.subtract(Duration(days: dateOnly.weekday - 1));
+    return DateService.shiftDays(dateOnly, -(dateOnly.weekday - 1));
   }
 
   static DateTime _dateKey(DateTime d) => DateTime(d.year, d.month, d.day);
@@ -26,8 +27,8 @@ class _PerformanceHeatmapState extends State<PerformanceHeatmap> {
   @override
   Widget build(BuildContext context) {
     final today = DateTime.now();
-    final windowStart = _mondayOf(today).subtract(const Duration(days: (_weekCount - 1) * 7));
-    final windowEnd = windowStart.add(const Duration(days: _weekCount * 7 - 1));
+    final windowStart = DateService.shiftDays(_mondayOf(today), -(_weekCount - 1) * 7);
+    final windowEnd = DateService.shiftDays(windowStart, _weekCount * 7 - 1);
 
     // Sliced from the page-wide history rather than streamed here: this
     // widget's own listener was rebuilt (and its 13 weeks re-read) every time
@@ -95,10 +96,10 @@ class _Grid extends StatelessWidget {
         return Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: List.generate(_weekCount, (weekIndex) {
-            final weekMonday = windowStart.add(Duration(days: weekIndex * 7));
+            final weekMonday = DateService.shiftDays(windowStart, weekIndex * 7);
             return Column(
               children: List.generate(7, (dayIndex) {
-                final cellDate = weekMonday.add(Duration(days: dayIndex));
+                final cellDate = DateService.shiftDays(weekMonday, dayIndex);
                 final isFuture = cellDate.isAfter(today);
                 return Padding(
                   padding: EdgeInsets.only(bottom: dayIndex < 6 ? _cellSpacing : 0),
@@ -225,7 +226,7 @@ class _MonthLabels extends StatelessWidget {
     final labels = <String>[];
     int? prevMonth;
     for (int i = 0; i < weekCount; i++) {
-      final weekMonday = windowStart.add(Duration(days: i * 7));
+      final weekMonday = DateService.shiftDays(windowStart, i * 7);
       if (prevMonth == null || weekMonday.month != prevMonth) {
         labels.add(_monthAbbr[weekMonday.month]);
         prevMonth = weekMonday.month;

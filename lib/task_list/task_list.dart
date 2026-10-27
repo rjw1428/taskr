@@ -394,7 +394,7 @@ class TaskListState extends State<TaskListScreen> {
                               runSpacing: 4,
                               children: chips.map((cd) {
                                 final dueDate = DateService().getDate(cd['dueDate'] as String);
-                                final days = dueDate.difference(viewed).inDays;
+                                final days = DateService.daysBetween(viewed, dueDate);
                                 final text = TaskListLogic.countdownChipText(cd);
                                 final chipStyle = TextStyle(
                                   fontSize: 11,

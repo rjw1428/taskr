@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:taskr/services/models.dart';
 import 'package:taskr/shared/constants.dart';
+import 'package:taskr/services/date.service.dart';
 
 /// Pure planning logic behind [GoalService.generateTasksForGoal]: which week to
 /// target, how to turn the model's reply into task rows, and the prompt itself.
@@ -21,10 +22,10 @@ class GoalPlanning {
   static DateTime targetMonday(DateTime now) {
     final today = DateTime(now.year, now.month, now.day);
     // Monday of the current week (weekday: Mon=1 .. Sun=7).
-    var monday = today.subtract(Duration(days: now.weekday - 1));
+    var monday = DateService.shiftDays(today, -(now.weekday - 1));
     final daysLeftInWeek = 7 - (now.weekday - 1); // includes today
     if (daysLeftInWeek < minDaysForCurrentWeek) {
-      monday = monday.add(const Duration(days: 7));
+      monday = DateService.shiftDays(monday, 7);
     }
     return monday;
   }
@@ -33,7 +34,7 @@ class GoalPlanning {
   /// offsets are clamped rather than rejected so a slightly-off model reply still
   /// produces a usable week.
   static DateTime dateForOffset(DateTime monday, int? dayOffset) {
-    return monday.add(Duration(days: (dayOffset ?? 0).clamp(0, 6)));
+    return DateService.shiftDays(monday, (dayOffset ?? 0).clamp(0, 6));
   }
 
   static Effort parseEffort(String? effort) {

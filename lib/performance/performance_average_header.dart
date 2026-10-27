@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:taskr/performance/performance_history.dart';
 import 'package:taskr/shared/shared.dart';
+import 'package:taskr/services/date.service.dart';
 
 const _windows = [7, 30, 90, 365];
 
@@ -23,7 +24,7 @@ class _PerformanceAverageHeaderState extends State<PerformanceAverageHeader> {
     final theme = Theme.of(context);
     final t = theme.appTokens;
     final today = _dateKey(DateTime.now());
-    final streamStart = today.subtract(const Duration(days: 364));
+    final streamStart = DateService.shiftDays(today, -364);
 
     // Sliced from the page-wide history (which starts at the same day) rather
     // than streamed here: this widget's own year-long listener was rebuilt and
@@ -94,7 +95,7 @@ class _PerformanceAverageHeaderState extends State<PerformanceAverageHeader> {
     if (windowDays == 365) {
       if (scoresByDay.isEmpty) return 0.0;
       final oldest = scoresByDay.keys.reduce((a, b) => a.isBefore(b) ? a : b);
-      final daysSinceOldest = today.difference(oldest).inDays + 1;
+      final daysSinceOldest = DateService.daysBetween(oldest, today) + 1;
       effectiveDays = daysSinceOldest < 365 ? daysSinceOldest : 365;
     } else {
       effectiveDays = windowDays;
@@ -102,7 +103,7 @@ class _PerformanceAverageHeaderState extends State<PerformanceAverageHeader> {
 
     if (effectiveDays <= 0) return 0.0;
 
-    final windowStart = today.subtract(Duration(days: effectiveDays - 1));
+    final windowStart = DateService.shiftDays(today, -(effectiveDays - 1));
     int total = 0;
     scoresByDay.forEach((date, score) {
       if (!date.isBefore(windowStart) && !date.isAfter(today)) {

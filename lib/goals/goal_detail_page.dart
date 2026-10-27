@@ -142,8 +142,8 @@ class _GoalDetailPageState extends State<GoalDetailPage> {
     final end = DateTime.parse(goal.endDate);
     final start = DateTime.parse(goal.startDate);
     final now = DateTime.now();
-    final totalDays = end.difference(start).inDays;
-    final elapsedDays = now.difference(start).inDays;
+    final totalDays = DateService.daysBetween(start, end);
+    final elapsedDays = DateService.daysBetween(start, now);
     final progress = totalDays > 0 ? (elapsedDays / totalDays).clamp(0.0, 1.0) : 1.0;
 
     return ContentColumn(child: Scaffold(

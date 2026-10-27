@@ -166,7 +166,9 @@ class Goal {
     late DateTime end;
     switch (timeframe) {
       case GoalTimeframe.oneWeek:
-        end = start.add(const Duration(days: 7));
+        // Calendar components, like the cases below: a 7-day Duration is 168
+        // hours, which is a day short when the clocks go back inside the week.
+        end = DateTime(start.year, start.month, start.day + 7);
       case GoalTimeframe.oneMonth:
         end = DateTime(start.year, start.month + 1, start.day);
       case GoalTimeframe.threeMonths:

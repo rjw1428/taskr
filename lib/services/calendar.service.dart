@@ -119,7 +119,7 @@ class CalendarService {
   Future<Map<String, dynamic>> _buildEventBody(Task task) async {
     final dueDate = task.dueDate!;
     final start = DateService().getDate(dueDate);
-    final end = start.add(const Duration(days: 1));
+    final end = DateService.shiftDays(start, 1);
     final body = <String, dynamic>{
       'summary': task.title,
       if (task.description != null && task.description!.isNotEmpty)

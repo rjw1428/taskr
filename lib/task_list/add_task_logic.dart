@@ -1,4 +1,5 @@
 import 'package:taskr/services/models.dart';
+import 'package:taskr/services/date.service.dart';
 
 /// What the save path must do about a task's reminder once the form's value is
 /// compared with what was stored.
@@ -42,7 +43,7 @@ class AddTaskLogic {
 
   /// Days covered by a multi-day task, inclusive of both ends. Fewer than two
   /// means it isn't a multi-day task at all.
-  static int multiDayCount(DateTime start, DateTime end) => end.difference(start).inDays + 1;
+  static int multiDayCount(DateTime start, DateTime end) => DateService.daysBetween(start, end) + 1;
 
   static String multiDayPosition(int index, int dayCount) {
     if (index == 0) return 'start';

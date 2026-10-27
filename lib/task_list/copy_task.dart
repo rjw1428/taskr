@@ -82,8 +82,8 @@ class TaskFormState extends State<TaskForm> {
 
   List<DateTime> _updateRepeatedDays(DateTime selectedDate, bool initial) {
     final offset = selectedDate.weekday - 1;
-    DateTime prev = selectedDate.subtract(Duration(days: offset));
-    repeatedDates = List.generate(7, (index) => prev.add(Duration(days: index)));
+    DateTime prev = DateService.shiftDays(selectedDate, -offset);
+    repeatedDates = List.generate(7, (index) => DateService.shiftDays(prev, index));
 
     // Reset current selection except for selected date
     for (int i = 0; i < repeatDayValues.length; i++) {

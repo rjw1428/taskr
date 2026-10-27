@@ -146,7 +146,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
       final groupId = DateTime.now().millisecondsSinceEpoch.toString();
 
       for (int i = 0; i < dayCount; i++) {
-        final date = startDate.add(Duration(days: i));
+        final date = DateService.shiftDays(startDate, i);
         final position = AddTaskLogic.multiDayPosition(i, dayCount);
 
         final task = Task(
@@ -508,7 +508,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                                     final startDate = DateService().getDate(startStr);
                                     final initial = _multiDayEndDate != null
                                         ? DateService().getDate(_multiDayEndDate!)
-                                        : startDate.add(const Duration(days: 1));
+                                        : DateService.shiftDays(startDate, 1);
                                     final date = await _selectDate(context, initial);
                                     if (date == null || !date.isAfter(startDate)) return;
                                     setState(() => _multiDayEndDate = DateService().getString(date));

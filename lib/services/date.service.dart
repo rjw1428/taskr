@@ -70,24 +70,48 @@ class DateService {
     return DateFormat('MMM').format(DateTime(now.year, month, 1));
   }
 
+  /// Shifts [d] by whole calendar days, forward or back.
+  ///
+  /// `add(Duration(days: 1))` adds 24 hours, which is not a day when the clocks
+  /// change. 2026-11-01 is 25 hours long in New York, so midnight plus 24 hours
+  /// is 23:00 on the *same* date — which froze the date scroller on that day and
+  /// made goal-task generation emit it twice and skip the 2nd. Rebuilding from
+  /// the calendar components lets DateTime normalize the day instead, and leaves
+  /// the wall-clock time alone.
+  ///
+  /// UTC-ness is preserved: callers that already work in UTC (see
+  /// RecurringSeries.utcDate) are immune to this and must stay that way.
+  static DateTime shiftDays(DateTime d, int days) => d.isUtc
+      ? DateTime.utc(d.year, d.month, d.day + days, d.hour, d.minute, d.second, d.millisecond)
+      : DateTime(d.year, d.month, d.day + days, d.hour, d.minute, d.second, d.millisecond);
+
+  /// Whole calendar days from [from] to [to], ignoring the time of day.
+  ///
+  /// `to.difference(from).inDays` counts 24-hour blocks and then truncates, so
+  /// a week containing a spring-forward is 6 days and 23 hours — it reports 6.
+  /// Comparing the dates in UTC removes the offset from the subtraction, the
+  /// same trick RecurringSeries.utcDate uses.
+  static int daysBetween(DateTime from, DateTime to) {
+    final a = DateTime.utc(from.year, from.month, from.day);
+    final b = DateTime.utc(to.year, to.month, to.day);
+    return b.difference(a).inDays;
+  }
+
   String dayAxisLabel(int daysBack) {
-    final now = DateTime.now();
-    final newDate = now.subtract(Duration(days: daysBack));
+    final newDate = shiftDays(DateTime.now(), -daysBack);
     return DateFormat('E').format(newDate);
   }
 
   String incrementDate(DateTime d) {
-    final update = d.add(const Duration(days: 1));
-    return DateFormat(stringFmt).format(update);
+    return DateFormat(stringFmt).format(shiftDays(d, 1));
   }
 
   String decrementDate(DateTime d) {
-    final update = d.subtract(const Duration(days: 1));
-    return DateFormat(stringFmt).format(update);
+    return DateFormat(stringFmt).format(shiftDays(d, -1));
   }
 
   DateTime daysAgo(DateTime startDate, int days) {
-    return startDate.subtract(Duration(days: days));
+    return shiftDays(startDate, -days);
   }
 
   String timeFrameBuilder(Task task) {

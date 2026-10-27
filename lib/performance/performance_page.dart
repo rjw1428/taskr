@@ -33,8 +33,8 @@ class _PerformancePageState extends State<PerformancePage> {
   late final Stream<PerformanceHistory?> _history = () {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final start = today.subtract(const Duration(days: 364));
-    final end = today.subtract(Duration(days: today.weekday - 1)).add(const Duration(days: 6));
+    final start = DateService.shiftDays(today, -364);
+    final end = DateService.shiftDays(today, -(today.weekday - 1) + 6);
     return PerformanceService()
         .streamPerformanceForMonth(_userId, start, end)
         .map<PerformanceHistory?>((docs) => PerformanceHistory(docs));
@@ -131,7 +131,7 @@ class CurrentScoreState extends State<CurrentScore> {
       final pushed = day['pushed'] as Map<String, dynamic>?;
       pushedByDate[DateService().getString(ts.toDate())] = (pushed?['ALL'] as int?) ?? 0;
     }
-    final pushedDays = List.generate(7, (i) => DateTime.now().subtract(Duration(days: 6 - i)));
+    final pushedDays = List.generate(7, (i) => DateService.shiftDays(DateTime.now(), -(6 - i)));
     final pushedDayKeys = pushedDays.map((d) => DateService().getString(d)).toList();
     final pushedValues = pushedDayKeys.map((k) => pushedByDate[k] ?? 0).toList();
     final pushedLabels = pushedDays.map((d) => DateFormat('E').format(d)).toList();
@@ -438,7 +438,7 @@ List<Map<String, dynamic>> alignDailyCompleted(
         (doc['completed'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
   }
   return List.generate(dayCount, (i) {
-    final day = today.subtract(Duration(days: dayCount - 1 - i));
+    final day = DateService.shiftDays(today, -(dayCount - 1 - i));
     return byDay[DateService().getString(day)] ?? const <String, dynamic>{};
   });
 }

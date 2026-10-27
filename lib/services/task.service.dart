@@ -706,13 +706,13 @@ class TaskService {
 
     // Search backward from anchor to find the start
     for (int i = 0; i <= 30; i++) {
-      final task = await checkDate(anchor.subtract(Duration(days: i)));
+      final task = await checkDate(DateService.shiftDays(anchor, -i));
       if (task == null) break;
       results.insert(0, task);
     }
     // Search forward from anchor+1 to find the end
     for (int i = 1; i <= 30; i++) {
-      final task = await checkDate(anchor.add(Duration(days: i)));
+      final task = await checkDate(DateService.shiftDays(anchor, i));
       if (task == null) break;
       results.add(task);
     }
@@ -728,11 +728,11 @@ class TaskService {
     final endDate = DateService().getDate(newEndDate);
     if (!endDate.isAfter(startDate)) return;
 
-    final newDayCount = endDate.difference(startDate).inDays + 1;
+    final newDayCount = DateService.daysBetween(startDate, endDate) + 1;
     final existingDates = {for (final t in group) t.dueDate!: t};
 
     for (int i = 0; i < newDayCount; i++) {
-      final date = startDate.add(Duration(days: i));
+      final date = DateService.shiftDays(startDate, i);
       final dateStr = DateService().getString(date);
       final position = i == 0 ? 'start' : (i == newDayCount - 1 ? 'end' : 'middle');
 

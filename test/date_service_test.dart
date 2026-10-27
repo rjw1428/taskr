@@ -54,6 +54,52 @@ void main() {
     test('daysAgo subtracts whole days', () {
       expect(ds.daysAgo(DateTime.utc(2026, 3, 10), 10), DateTime.utc(2026, 2, 28));
     });
+
+    test('increment crosses the days the clocks change', () {
+      // In US zones 2026-11-01 is 25 hours long and 2026-03-08 is 23, so the
+      // old `add(Duration(days: 1))` landed back on 11-01 — the date scroller
+      // could not move past it. The next-calendar-day invariant below holds in
+      // every zone, so this test is not tied to the machine's own.
+      expect(ds.incrementDate(ds.getDate('2026-11-01')), '2026-11-02');
+      expect(ds.decrementDate(ds.getDate('2026-11-02')), '2026-11-01');
+      expect(ds.incrementDate(ds.getDate('2026-03-08')), '2026-03-09');
+      expect(ds.decrementDate(ds.getDate('2026-03-09')), '2026-03-08');
+    });
+
+    test('walking a year forward visits every date exactly once', () {
+      var d = ds.getDate('2026-01-01');
+      final seen = <String>[];
+      for (var i = 0; i < 400; i++) {
+        seen.add(ds.getString(d));
+        d = DateService.shiftDays(d, 1);
+      }
+      expect(seen.toSet(), hasLength(400), reason: 'a repeated date means a day was lost');
+      expect(seen.last, '2027-02-04');
+    });
+
+    test('daysBetween counts calendar days across both clock changes', () {
+      // The week containing the spring-forward is 167 hours, so inDays used to
+      // report 6 and a multi-day task lost its last day.
+      expect(DateService.daysBetween(ds.getDate('2026-03-08'), ds.getDate('2026-03-15')), 7);
+      expect(DateService.daysBetween(ds.getDate('2026-11-01'), ds.getDate('2026-11-08')), 7);
+      expect(DateService.daysBetween(ds.getDate('2026-11-01'), ds.getDate('2026-11-02')), 1);
+      expect(DateService.daysBetween(ds.getDate('2026-11-02'), ds.getDate('2026-11-01')), -1);
+      expect(DateService.daysBetween(ds.getDate('2026-11-01'), ds.getDate('2026-11-01')), 0);
+    });
+
+    test('daysBetween ignores the time of day', () {
+      expect(
+        DateService.daysBetween(DateTime(2026, 11, 1, 23, 59), DateTime(2026, 11, 2, 0, 1)),
+        1,
+      );
+    });
+
+    test('shiftDays keeps the wall-clock time and the UTC flag', () {
+      final local = DateService.shiftDays(DateTime(2026, 11, 1, 9, 30), 1);
+      expect([local.year, local.month, local.day, local.hour, local.minute], [2026, 11, 2, 9, 30]);
+      expect(local.isUtc, isFalse);
+      expect(DateService.shiftDays(DateTime.utc(2026, 11, 1), 1).isUtc, isTrue);
+    });
   });
 
   group('selected date', () {
