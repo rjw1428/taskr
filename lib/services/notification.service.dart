@@ -105,6 +105,32 @@ class NotificationService {
     return _userDoc(userId).set({'goalReminderSchedule': schedule.wire}, SetOptions(merge: true));
   }
 
+  /// The commute opt-ins, read by the `trainSchedule` fan-out in
+  /// functions/src/index.ts.
+  ///
+  /// Absent means off for both, which is why the fan-out queries for `== true`
+  /// rather than `!= false`: these drive a push about one specific SEPTA line,
+  /// so a new account must not be enrolled by default.
+  Stream<Set<CommuteAlert>> watchCommuteAlerts(String userId) {
+    return _userDoc(userId).snapshots().map((snap) {
+      final data = snap.data();
+      return {
+        for (final alert in CommuteAlert.values)
+          if (data?[alert.field] == true) alert,
+      };
+    });
+  }
+
+  /// Turns one commute alert on or off.
+  ///
+  /// Merged rather than updated for the same reason as [setGoalReminders], and
+  /// because these two fields have no writer anywhere else — before this they
+  /// were set by hand in the console, so any user doc that gets re-provisioned
+  /// comes back without them.
+  Future<void> setCommuteAlert(String userId, CommuteAlert alert, bool enabled) {
+    return _userDoc(userId).set({alert.field: enabled}, SetOptions(merge: true));
+  }
+
   Future<void> clearAll() async {
     final uid = _auth.user!.uid;
     final snap = await _col(uid).get();
@@ -140,4 +166,23 @@ enum GoalReminderSchedule {
       orElse: () => GoalReminderSchedule.both,
     );
   }
+}
+
+/// The two independent commute opt-ins on the user doc.
+///
+/// A user can take the train without paying for parking, or park without
+/// wanting the SEPTA status push, so they are separate flags rather than one
+/// "commute" switch.
+enum CommuteAlert {
+  train('trainAlert', 'Train status'),
+  parking('parkingAlert', 'Parking prompt');
+
+  const CommuteAlert(this.field, this.label);
+
+  /// The user-doc field name. Queried directly by the scheduled fan-out, so the
+  /// string is the contract — never rename one without the function.
+  final String field;
+
+  /// How the setting reads in the UI.
+  final String label;
 }

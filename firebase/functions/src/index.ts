@@ -83,13 +83,20 @@ async function runTrainFanout() {
   return Promise.all(notifyPromises);
 }
 
-export const trainSchedule = onSchedule("every day 11:00", async () => {
-  try {
-    await runTrainFanout();
-  } catch (e) {
-    logger.error(e)
+// Pinned to the commute zone. The bare "every day 11:00" form is UTC, which is
+// 07:00 in New York only while EDT is in effect and 06:00 once DST ends — a
+// silent hour of drift against the departure times the rest of this flow
+// resolves through COMMUTE_TIMEZONE.
+export const trainSchedule = onSchedule(
+  {schedule: "every day 07:00", timeZone: COMMUTE_TIMEZONE},
+  async () => {
+    try {
+      await runTrainFanout();
+    } catch (e) {
+      logger.error(e)
+    }
   }
-});
+);
 
 /**
  * In-app "check my train" for the signed-in user only. The scheduled fan-out

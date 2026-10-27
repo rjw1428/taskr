@@ -7,6 +7,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:taskr/login/login.dart';
 import 'package:taskr/services/services.dart';
 import 'package:taskr/settings/settings.dart';
+import 'package:taskr/shared/shared.dart';
 
 import 'helpers/harness.dart';
 
@@ -191,5 +192,54 @@ void main() {
       expect(find.textContaining('Could not delete tag'), findsOneWidget);
       expect(find.byType(InputChip), findsOneWidget);
     });
+  });
+
+  group('commute alerts', () {
+    // The section is owner-gated, so the whole group runs as the owner.
+    setUp(() async {
+      env.dispose();
+      env = await TestEnv.create(email: ownerEmail);
+    });
+
+    testWidgets('the owner sees both switches and can turn them on', (tester) async {
+      await mount(tester);
+      expect(find.text('COMMUTE'), findsOneWidget);
+      expect(find.byType(SwitchListTile), findsNWidgets(2));
+      expect(find.text('Train status'), findsOneWidget);
+      expect(find.text('Parking prompt'), findsOneWidget);
+
+      await tester.tap(find.text('Parking prompt'));
+      await settle(tester);
+      expect((await env.userDoc())?['parkingAlert'], true);
+      expect((await env.userDoc())?['trainAlert'], isNull);
+
+      await tester.tap(find.text('Train status'));
+      await settle(tester);
+      expect((await env.userDoc())?['trainAlert'], true);
+    });
+
+    testWidgets('stored flags drive the switch positions', (tester) async {
+      await env.db.collection('todos').doc(env.uid).set(
+        {'parkingAlert': true, 'trainAlert': false},
+        SetOptions(merge: true),
+      );
+      await mount(tester);
+      final switches = tester.widgetList<SwitchListTile>(find.byType(SwitchListTile)).toList();
+      expect(switches.map((s) => s.value), [false, true]);
+    });
+
+    testWidgets('turning one off writes false rather than removing it', (tester) async {
+      await env.db.collection('todos').doc(env.uid).set({'parkingAlert': true}, SetOptions(merge: true));
+      await mount(tester);
+      await tester.tap(find.text('Parking prompt'));
+      await settle(tester);
+      expect((await env.userDoc())?['parkingAlert'], false);
+    });
+  });
+
+  testWidgets('the commute section is hidden for anyone but the owner', (tester) async {
+    await mount(tester);
+    expect(find.text('COMMUTE'), findsNothing);
+    expect(find.byType(SwitchListTile), findsNothing);
   });
 }

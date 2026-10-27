@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taskr/services/services.dart';
 
@@ -86,6 +87,45 @@ void main() {
       await service.setGoalReminders(env.uid, GoalReminderSchedule.eveningOnly);
       expect(await service.watchGoalReminders(env.uid).first, GoalReminderSchedule.eveningOnly);
       expect((await env.userDoc())?['email'], 'test@example.com');
+    });
+
+    test('commute alerts default off and round-trip independently', () async {
+      final service = NotificationService();
+      // Absent means off: these enrol the user in a push about one specific
+      // SEPTA line, so a doc without the fields must not opt them in.
+      expect(await service.watchCommuteAlerts(env.uid).first, isEmpty);
+
+      await service.setCommuteAlert(env.uid, CommuteAlert.parking, true);
+      expect(await service.watchCommuteAlerts(env.uid).first, {CommuteAlert.parking});
+
+      await service.setCommuteAlert(env.uid, CommuteAlert.train, true);
+      expect(
+        await service.watchCommuteAlerts(env.uid).first,
+        {CommuteAlert.train, CommuteAlert.parking},
+      );
+
+      await service.setCommuteAlert(env.uid, CommuteAlert.parking, false);
+      expect(await service.watchCommuteAlerts(env.uid).first, {CommuteAlert.train});
+    });
+
+    test('commute alerts are merged, not overwritten', () async {
+      await NotificationService().setCommuteAlert(env.uid, CommuteAlert.train, true);
+      final doc = await env.userDoc();
+      expect(doc?['trainAlert'], true);
+      // The fan-out reads these off the same doc that holds the score and the
+      // FCM token; a non-merge write here is how they got lost before.
+      expect(doc?['email'], 'test@example.com');
+      expect(doc?['currentScore'], 0);
+    });
+
+    test('a non-true stored value reads as off', () async {
+      // The fan-out queries `== true`, so anything else must present as off
+      // rather than as "on" on the strength of being present.
+      await env.db.collection('todos').doc(env.uid).set(
+        {'trainAlert': 'yes', 'parkingAlert': false},
+        SetOptions(merge: true),
+      );
+      expect(await NotificationService().watchCommuteAlerts(env.uid).first, isEmpty);
     });
   });
 

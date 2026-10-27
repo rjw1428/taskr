@@ -63,6 +63,14 @@ class SettingsPageState extends State<SettingsForm> {
             const SizedBox(height: Insets.sm),
             const SectionHeader('Notifications'),
             _GoalRemindersRow(userId: widget.userId),
+            // Owner-only, like the other personal integrations: these drive one
+            // hardcoded SEPTA line and the owner's own "Work Train" task, so
+            // they would be dead controls on anyone else's account.
+            if (AuthService().isOwner) ...[
+              const SizedBox(height: Insets.sm),
+              const SectionHeader('Commute'),
+              _CommuteAlertsRow(userId: widget.userId),
+            ],
             const SizedBox(height: Insets.sm),
             const SectionHeader('Google Calendar'),
             _GoogleCalendarRow(userId: widget.userId),
@@ -233,6 +241,62 @@ class _GoalRemindersRow extends StatelessWidget {
       // The control is driven by the stream, so a failed write leaves it where
       // it was; say so rather than letting it silently snap back.
       messenger.showSnackBar(SnackBar(content: Text('Could not update goal reminders: $e')));
+    }
+  }
+}
+
+/// The two commute opt-ins.
+///
+/// These existed as console-set fields on the user doc long before they had any
+/// UI, which meant a re-provisioned user doc turned both features off with
+/// nothing in the app able to turn them back on.
+class _CommuteAlertsRow extends StatelessWidget {
+  final String userId;
+  const _CommuteAlertsRow({required this.userId});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final t = theme.appTokens;
+    return StreamBuilder<Set<CommuteAlert>>(
+      stream: NotificationService().watchCommuteAlerts(userId),
+      // Off until the doc says otherwise, matching the fan-out's `== true`.
+      initialData: const {},
+      builder: (context, snapshot) {
+        final enabled = snapshot.data ?? const <CommuteAlert>{};
+        return Column(
+          children: [
+            for (final alert in CommuteAlert.values)
+              SwitchListTile(
+                value: enabled.contains(alert),
+                title: Text(alert.label, style: theme.textTheme.bodyLarge),
+                subtitle: Text(
+                  _subtitle(alert),
+                  style: theme.textTheme.bodySmall?.copyWith(color: t.textMuted),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: Insets.xs),
+                onChanged: (on) => _set(context, alert, on),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  static String _subtitle(CommuteAlert alert) => switch (alert) {
+        CommuteAlert.train => 'Next-train times each morning you have a Work Train task',
+        CommuteAlert.parking => 'Asks whether to pay for parking as your train leaves',
+      };
+
+  Future<void> _set(BuildContext context, CommuteAlert alert, bool enabled) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await NotificationService().setCommuteAlert(userId, alert, enabled);
+    } catch (e) {
+      // Driven by the stream, so a failed write leaves the switch where it was.
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not update ${alert.label.toLowerCase()}: $e')),
+      );
     }
   }
 }
