@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:taskr/accomplishments/accomplishment_detail_page.dart';
 import 'package:taskr/accomplishments/accomplishment_list.dart';
 import 'package:taskr/performance/performance_page.dart';
+import 'package:taskr/performance/performance_range.dart';
 import 'package:taskr/services/services.dart';
 
 import 'helpers/harness.dart';
@@ -78,10 +79,98 @@ void main() {
     expect(find.text('Complete some tasks to start tracking your progress.'), findsOneWidget);
   });
 
-  testWidgets('data older than a week alone still shows the empty state', (tester) async {
+  testWidgets('data older than a week still shows the page, so the toggle can reach it', (tester) async {
     await perf(daysBack(30), completed: {'ALL': 9});
     await mount(tester);
-    expect(find.text('No performance data yet'), findsOneWidget);
+    expect(find.text('No performance data yet'), findsNothing);
+    expect(find.text('0.0'), findsOneWidget); // nothing this week
+    expect(tester.widget<LineChart>(find.byType(LineChart)).data.maxY, 4);
+
+    await tester.tap(find.text('90d'));
+    await settle(tester);
+    // 9 * 1.2 -> 11
+    expect(tester.widget<LineChart>(find.byType(LineChart)).data.maxY, 11);
+  });
+
+  testWidgets('the range toggle redraws the score chart over the chosen window', (tester) async {
+    await seedRichHistory();
+    await mount(tester);
+    LineChartBarData all() => tester.widget<LineChart>(find.byType(LineChart)).data.lineBarsData.first;
+
+    // 7d: the series starts at its first scoring day, six days back.
+    expect(all().spots.length, 7);
+    expect(all().dotData.show, isTrue);
+    expect(find.text('Daily score'), findsOneWidget);
+
+    await tester.tap(find.text('30d'));
+    await settle(tester);
+    // One point per day from the first scoring day (20 back) through today.
+    expect(all().spots.length, 21);
+    expect(all().spots.first.y, 4);
+    expect(all().spots.last.y, 5);
+    expect(all().dotData.show, isFalse);
+    // Labels thin out to dates, today always among them.
+    expect(find.text(DateFormat('M/d').format(today)), findsNWidgets(2)); // line + bars
+    expect(find.text(DateFormat('E').format(today)), findsNothing);
+
+    await tester.tap(find.text('90d'));
+    await settle(tester);
+    expect(all().spots.length, 46); // from 45 days back
+    expect(all().spots.first.y, 2);
+
+    await tester.tap(find.text('1y'));
+    await settle(tester);
+    // Weekly averages over 52 weeks; the week ending today holds 5+3+8+12.
+    expect(find.text('Weekly average'), findsOneWidget);
+    expect(find.text('Daily score'), findsNothing);
+    expect(all().spots.last.x, 51);
+    expect(all().spots.last.y, closeTo(28 / 7, 1e-9));
+    // The doc 100 days back falls in the week 14 buckets before this one.
+    expect(all().spots.first.x, 51 - 14);
+    expect(all().spots.first.y, closeTo(6 / 7, 1e-9));
+
+    await tester.tap(find.text('7d'));
+    await settle(tester);
+    expect(all().spots.length, 7);
+  });
+
+  testWidgets('the range toggle widens the points-lost chart, bucketing longer windows', (tester) async {
+    await perf(today, completed: {'ALL': 1}, pushed: {'ALL': 2});
+    await perf(daysBack(10), pushed: {'ALL': 4});
+    await perf(daysBack(11), pushed: {'ALL': 1});
+    await perf(daysBack(200), pushed: {'ALL': 5});
+    await openTask(daysBack(3), 'high'); // 3 missed, inside every window
+    await openTask(daysBack(12), 'low'); // 1 missed
+    await openTask(daysBack(60), 'high'); // 3 missed
+    await openTask(today, 'high'); // today never counts as missed
+    await mount(tester);
+    List<double> bars() =>
+        tester.widget<BarChart>(find.byType(BarChart)).data.barGroups.map((g) => g.barRods.single.toY).toList();
+
+    expect(find.text('2 deferred · 3 missed · last 7 days'), findsOneWidget);
+    expect(bars().length, 7);
+
+    await tester.tap(find.text('30d'));
+    await settle(tester);
+    expect(find.text('7 deferred · 4 missed · last 30 days'), findsOneWidget);
+    expect(bars().length, 30);
+    expect(bars()[29 - 10], 4);
+    expect(bars()[29 - 3], 3);
+
+    await tester.tap(find.text('90d'));
+    await settle(tester);
+    expect(find.text('7 deferred · 7 missed · last 13 weeks'), findsOneWidget);
+    expect(bars().length, 13);
+    // Days 10, 11 and 12 back share the week before this one: 4 + 1 pushed, 1 missed.
+    expect(bars()[11], 6);
+    expect(bars()[12], 5); // today's 2 pushed + 3 missed three days back
+
+    await tester.tap(find.text('1y'));
+    await settle(tester);
+    expect(find.text('12 deferred · 7 missed · last 52 weeks'), findsOneWidget);
+    expect(bars().length, 13);
+    expect(bars()[12], 11); // the last 28 days: 7 pushed + 4 missed
+    expect(bars()[12 - 200 ~/ 28], 5);
   });
 
   testWidgets('renders every card from seeded history', (tester) async {
@@ -351,12 +440,57 @@ void main() {
           formattedValue: v.toString(),
           axisSide: AxisSide.bottom,
         );
-    String labelAt(double v) => ((bottomTitleWidgets(v, meta(v), 7, Colors.black) as SideTitleWidget).child as Text).data!;
+    final labels = bucketAxisLabels(today, 7, 1);
+    String labelAt(double v) =>
+        ((bottomTitleWidgets(v, meta(v), labels, Colors.black) as SideTitleWidget).child as Text).data!;
 
     test('labels the last slot with today and the first with six days back', () {
       expect(labelAt(6), DateFormat('E').format(today));
       expect(labelAt(0), DateFormat('E').format(daysBack(6)));
       expect(labelAt(5), DateFormat('E').format(daysBack(1)));
+    });
+  });
+
+  group('range bucketing', () {
+    test('every range draws a whole number of buckets', () {
+      final r = {for (final r in PerformanceRange.all) r.label: r};
+      expect(r['90d']!.bucketCount(r['90d']!.barBucketDays), 13);
+      expect(r['1y']!.bucketCount(r['1y']!.lineBucketDays), 52);
+      expect(r['1y']!.bucketCount(r['1y']!.barBucketDays), 13);
+    });
+
+    test('longer axes label about six buckets, always including the newest', () {
+      final month = bucketAxisLabels(today, 30, 1);
+      expect(month.last, DateFormat('M/d').format(today));
+      expect(month[24], DateFormat('M/d').format(daysBack(5)));
+      expect(month.where((l) => l.isNotEmpty).length, 6);
+      expect(month[28], '');
+
+      final year = bucketAxisLabels(today, 52, 7);
+      expect(year.last, DateFormat('MMM').format(today));
+      expect(year.where((l) => l.isNotEmpty).length, 6);
+    });
+
+    test('a tooltip names the day, or the span a bucket covers', () {
+      final f = DateFormat('MMM d');
+      expect(bucketSpanLabel(today, 30, 1, 29), f.format(today));
+      expect(bucketSpanLabel(today, 13, 7, 12), '${f.format(DateService.shiftDays(today, -6))} – ${f.format(today)}');
+      expect(bucketSpanLabel(today, 13, 7, 11),
+          '${f.format(DateService.shiftDays(today, -13))} – ${f.format(DateService.shiftDays(today, -7))}');
+    });
+
+    test('bucketDailyCompleted averages each key over the whole bucket', () {
+      final daily = <Map<String, dynamic>>[
+        {'ALL': 7, 'a': 7},
+        for (var i = 0; i < 6; i++) <String, dynamic>{},
+        for (var i = 0; i < 7; i++) {'ALL': 2},
+      ];
+      final weekly = bucketDailyCompleted(daily, 7);
+      expect(weekly, [
+        {'ALL': 1.0, 'a': 1.0},
+        {'ALL': 2.0},
+      ]);
+      expect(identical(bucketDailyCompleted(daily, 1), daily), isTrue);
     });
   });
 

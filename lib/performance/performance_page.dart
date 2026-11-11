@@ -5,6 +5,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:taskr/performance/performance_heatmap.dart';
 import 'package:taskr/performance/performance_history.dart';
 import 'package:taskr/performance/performance_average_header.dart';
+import 'package:taskr/performance/performance_range.dart';
 import 'package:provider/provider.dart';
 import 'package:taskr/services/accomplishment.provider.dart';
 import 'package:taskr/services/models.dart';
@@ -28,8 +29,8 @@ class _PerformancePageState extends State<PerformancePage> {
   // Bounds are fixed when the page opens so the query — and therefore the
   // listener — is stable across rebuilds. The window covers every card on the
   // page: the year-long average and best-day stats, the 13-week heatmap (which
-  // runs to the end of the current week), and the 7-day charts.
-  late final DateTime _sevenDayCutoff = DateService().daysAgo(DateTime.now(), 7);
+  // runs to the end of the current week), and the charts at any range of the
+  // header toggle, up to a year.
   late final Stream<PerformanceHistory?> _history = () {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -54,17 +55,14 @@ class _PerformancePageState extends State<PerformancePage> {
           },
         ),
       ],
-      child: CurrentScore(userId: _userId, sevenDayCutoff: _sevenDayCutoff),
+      child: CurrentScore(userId: _userId),
     );
   }
 }
 
 class CurrentScore extends StatefulWidget {
   final String userId;
-
-  /// Docs dated after this make up the 7-day charts.
-  final DateTime sevenDayCutoff;
-  const CurrentScore({super.key, required this.userId, required this.sevenDayCutoff});
+  const CurrentScore({super.key, required this.userId});
 
   @override
   State<StatefulWidget> createState() => CurrentScoreState();
@@ -76,6 +74,10 @@ class CurrentScoreState extends State<CurrentScore> {
 
   bool isShowingAll = true;
 
+  /// Index into [PerformanceRange.all], set by the header toggle and followed
+  /// by the average, the score chart and the points-lost chart.
+  int _rangeIndex = 0;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -85,9 +87,11 @@ class CurrentScoreState extends State<CurrentScore> {
     if (history == null) {
       return const LoadingScreen(message: 'Loading Performance Data...');
     }
-    final performance = history.between(after: widget.sevenDayCutoff);
+    final now = DateTime.now();
 
-    if (performance.isEmpty) {
+    // Empty only when there is no history at all: an empty week must not hide
+    // the toggle that reaches the older data.
+    if (history.between(until: now).isEmpty) {
       return const EmptyState(
         icon: Icons.query_stats,
         title: 'No performance data yet',
@@ -95,15 +99,22 @@ class CurrentScoreState extends State<CurrentScore> {
       );
     }
 
-    final chartData = alignDailyCompleted(performance, DateTime.now());
+    final range = PerformanceRange.all[_rangeIndex];
+    final lineBucketDays = range.lineBucketDays;
+    final lineCount = range.bucketCount(lineBucketDays);
+    final chartData = bucketDailyCompleted(
+      alignDailyCompleted(history.docs, now, dayCount: lineCount * lineBucketDays),
+      lineBucketDays,
+    );
+    final lineLabels = bucketAxisLabels(now, lineCount, lineBucketDays);
 
     // Y-axis max reflects the series actually shown: the total ('ALL') in Total
     // mode, or the largest per-effort value in Breakdown mode. Previously the max
     // was the total scaled by 0.6, so tall single-effort days ran off the top.
-    int displayedMax = 0;
+    num displayedMax = 0;
     for (final day in chartData) {
       day.forEach((key, value) {
-        if (value is! int) return;
+        if (value is! num) return;
         final included = isShowingAll ? key == 'ALL' : key != 'ALL';
         if (included && value > displayedMax) displayedMax = value;
       });
@@ -123,20 +134,22 @@ class CurrentScoreState extends State<CurrentScore> {
     // Performance data is keyed by tag id; map to labels for the legend.
     final tagNames = {for (final tg in Provider.of<TagProvider>(context).tags) tg.id: tg.label};
 
-    // Points pushed off each of the last 7 days (from the same performance docs).
+    // Points pushed off each day (from the same performance docs).
     final pushedByDate = <String, int>{};
-    for (final day in performance) {
+    for (final day in history.docs) {
       final ts = day['date'] as Timestamp?;
       if (ts == null) continue;
       final pushed = day['pushed'] as Map<String, dynamic>?;
       pushedByDate[DateService().getString(ts.toDate())] = (pushed?['ALL'] as int?) ?? 0;
     }
-    final pushedDays = List.generate(7, (i) => DateService.shiftDays(DateTime.now(), -(6 - i)));
-    final pushedDayKeys = pushedDays.map((d) => DateService().getString(d)).toList();
-    final pushedValues = pushedDayKeys.map((k) => pushedByDate[k] ?? 0).toList();
-    final pushedLabels = pushedDays.map((d) => DateFormat('E').format(d)).toList();
 
-    final header = AppCard(child: PerformanceAverageHeader(userId: widget.userId));
+    final header = AppCard(
+      child: PerformanceAverageHeader(
+        userId: widget.userId,
+        rangeIndex: _rangeIndex,
+        onRangeChanged: (i) => setState(() => _rangeIndex = i),
+      ),
+    );
     final dailyScore = AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -144,7 +157,10 @@ class CurrentScoreState extends State<CurrentScore> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Daily score', style: theme.textTheme.titleMedium),
+              Flexible(
+                child: Text(lineBucketDays == 1 ? 'Daily score' : 'Weekly average',
+                    overflow: TextOverflow.ellipsis, style: theme.textTheme.titleMedium),
+              ),
               SegmentedButton<bool>(
                 segments: const [
                   ButtonSegment(value: true, label: Text('Total')),
@@ -171,10 +187,17 @@ class CurrentScoreState extends State<CurrentScore> {
                     fitInsideHorizontally: true,
                     fitInsideVertically: true,
                     getTooltipColor: (touchedSpot) => t.surfaceRaised.withValues(alpha: 0.95),
-                    getTooltipItems: (data) => data.map((spot) {
-                      return LineTooltipItem(
-                          spot.y.toString(), TextStyle(color: theme.colorScheme.onSurface));
-                    }).toList(),
+                    getTooltipItems: (data) => [
+                      for (var i = 0; i < data.length; i++)
+                        LineTooltipItem(
+                          // The date heads the tooltip once: past a week the
+                          // axis no longer labels every point.
+                          i == 0
+                              ? '${bucketSpanLabel(now, lineCount, lineBucketDays, data[i].x.toInt())}\n${data[i].y.toStringAsFixed(1)}'
+                              : data[i].y.toStringAsFixed(1),
+                          TextStyle(color: theme.colorScheme.onSurface),
+                        ),
+                    ],
                   ),
                 ),
                 gridData: const FlGridData(show: false),
@@ -185,7 +208,7 @@ class CurrentScoreState extends State<CurrentScore> {
                         reservedSize: 32,
                         interval: 1,
                         getTitlesWidget: (double value, TitleMeta meta) =>
-                            bottomTitleWidgets(value, meta, chartData.length, t.textMuted)),
+                            bottomTitleWidgets(value, meta, lineLabels, t.textMuted)),
                   ),
                   rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -205,7 +228,7 @@ class CurrentScoreState extends State<CurrentScore> {
                     top: const BorderSide(color: Colors.transparent),
                   ),
                 ),
-                lineBarsData: seriesToBars(chartSeries, isShowingAll),
+                lineBarsData: seriesToBars(chartSeries, isShowingAll, pointCount: lineCount),
                 maxY: maxYAxis.toDouble(),
                 minY: 0,
               ),
@@ -229,11 +252,9 @@ class CurrentScoreState extends State<CurrentScore> {
     );
     final heatmap = AppCard(child: PerformanceHeatmap(userId: widget.userId));
     final pushed = _PushedChartCard(
-      values: pushedValues,
-      labels: pushedLabels,
-      // The last entry is today; a day's leftovers aren't "missed" until
-      // it's over, so today contributes no missed points.
-      dayKeys: pushedDayKeys.sublist(0, pushedDayKeys.length - 1),
+      range: range,
+      today: now,
+      pushedByDate: pushedByDate,
       userId: widget.userId,
     );
     final accomplishments = Column(
@@ -443,10 +464,31 @@ List<Map<String, dynamic>> alignDailyCompleted(
   });
 }
 
-Widget bottomTitleWidgets(double value, TitleMeta meta, int dataLength, Color color) {
+/// Averages each run of [bucketDays] days of [daily] (oldest first, a whole
+/// number of buckets long) into one map per bucket. A day with no entry for a
+/// key counts as 0, so the result is points per day across the whole bucket.
+List<Map<String, dynamic>> bucketDailyCompleted(List<Map<String, dynamic>> daily, int bucketDays) {
+  if (bucketDays <= 1) return daily;
+  final buckets = <Map<String, dynamic>>[];
+  for (var start = 0; start < daily.length; start += bucketDays) {
+    final sums = <String, num>{};
+    for (final day in daily.skip(start).take(bucketDays)) {
+      day.forEach((key, value) {
+        if (value is num) sums[key] = (sums[key] ?? 0) + value;
+      });
+    }
+    buckets.add({for (final e in sums.entries) e.key: e.value / bucketDays});
+  }
+  return buckets;
+}
+
+/// The label for x position [value], from [labels] (one per point, blank where
+/// the axis skips a label — see [bucketAxisLabels]).
+Widget bottomTitleWidgets(double value, TitleMeta meta, List<String> labels, Color color) {
   final style = TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: color);
-  final day = DateService().dayAxisLabel(dataLength - 1 - value.toInt());
-  return SideTitleWidget(axisSide: meta.axisSide, space: 10, child: Text(day, style: style));
+  final i = value.toInt();
+  final label = (i >= 0 && i < labels.length) ? labels[i] : '';
+  return SideTitleWidget(axisSide: meta.axisSide, space: 10, child: Text(label, style: style));
 }
 
 Widget leftTitleWidgets(double value, TitleMeta meta, Color color) {
@@ -474,7 +516,7 @@ List<ChartSeries> computeChartSeries(
   final Map<String, List<FlSpot>> lines = {};
   for (int i = 0; i < chartData.length; i++) {
     for (var key in uniqueKeys) {
-      int value = chartData[i][key] ?? 0;
+      final num value = (chartData[i][key] as num?) ?? 0;
       final point = FlSpot(i.toDouble(), value.toDouble());
       if (lines.containsKey(key)) {
         lines[key]!.add(point);
@@ -494,16 +536,19 @@ List<ChartSeries> computeChartSeries(
   return series;
 }
 
-List<LineChartBarData> seriesToBars(List<ChartSeries> series, bool showAll) {
+/// [pointCount] thins the line and drops the per-point dots as the range
+/// grows, where they would otherwise run together.
+List<LineChartBarData> seriesToBars(List<ChartSeries> series, bool showAll, {int pointCount = 7}) {
+  final barWidth = pointCount <= 7 ? 4.0 : (pointCount <= 31 ? 3.0 : 2.0);
   return series
       .map((s) => LineChartBarData(
             isCurved: true,
             show: s.shown,
             preventCurveOverShooting: true,
             color: s.color,
-            barWidth: 4,
+            barWidth: barWidth,
             isStrokeCapRound: true,
-            dotData: FlDotData(show: s.shown),
+            dotData: FlDotData(show: s.shown && pointCount <= 7),
             belowBarData: BarAreaData(show: showAll),
             spots: s.spots,
           ))
@@ -530,21 +575,21 @@ class _LegendDot extends StatelessWidget {
   }
 }
 
-/// Stacked bar chart of effort points lost off each of the last 7 days: points
-/// pushed (deferred to another day) plus points missed (left incomplete and
-/// never pushed). Today has no missed segment — the day isn't over yet.
+/// Stacked bar chart of effort points lost across [range]: points pushed
+/// (deferred to another day) plus points missed (left incomplete and never
+/// pushed). Past a month each bar sums a bucket of days. Today has no missed
+/// segment — the day isn't over yet.
 class _PushedChartCard extends StatefulWidget {
-  final List<int> values; // pushed, oldest -> today
-  final List<String> labels;
+  final PerformanceRange range;
+  final DateTime today;
 
-  /// Day strings for the past days only (i.e. `labels` minus today), used to
-  /// look up missed points; index i lines up with bar i.
-  final List<String> dayKeys;
+  /// Pushed points per day string, for any days the history holds.
+  final Map<String, int> pushedByDate;
   final String userId;
   const _PushedChartCard({
-    required this.values,
-    required this.labels,
-    required this.dayKeys,
+    required this.range,
+    required this.today,
+    required this.pushedByDate,
     required this.userId,
   });
 
@@ -553,19 +598,34 @@ class _PushedChartCard extends StatefulWidget {
 }
 
 class _PushedChartCardState extends State<_PushedChartCard> {
-  List<int> get values => widget.values;
-  List<String> get labels => widget.labels;
+  int get _bucketDays => widget.range.barBucketDays;
+  int get _count => widget.range.bucketCount(_bucketDays);
 
-  // Six per-day listeners, kept across rebuilds; re-created only when the set
-  // of days changes (i.e. at midnight).
+  /// Every day the chart covers, oldest first, ending today.
+  List<String> _dayKeys() {
+    final total = _count * _bucketDays;
+    return List.generate(
+        total, (i) => DateService().getString(DateService.shiftDays(widget.today, -(total - 1 - i))));
+  }
+
+  // Kept across rebuilds; re-created only when the days covered change (a new
+  // range, or midnight). Emits null when the tally can't be read.
   String? _missedKey;
-  Stream<Map<String, int>>? _missed;
+  Stream<Map<String, int>?>? _missed;
 
-  Stream<Map<String, int>> _missedStream() {
-    final key = widget.dayKeys.join(',');
+  Stream<Map<String, int>?> _missedStream(List<String> dayKeys) {
+    final key = '${dayKeys.first}|${dayKeys.last}';
     if (key != _missedKey) {
       _missedKey = key;
-      _missed = TaskService().streamMissedPoints(widget.userId, widget.dayKeys);
+      // The last entry is today; a day's leftovers aren't "missed" until
+      // it's over, so today contributes no missed points.
+      final past = dayKeys.sublist(0, dayKeys.length - 1);
+      // A week is six small per-day listeners. Anything longer would be one
+      // listener per day over every task, so it goes through a single query
+      // for just the incomplete ones.
+      _missed = past.length <= 6
+          ? TaskService().streamMissedPoints(widget.userId, past).map<Map<String, int>?>((m) => m)
+          : TaskService().streamMissedPointsBetween(widget.userId, past.first, dayKeys.last);
     }
     return _missed!;
   }
@@ -578,23 +638,33 @@ class _PushedChartCardState extends State<_PushedChartCard> {
 
   @override
   Widget build(BuildContext context) {
-    final dayKeys = widget.dayKeys;
-    return StreamBuilder<Map<String, int>>(
-      stream: _missedStream(),
+    final dayKeys = _dayKeys();
+    final labels = bucketAxisLabels(widget.today, _count, _bucketDays);
+    int bucketSum(Map<String, int> byDate, int bucket) {
+      var sum = 0;
+      for (var d = bucket * _bucketDays; d < (bucket + 1) * _bucketDays; d++) {
+        sum += byDate[dayKeys[d]] ?? 0;
+      }
+      return sum;
+    }
+
+    final values = List.generate(_count, (i) => bucketSum(widget.pushedByDate, i));
+    return StreamBuilder<Map<String, int>?>(
+      stream: _missedStream(dayKeys),
       builder: (context, snap) {
         // Until the missed tally arrives, render pushed-only rather than a
         // spinner — the chart is already meaningful without it.
-        final missedByDate = snap.data ?? const <String, int>{};
-        final missed = List.generate(
-          values.length,
-          (i) => i < dayKeys.length ? (missedByDate[dayKeys[i]] ?? 0) : 0,
-        );
-        return _buildCard(context, missed);
+        final missedByDate = {...?snap.data}..remove(dayKeys.last);
+        final missed = List.generate(_count, (i) => bucketSum(missedByDate, i));
+        final missedUnavailable = snap.connectionState != ConnectionState.waiting && snap.data == null;
+        return _buildCard(context, values, missed, labels, missedUnavailable);
       },
     );
   }
 
-  Widget _buildCard(BuildContext context, List<int> missed) {
+  Widget _buildCard(
+      BuildContext context, List<int> values, List<int> missed, List<String> labels, bool missedUnavailable) {
+    final period = _bucketDays == 1 ? 'last $_count days' : 'last ${_count * _bucketDays ~/ 7} weeks';
     final theme = Theme.of(context);
     final t = theme.appTokens;
     final pushedColor = theme.colorScheme.error;
@@ -614,7 +684,7 @@ class _PushedChartCardState extends State<_PushedChartCard> {
         children: [
           Text('Points lost', style: theme.textTheme.titleMedium),
           const SizedBox(height: 2),
-          Text('$totalPushed deferred · $totalMissed missed · last 7 days',
+          Text('$totalPushed deferred · ${missedUnavailable ? 'missed unavailable' : '$totalMissed missed'} · $period',
               style: theme.textTheme.bodySmall?.copyWith(color: t.textFaint)),
           const SizedBox(height: Insets.md),
           if (total == 0)
@@ -670,6 +740,7 @@ class _PushedChartCardState extends State<_PushedChartCard> {
                     getTooltipItem: (group, gi, rod, ri) {
                       final i = group.x;
                       final parts = <String>[
+                        bucketSpanLabel(widget.today, _count, _bucketDays, i),
                         if (values[i] > 0) '${values[i]} pushed',
                         if (missed[i] > 0) '${missed[i]} missed',
                       ];
@@ -686,7 +757,7 @@ class _PushedChartCardState extends State<_PushedChartCard> {
                       BarChartRodData(
                         toY: (values[i] + missed[i]).toDouble(),
                         color: pushedColor,
-                        width: 14,
+                        width: _count <= 13 ? 14 : 6,
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
                         // Pushed sits on the baseline, missed stacks above it.
                         rodStackItems: [

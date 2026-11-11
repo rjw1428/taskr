@@ -198,20 +198,56 @@ class TaskService {
     final streams = dates.map((date) => taskCollection(userId, date).snapshots().map((snap) {
           var points = 0;
           for (final doc in snap.docs) {
-            final data = doc.data();
-            if (data['completed'] == true) continue;
-            if (data['type'] == 'divider') continue;
-            // Matches Task.fromJson's fallback for an absent/unknown priority.
-            final priority = Effort.values.firstWhere(
-              (e) => e.name == data['priority'],
-              orElse: () => Effort.low,
-            );
-            points += PerformanceService().getScore(priority);
+            points += _missedPointsOf(doc.data());
           }
           return points;
         }).handleError((error) => debugPrint("MISSED POINTS ($date): $error")));
     return CombineLatestStream.list(streams)
         .map((values) => {for (int i = 0; i < dates.length; i++) dates[i]: values[i]});
+  }
+
+  /// [streamMissedPoints] for a long run of days: every incomplete task due on
+  /// or after [fromDate] and before [beforeDate] (pass today, whose leftovers
+  /// aren't missed yet), as one collection-group query instead of a listener
+  /// per day. It reads only the incomplete tasks, so a year costs a handful of
+  /// reads rather than every task in 364 partitions.
+  ///
+  /// Needs the collection-group index `items`: userId, completed, dueDate.
+  /// Emits null if the query fails (index missing or still building) so the
+  /// caller can say the tally is unavailable instead of showing a false zero.
+  Stream<Map<String, int>?> streamMissedPointsBetween(String userId, String fromDate, String beforeDate) {
+    return _db
+        .collectionGroup('items')
+        .where('userId', isEqualTo: userId)
+        .where('completed', isEqualTo: false)
+        .where('dueDate', isGreaterThanOrEqualTo: fromDate)
+        .where('dueDate', isLessThan: beforeDate)
+        .snapshots()
+        .map<Map<String, int>?>((snap) {
+      final byDate = <String, int>{};
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final date = data['dueDate'] as String;
+        byDate[date] = (byDate[date] ?? 0) + _missedPointsOf(data);
+      }
+      return byDate;
+    }).onErrorReturnWith((error, _) {
+      debugPrint("MISSED POINTS ($fromDate..$beforeDate): $error");
+      return null;
+    });
+  }
+
+  /// Points an unfinished task counts as missed; 0 for completed tasks and
+  /// dividers.
+  int _missedPointsOf(Map<String, dynamic> data) {
+    if (data['completed'] == true) return 0;
+    if (data['type'] == 'divider') return 0;
+    // Matches Task.fromJson's fallback for an absent/unknown priority.
+    final priority = Effort.values.firstWhere(
+      (e) => e.name == data['priority'],
+      orElse: () => Effort.low,
+    );
+    return PerformanceService().getScore(priority);
   }
 
   // ─── Subtasks ──────────────────────────────────────────────────────────

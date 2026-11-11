@@ -17,10 +17,20 @@ void main() {
 
   Map<String, dynamic> doc(DateTime day, int all) => {'date': Timestamp.fromDate(day), 'completed': {'ALL': all}};
 
+  var rangeIndex = 0;
+  setUp(() => rangeIndex = 0);
+
   Future<void> mount(WidgetTester tester, PerformanceHistory? history) async {
     await pumpApp(
       tester,
-      PerformanceAverageHeader(userId: env.uid),
+      // The page owns the selected range; a minimal stand-in holds it here.
+      StatefulBuilder(builder: (context, setState) {
+        return PerformanceAverageHeader(
+          userId: env.uid,
+          rangeIndex: rangeIndex,
+          onRangeChanged: (i) => setState(() => rangeIndex = i),
+        );
+      }),
       wrapInScaffold: true,
       extraProviders: [Provider<PerformanceHistory?>.value(value: history)],
     );

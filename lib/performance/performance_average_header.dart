@@ -1,21 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:taskr/performance/performance_history.dart';
+import 'package:taskr/performance/performance_range.dart';
 import 'package:taskr/shared/shared.dart';
 import 'package:taskr/services/date.service.dart';
 
-const _windows = [7, 30, 90, 365];
-
-class PerformanceAverageHeader extends StatefulWidget {
+class PerformanceAverageHeader extends StatelessWidget {
   final String userId;
-  const PerformanceAverageHeader({super.key, required this.userId});
 
-  @override
-  State<PerformanceAverageHeader> createState() => _PerformanceAverageHeaderState();
-}
-
-class _PerformanceAverageHeaderState extends State<PerformanceAverageHeader> {
-  int _windowIndex = 0;
+  /// Index into [PerformanceRange.all]. Owned by the page, not this widget, so
+  /// the charts below follow the same toggle.
+  final int rangeIndex;
+  final ValueChanged<int> onRangeChanged;
+  const PerformanceAverageHeader({
+    super.key,
+    required this.userId,
+    required this.rangeIndex,
+    required this.onRangeChanged,
+  });
 
   static DateTime _dateKey(DateTime d) => DateTime(d.year, d.month, d.day);
 
@@ -37,7 +39,7 @@ class _PerformanceAverageHeaderState extends State<PerformanceAverageHeader> {
 
     return Builder(
       builder: (context) {
-        final windowDays = _windows[_windowIndex];
+        final windowDays = PerformanceRange.all[rangeIndex].days;
         final average = _averageFor(windowDays, scoresByDay, today);
 
         return Column(
@@ -69,15 +71,13 @@ class _PerformanceAverageHeaderState extends State<PerformanceAverageHeader> {
             SizedBox(
               width: double.infinity,
               child: SegmentedButton<int>(
-                segments: const [
-                  ButtonSegment(value: 0, label: Text('7d')),
-                  ButtonSegment(value: 1, label: Text('30d')),
-                  ButtonSegment(value: 2, label: Text('90d')),
-                  ButtonSegment(value: 3, label: Text('1y')),
+                segments: [
+                  for (var i = 0; i < PerformanceRange.all.length; i++)
+                    ButtonSegment(value: i, label: Text(PerformanceRange.all[i].label)),
                 ],
-                selected: {_windowIndex},
+                selected: {rangeIndex},
                 showSelectedIcon: false,
-                onSelectionChanged: (s) => setState(() => _windowIndex = s.first),
+                onSelectionChanged: (s) => onRangeChanged(s.first),
                 style: const ButtonStyle(
                   visualDensity: VisualDensity.compact,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
