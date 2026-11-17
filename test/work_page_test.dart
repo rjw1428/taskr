@@ -79,6 +79,19 @@ void main() {
     expect(actions.first['completedAt'], isNull);
   });
 
+  // A SnackBar with an action defaults to persist: true and never times out, so
+  // the Done snackbar sat there until tapped.
+  testWidgets('the Done snackbar dismisses itself', (tester) async {
+    await service.add(WorkItem(title: 'P', nextActions: [act('1', 'One')]));
+    await pump(tester);
+    await tester.tap(find.byKey(const Key('complete-1')));
+    await settle(tester);
+    expect(find.text('Done: One'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.text('Done: One'), findsNothing);
+  });
+
   testWidgets('waiting action completes via its menu', (tester) async {
     await service.add(WorkItem(title: 'P', nextActions: [act('w', 'Numbers', waiting: 'Sam')]));
     await pump(tester);

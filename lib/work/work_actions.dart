@@ -59,6 +59,8 @@ class WorkActions {
     messenger?.hideCurrentSnackBar();
     messenger?.showSnackBar(SnackBar(
       content: Text('Removed: ${action.text}', maxLines: 1, overflow: TextOverflow.ellipsis),
+      // An action makes a SnackBar persist by default; this one should time out.
+      persist: false,
       action: SnackBarAction(
         label: 'Undo',
         onPressed: () => guard(
@@ -84,6 +86,8 @@ class WorkActions {
     messenger?.hideCurrentSnackBar();
     messenger?.showSnackBar(SnackBar(
       content: Text('Done: ${action.text}', maxLines: 1, overflow: TextOverflow.ellipsis),
+      // An action makes a SnackBar persist by default; this one should time out.
+      persist: false,
       action: SnackBarAction(
         label: 'Undo',
         onPressed: () => guard(() => _mutateActions(itemId, (a) => WorkLogic.undoComplete(a, action.id)), 'Undo'),
