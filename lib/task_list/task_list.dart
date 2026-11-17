@@ -25,12 +25,13 @@ class TaskListScreen extends StatefulWidget {
   TaskListState createState() => TaskListState();
 }
 
-class TaskListState extends State<TaskListScreen> {
+class TaskListState extends State<TaskListScreen> with WidgetsBindingObserver {
   List<Task>? _tasks;
   int _completedCount = 0;
   int _totalCount = 0;
-  String today = DateService().getString(DateTime.now());
-  String selectedDate = DateService().getString(DateTime.now());
+  String today = DateService().getString(DateService().now());
+  String selectedDate = DateService().getString(DateService().now());
+  Timer? _dayTimer;
   late String userId;
   final TaskService _taskService = TaskService();
 
@@ -80,12 +81,41 @@ class TaskListState extends State<TaskListScreen> {
     super.initState();
     userId = AuthService().user!.uid;
     setFcmToken();
+    // The list always opens on today, so the shared selected day (which the
+    // add-task form reads) has to start there too.
+    if (!widget.isBacklog) DateService().setSelectedDate(DateService().getDate(selectedDate));
+    // A session can outlive the day it started on (a browser tab left open
+    // overnight). Re-check on returning to the app, and once a minute for a
+    // tab that stays in view across midnight.
+    WidgetsBinding.instance.addObserver(this);
+    _dayTimer = Timer.periodic(const Duration(minutes: 1), (_) => _syncDay());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _syncDay();
+  }
+
+  /// Catches the list up when the calendar day has changed since it last
+  /// looked. A list that was showing today moves on to the new today; one the
+  /// user had moved to another day stays put, but `today` still updates so the
+  /// jump-to-today buttons point at the right day.
+  void _syncDay() {
+    final now = DateService().getString(DateService().now());
+    if (now == today || !mounted) return;
+    DateService().syncToday();
+    setState(() {
+      if (selectedDate == today) selectedDate = now;
+      today = now;
+    });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
     _debounce?.cancel();
+    _dayTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _tokenRefreshSub?.cancel();
     super.dispose();
   }

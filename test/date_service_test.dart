@@ -109,6 +109,38 @@ void main() {
       expect(ds.getSelectedDate(), d);
       expect(ds.selectedDate, d);
     });
+
+    test('a selection sitting on today follows the clock into the next day', () {
+      var now = DateTime(2026, 3, 10, 22);
+      ds.clock = () => now;
+      ds.setSelectedDate(DateTime(2026, 3, 10));
+      expect(ds.syncToday(), isFalse);
+
+      now = DateTime(2026, 3, 12, 7);
+      expect(ds.getString(ds.getSelectedDate()), '2026-03-12');
+      // Already caught up: nothing more to do.
+      expect(ds.syncToday(), isFalse);
+    });
+
+    test('a selection on another day is left alone when the day changes', () {
+      var now = DateTime(2026, 3, 10, 22);
+      ds.clock = () => now;
+      ds.setSelectedDate(DateTime(2026, 3, 14));
+
+      now = DateTime(2026, 3, 11, 7);
+      expect(ds.syncToday(), isTrue);
+      expect(ds.getString(ds.getSelectedDate()), '2026-03-14');
+    });
+
+    test('choosing the old day after midnight is not undone by the rollover', () {
+      var now = DateTime(2026, 3, 10, 22);
+      ds.clock = () => now;
+      ds.setSelectedDate(DateTime(2026, 3, 10));
+
+      now = DateTime(2026, 3, 11, 7);
+      ds.setSelectedDate(DateTime(2026, 3, 10));
+      expect(ds.getString(ds.getSelectedDate()), '2026-03-10');
+    });
   });
 
   group('formatting', () {

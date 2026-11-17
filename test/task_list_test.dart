@@ -287,6 +287,65 @@ void main() {
     await settle(tester);
   }
 
+  // A browser tab can stay open for days; the list must not stay on the day it
+  // was loaded.
+  group('day rollover', () {
+    late DateTime now;
+    String selected() => DateService().getString(DateService().getSelectedDate());
+
+    setUp(() {
+      now = DateTime(2026, 3, 10, 22);
+      DateService().clock = () => now;
+    });
+
+    testWidgets('a list showing today moves to the new day on returning to the app', (tester) async {
+      await pumpList(tester);
+      expect(find.text('2026-03-10'), findsOneWidget);
+      expect(selected(), '2026-03-10');
+
+      now = DateTime(2026, 3, 11, 7);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await settle(tester, frames: 8);
+      expect(find.text('2026-03-11'), findsOneWidget);
+      expect(selected(), '2026-03-11');
+      expect(find.byIcon(FontAwesomeIcons.forwardStep), findsNothing);
+    });
+
+    testWidgets('a list left in view across midnight moves on within a minute', (tester) async {
+      await pumpList(tester);
+      now = DateTime(2026, 3, 11, 0, 0, 30);
+      await tester.pump(const Duration(minutes: 1));
+      await settle(tester, frames: 8);
+      expect(find.text('2026-03-11'), findsOneWidget);
+      expect(selected(), '2026-03-11');
+    });
+
+    testWidgets('a day the user navigated to is kept, and jump-to-today finds the new day', (tester) async {
+      await pumpList(tester);
+      await tester.tap(find.byIcon(FontAwesomeIcons.caretLeft));
+      await settle(tester, frames: 8);
+      expect(find.text('2026-03-09'), findsOneWidget);
+
+      now = DateTime(2026, 3, 11, 7);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await settle(tester, frames: 8);
+      expect(find.text('2026-03-09'), findsOneWidget);
+      expect(selected(), '2026-03-09');
+
+      await tester.tap(find.byIcon(FontAwesomeIcons.forwardStep));
+      await settle(tester, frames: 8);
+      expect(find.text('2026-03-11'), findsOneWidget);
+      expect(selected(), '2026-03-11');
+    });
+
+    testWidgets('the add-task day is right even before the list has caught up', (tester) async {
+      await pumpList(tester);
+      now = DateTime(2026, 3, 11, 7);
+      // No resume and no timer tick yet: reading the selected day checks the clock.
+      expect(selected(), '2026-03-11');
+    });
+  });
+
   group('delete with undo', () {
     testWidgets('removing a task shows an undo snackbar that restores it', (tester) async {
       final id = await seed('Doomed', date: today);

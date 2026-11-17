@@ -26,7 +26,8 @@ void main() {
   late TestEnv env;
   setUp(() async {
     env = await TestEnv.create();
-    DateService().setSelectedDate(DateTime(2026, 9, 19));
+    // The list opens on the clock's day and points the shared selected day at it.
+    DateService().clock = () => DateTime(2026, 9, 19, 10);
   });
   tearDown(() => env.dispose());
 

@@ -27,11 +27,33 @@ class DateService {
   /// The current wall-clock time of day.
   TimeOfDay nowTime() => TimeOfDay.fromDateTime(clock());
 
+  /// The calendar day [selectedDate] was last checked against.
+  late String _today = getString(selectedDate);
+
+  /// Moves [selectedDate] on to the current day if the day has changed while it
+  /// was sitting on what used to be today. Returns whether the day changed.
+  ///
+  /// The service is created once per session, and a browser tab can stay open
+  /// for days: without this the "selected" day stayed on the day the app was
+  /// loaded, so new tasks were dated in the past. A day the user navigated to
+  /// on purpose is left alone.
+  bool syncToday() {
+    final current = getString(clock());
+    if (current == _today) return false;
+    if (getString(selectedDate) == _today) selectedDate = getDate(current);
+    _today = current;
+    return true;
+  }
+
   DateTime getSelectedDate() {
+    syncToday();
     return selectedDate;
   }
 
   void setSelectedDate(DateTime d) {
+    // Settle any rollover first so it is judged against the old selection, not
+    // the one being set.
+    syncToday();
     selectedDate = d;
   }
 
