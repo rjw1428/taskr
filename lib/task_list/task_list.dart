@@ -584,7 +584,9 @@ class TaskListState extends State<TaskListScreen> {
     }
     messenger.showSnackBar(
       SnackBar(
-        duration: const Duration(days: 365),
+        duration: const Duration(seconds: 4),
+        // An action makes a SnackBar persist by default; this one should time out.
+        persist: false,
         content: Text(task.isDivider ? 'Divider removed' : 'Task removed'),
         action: SnackBarAction(
           label: 'Undo',
@@ -597,9 +599,6 @@ class TaskListState extends State<TaskListScreen> {
         ),
       ),
     );
-    Timer(const Duration(seconds: 3), () {
-      messenger.hideCurrentSnackBar();
-    });
   }
 
   displayTask(Task task, int i, Function onComplete, bool isBacklog, TaskService taskService,

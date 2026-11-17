@@ -82,7 +82,9 @@ void _showSnack(String message, {required bool isError, DateTime? now}) {
     ..showSnackBar(SnackBar(
       content: Text(message, style: TextStyle(color: fg)),
       backgroundColor: isError ? scheme.errorContainer : null,
-      duration: Duration(seconds: isError ? 6 : 4),
+      duration: const Duration(seconds: 4),
+      // An action makes a SnackBar persist by default; these should time out.
+      persist: false,
       action: SnackBarAction(
         label: 'Dismiss',
         textColor: fg,

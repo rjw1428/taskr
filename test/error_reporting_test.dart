@@ -140,6 +140,25 @@ void main() {
       expect(find.text('Queued offline'), findsNothing);
     });
 
+    // A SnackBar with an action defaults to persist: true and never times out.
+    testWidgets('notices and errors both dismiss themselves after four seconds', (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        scaffoldMessengerKey: scaffoldMessengerKey,
+        home: const Scaffold(body: SizedBox()),
+      ));
+      for (final show in [() => showNoticeSnack('Queued offline'), () => showErrorSnack('boom')]) {
+        resetErrorSnackDedupe();
+        show();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        final bar = tester.widget<SnackBar>(find.byType(SnackBar));
+        expect(bar.duration, const Duration(seconds: 4));
+        await tester.pump(const Duration(seconds: 4));
+        await tester.pumpAndSettle();
+        expect(find.byType(SnackBar), findsNothing);
+      }
+    });
+
     testWidgets('reportError logs the stack and shows the snackbar', (tester) async {
       await tester.pumpWidget(MaterialApp(
         scaffoldMessengerKey: scaffoldMessengerKey,

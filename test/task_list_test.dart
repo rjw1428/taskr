@@ -302,7 +302,7 @@ void main() {
       expect(find.text('Doomed'), findsNothing);
       expect(env.functionCalls.map((c) => c.name), isNot(contains('cancelReminder')));
 
-      // The snackbar stays until the list's own 3s timer; it does not dismiss itself.
+      // Still up after a second: it times out at four.
       await tester.pump(const Duration(seconds: 1));
       await settle(tester);
       expect(find.text('Task removed'), findsOneWidget);
@@ -314,8 +314,23 @@ void main() {
       expect(await order(today), [id]);
       expect(find.text('Doomed'), findsOneWidget);
 
-      // The snackbar auto-hides after three seconds.
+      // Gone once the four seconds are up (or sooner, Undo having been tapped).
       await flushSnackTimer(tester);
+      expect(find.text('Task removed'), findsNothing);
+    });
+
+    testWidgets('the removed snackbar dismisses itself after four seconds', (tester) async {
+      await seed('Doomed', date: today);
+      await pumpList(tester);
+      await tester.tap(find.byWidgetPredicate((w) => w is PopupMenuButton));
+      await settle(tester);
+      await tester.tap(find.text('Remove'));
+      await settle(tester, frames: 8);
+      expect(find.text('Task removed'), findsOneWidget);
+      expect(tester.widget<SnackBar>(find.byType(SnackBar)).duration, const Duration(seconds: 4));
+
+      await flushSnackTimer(tester);
+      await tester.pumpAndSettle();
       expect(find.text('Task removed'), findsNothing);
     });
 
