@@ -642,19 +642,42 @@ void main() {
   });
 
   group('pushTask', () {
+    // A future day: push moves these forward one day. (Past tasks go to today.)
+    final future = DateService().getString(DateService.shiftDays(DateTime.now(), 3));
+    final dayAfter = DateService().getString(DateService.shiftDays(DateTime.now(), 4));
+
+    test('an overdue task is pushed to today, not the day after its old date', () async {
+      final id = await service.addTask(t('stale', date: '2020-01-01', priority: Effort.high));
+      await service.pushTask(t('stale', date: '2020-01-01', priority: Effort.high, id: id));
+      expect(await item('2020-01-01', id), isNull);
+      expect(await item('2020-01-02', id), isNull);
+      expect((await item(today, id))!['pushCount'], 1);
+      expect(await order(today), contains(id));
+      // The points still count as pushed off the day they were due.
+      expect((await perf('2020-01-01'))!['pushed']['ALL'], 3);
+      expect((await env.userDoc())?['currentScore'] ?? 0, 0);
+    });
+
+    test("yesterday's task is pushed to today", () async {
+      final yesterday = DateService().decrementDate(DateTime.now());
+      final id = await service.addTask(t('late', date: yesterday));
+      await service.pushTask(t('late', date: yesterday, id: id));
+      expect(await item(today, id), isNotNull);
+    });
+
     // Regression: push used to delete + re-add with a NEW id, breaking id-keyed
     // links (e.g. a goal generation's taskIds). It now moves the doc, same id.
     test('moves the task to the next day keeping the same document id', () async {
-      final id = await service.addTask(t('goalie', date: '2020-01-01', priority: Effort.high));
+      final id = await service.addTask(t('goalie', date: future, priority: Effort.high));
 
-      await service.pushTask(t('goalie', date: '2020-01-01', priority: Effort.high, id: id));
+      await service.pushTask(t('goalie', date: future, priority: Effort.high, id: id));
 
-      expect(await order('2020-01-01'), isNot(contains(id)));
-      expect(await item('2020-01-01', id), isNull);
-      expect(await order('2020-01-02'), contains(id));
-      final moved = await item('2020-01-02', id);
+      expect(await order(future), isNot(contains(id)));
+      expect(await item(future, id), isNull);
+      expect(await order(dayAfter), contains(id));
+      final moved = await item(dayAfter, id);
       expect(moved!['pushCount'], 1);
-      expect((await perf('2020-01-01'))!['pushed']['ALL'], 3);
+      expect((await perf(future))!['pushed']['ALL'], 3);
     });
 
     test("pushing today's task also decrements the running score", () async {
@@ -673,23 +696,23 @@ void main() {
 
     test('cancels a scheduled reminder before moving', () async {
       env.functions['cancelReminder'] = (_) => null;
-      final task = Task(added: 1, title: 'a', dueDate: '2020-01-01', reminderTaskName: 'queues/q/tasks/1');
+      final task = Task(added: 1, title: 'a', dueDate: future, reminderTaskName: 'queues/q/tasks/1');
       final id = await service.addTask(task);
       await service.pushTask(task.copyWith(id: id));
       // Exactly once: the awaited cancel clears the field so deleteTask does not
       // fire the same callable again.
       expect(env.functionCalls.where((c) => c.name == 'cancelReminder'), hasLength(1));
-      final moved = await item('2020-01-02', id);
+      final moved = await item(dayAfter, id);
       expect(moved!.containsKey('reminderTaskName'), isFalse);
     });
 
     test('a failing reminder cancel aborts the push so the task stays put', () async {
       env.functions['cancelReminder'] = (_) => throw Exception('down');
-      final task = Task(added: 1, title: 'a', dueDate: '2020-01-01', reminderTaskName: 'queues/q/tasks/1');
+      final task = Task(added: 1, title: 'a', dueDate: future, reminderTaskName: 'queues/q/tasks/1');
       final id = await service.addTask(task);
       await expectLater(service.pushTask(task.copyWith(id: id)), throwsException);
-      expect(await item('2020-01-01', id), isNotNull);
-      expect(await item('2020-01-02', id), isNull);
+      expect(await item(future, id), isNotNull);
+      expect(await item(dayAfter, id), isNull);
     });
 
     test('pushing a task due on another day leaves the running score alone', () async {
@@ -704,10 +727,10 @@ void main() {
     });
 
     test('each push adds one to the running push count', () async {
-      final task = Task(added: 1, title: 'again', dueDate: '2020-01-01', pushCount: 2);
+      final task = Task(added: 1, title: 'again', dueDate: future, pushCount: 2);
       final id = await service.addTask(task);
       await service.pushTask(task.copyWith(id: id));
-      expect((await item('2020-01-02', id))!['pushCount'], 3);
+      expect((await item(dayAfter, id))!['pushCount'], 3);
     });
 
     test('a series reminder inside the window is handed to Cloud Tasks', () async {

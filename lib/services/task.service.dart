@@ -664,7 +664,11 @@ class TaskService {
     final fromDate = task.dueDate ?? DateService().getString(now);
     final d = task.dueDate != null ? DateService().getDate(task.dueDate!) : now;
     final decrementScore = d.day == now.day && d.month == now.month && d.year == now.year;
-    task.dueDate = DateService().incrementDate(d);
+    // An overdue task lands on today, not the day after its old date: bumping
+    // a task from last week by one day would leave it just as overdue. Today's
+    // and future tasks move forward one day.
+    final isPast = DateTime(d.year, d.month, d.day).isBefore(DateTime(now.year, now.month, now.day));
+    task.dueDate = isPast ? DateService().getString(now) : DateService().incrementDate(d);
     task.pushCount += 1;
     // A series' reminder is a time of day, not a property of the original date,
     // so it follows the task when it moves. Everything else (one-off tasks, a
